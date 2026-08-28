@@ -1,40 +1,68 @@
-/* Deliberately plain. §0: the polished game console is out of scope — this is the
-   truth layer it will be layered on top of. Do not add theming, sprites or animation. */
+/* Base front end — deliberately plain.
+ *
+ * §0: the polished game console is out of scope here; this is the truth layer it
+ * is layered on top of. Do not add theming, sprites or animation.
+ *
+ * EVERY widget rule below is scoped to `main`, and new ones must be too. The
+ * console renders OUTSIDE <main> with its own stylesheet, and unscoped element
+ * selectors here leaked straight into it: `button:hover:not(:disabled)` has
+ * specificity (0,2,1) and outranks the console's own `.seg button` (0,1,1), so
+ * hovering a tuner key painted it flat dark. `.panel` collided by name as well
+ * and stamped a 1px border and a margin onto the steel plate.
+ *
+ * Only `:root` and `body`, which style the document itself, stay global.
+ */
+
 :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 body { margin: 0; background: #0e0e10; color: #e8e8ea; font-size: 14px; line-height: 1.5; }
+
 main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-h1, h2, h3 { font-weight: 600; margin: 0 0 .5rem; }
-h1 { font-size: 1.25rem; letter-spacing: .08em; }
-a { color: #7bb0ff; }
-hr { border: 0; border-top: 1px solid #2a2a30; margin: 1.25rem 0; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #22222a; white-space: nowrap; }
-th { color: #9a9aa6; font-weight: 500; }
-tbody tr[role="button"] { cursor: pointer; }
-tbody tr[role="button"]:hover { background: #17171c; }
-button { font: inherit; background: #23232b; color: #e8e8ea; border: 1px solid #35353f;
-  border-radius: 4px; padding: .4rem .8rem; cursor: pointer; }
-button:hover:not(:disabled) { background: #2c2c36; }
-button:disabled { opacity: .45; cursor: not-allowed; }
-input, select { font: inherit; background: #17171c; color: #e8e8ea; border: 1px solid #35353f;
-  border-radius: 4px; padding: .35rem .5rem; }
-label { display: block; margin: .6rem 0; }
-label > span { display: block; color: #9a9aa6; margin-bottom: .2rem; }
-code { background: #17171c; padding: .1rem .3rem; border-radius: 3px; }
-dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: .5rem 0; }
-dt { color: #9a9aa6; }
-dd { margin: 0; }
-.badge { display: inline-block; padding: .05rem .45rem; border-radius: 3px; border: 1px solid;
-  font-size: .8rem; }
-.badge--Trading { color: #6ee7a0; border-color: #2f6b48; }
-.badge--Locked { color: #ffd479; border-color: #6b5a2f; }
-.badge--Listed { color: #9a9aa6; border-color: #3a3a44; }
-.badge--Resolved { color: #7bb0ff; border-color: #2f4a6b; }
-.badge--Voided { color: #ff9ea8; border-color: #6b2f38; }
-.err { color: #ff9ea8; }
-.warn { color: #ffd479; }
-.ok { color: #6ee7a0; }
-.muted { color: #9a9aa6; }
-.stale { opacity: .45; }
-.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-.panel { border: 1px solid #2a2a30; border-radius: 6px; padding: .9rem 1rem; margin: .75rem 0; }
+
+main h1, main h2, main h3 { font-weight: 600; margin: 0 0 .5rem; }
+main h1 { font-size: 1.25rem; letter-spacing: .08em; }
+main a { color: #7bb0ff; }
+main hr { border: 0; border-top: 1px solid #2a2a30; margin: 1.25rem 0; }
+
+main table { width: 100%; border-collapse: collapse; }
+main th, main td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #22222a; white-space: nowrap; }
+main th { color: #9a9aa6; font-weight: 500; }
+main tbody tr[role="button"] { cursor: pointer; }
+main tbody tr[role="button"]:hover { background: #17171c; }
+
+main button {
+  font: inherit; background: #23232b; color: #e8e8ea; border: 1px solid #35353f;
+  border-radius: 4px; padding: .4rem .8rem; cursor: pointer;
+}
+main button:hover:not(:disabled) { background: #2c2c36; }
+main button:disabled { opacity: .45; cursor: not-allowed; }
+
+main input, main select {
+  font: inherit; background: #17171c; color: #e8e8ea; border: 1px solid #35353f;
+  border-radius: 4px; padding: .35rem .5rem;
+}
+main label { display: block; margin: .6rem 0; }
+main label > span { display: block; color: #9a9aa6; margin-bottom: .2rem; }
+main code { background: #17171c; padding: .1rem .3rem; border-radius: 3px; }
+
+main dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: .5rem 0; }
+main dt { color: #9a9aa6; }
+main dd { margin: 0; }
+
+main .badge {
+  display: inline-block; padding: .05rem .45rem; border-radius: 3px; border: 1px solid;
+  font-size: .8rem;
+}
+main .badge--Trading { color: #6ee7a0; border-color: #2f6b48; }
+main .badge--Locked { color: #ffd479; border-color: #6b5a2f; }
+main .badge--Settling { color: #ffd479; border-color: #6b5a2f; }
+main .badge--Listed { color: #9a9aa6; border-color: #3a3a44; }
+main .badge--Resolved { color: #7bb0ff; border-color: #2f4a6b; }
+main .badge--Voided { color: #ff9ea8; border-color: #6b2f38; }
+
+main .err { color: #ff9ea8; }
+main .warn { color: #ffd479; }
+main .ok { color: #6ee7a0; }
+main .muted { color: #9a9aa6; }
+main .stale { opacity: .45; }
+main .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+main .panel { border: 1px solid #2a2a30; border-radius: 6px; padding: .9rem 1rem; margin: .75rem 0; }
