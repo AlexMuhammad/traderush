@@ -4,25 +4,28 @@ import type { ReactNode, Ref } from 'react';
  *  that makes the whole panel glow when the window is nearly up or you are
  *  being hunted.
  *
- *  `panelRef` hands the node out so the nav drawer can portal into it — that is
- *  what makes the drawer rise from the console instead of from the viewport. */
+ *  The last child is an always-clipping layer the nav drawer is portalled into.
+ *  It exists so the drawer can slide past the bottom edge without being seen,
+ *  WITHOUT putting `overflow: hidden` on the plate itself — that would cut the
+ *  30px lamp glow off the call keys. Because it clips permanently, nothing has
+ *  to be timed against the drawer's animation.
+ */
 export function Panel({
-  hot, menuOpen, panelRef, children,
+  hot, mountRef, children,
 }: {
   hot: boolean;
-  /** Clips the plate while the drawer slides; see console.css. */
-  menuOpen?: boolean;
-  panelRef?: Ref<HTMLDivElement>;
+  /** Receives the drawer's clipping layer; pass it to NavMenu as `container`. */
+  mountRef?: Ref<HTMLDivElement>;
   children: ReactNode;
 }) {
-  const classes = ['panel', hot && 'hot', menuOpen && 'menu-open'].filter(Boolean).join(' ');
   return (
-    <div className={classes} ref={panelRef}>
+    <div className={`panel${hot ? ' hot' : ''}`}>
       <span className="screw" style={{ top: 7, left: 7 }} />
       <span className="screw" style={{ top: 7, right: 7 }} />
       <span className="screw" style={{ bottom: 7, left: 7 }} />
       <span className="screw" style={{ bottom: 7, right: 7 }} />
       {children}
+      <div className="drawer-mount" ref={mountRef} />
     </div>
   );
 }

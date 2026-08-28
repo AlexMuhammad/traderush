@@ -9,14 +9,13 @@ import { loadConfig } from '@bullrun/sdk';
  *  the viewport.
  */
 export function NavMenu({
-  open, onOpenChange, container, onNavigate, onAnimationEnd,
+  open, onOpenChange, container, onNavigate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The panel's clipping layer, so the drawer rises from inside the console. */
   container: HTMLElement | null;
   onNavigate: (to: string) => void;
-  /** Fires when the slide finishes, so the panel can stop clipping itself. */
-  onAnimationEnd?: (open: boolean) => void;
 }) {
   const cfg = loadConfig(import.meta.env as unknown as Record<string, string | undefined>);
 
@@ -31,7 +30,6 @@ export function NavMenu({
       // background scaling would be measured against the viewport and fight it.
       noBodyStyles
       shouldScaleBackground={false}
-      onAnimationEnd={onAnimationEnd}
     >
       <Drawer.Portal>
         <Drawer.Overlay className="drawer-overlay" />

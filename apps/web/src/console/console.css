@@ -91,13 +91,8 @@
     transparent 40%, transparent 68%, rgba(255,255,255,.09) 86%, transparent 100%);
 }
 
-/* The drawer and its overlay are portalled in as children of the plate, so they
-   are excluded here — `position: relative` would defeat the whole arrangement. */
-.panel > *:not(.drawer):not(.drawer-overlay) { position: relative; z-index: 1; }
-
-/* Clip only while the drawer is sliding. Clipping permanently would cut the
-   30px lamp glow off the call keys at the plate's edge. */
-.panel.menu-open { overflow: hidden; }
+/* The drawer's mount layer is excluded: `position: relative` would defeat it. */
+.panel > *:not(.drawer-mount) { position: relative; z-index: 1; }
 
 /* Near expiry, or while being hunted. */
 .panel.hot {
@@ -585,20 +580,38 @@
 
 /* ---------------------------------------------------------------- the drawer */
 
-/* vaul is scoped to the panel with `container`, and sets no inline `position`,
-   so these two rules are what keep it inside the console instead of pinned to
-   the viewport. */
-.drawer-overlay {
+/* The drawer is portalled into this layer rather than into the plate directly.
+   It clips permanently, so the drawer can animate past the bottom edge without
+   ever being seen — no state, no timing against vaul's animation. Empty while
+   closed, hence pointer-events: none. */
+.drawer-mount {
   position: absolute;
   inset: 0;
   z-index: 5;
+  overflow: hidden;
+  border-radius: 14px;
+  pointer-events: none;
+}
+.drawer-mount > * { pointer-events: auto; }
+
+/* vaul sets no inline `position`, which is what lets these anchor to the mount
+   instead of the viewport. */
+.drawer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   background: rgba(6,7,8,.62);
 }
 
 .drawer {
   position: absolute;
   left: 6px; right: 6px; bottom: 6px;
-  z-index: 6;
+  z-index: 2;
+  /* vaul's slideFrom/ToBottom keyframes travel by var(--initial-transform,100%),
+     i.e. exactly the drawer's own height. That leaves the 6px bottom inset
+     uncovered, so a sliver of the drawer's top edge stays visible against the
+     plate. Overshoot past the inset so it clears the clip completely. */
+  --initial-transform: calc(100% + 10px);
   display: flex;
   flex-direction: column;
   padding: 7px 9px 10px;

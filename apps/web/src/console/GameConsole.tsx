@@ -33,12 +33,9 @@ export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
   const engine = useMemo(() => new Engine(), []);
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Clipping outlives `menuOpen`: it must stay on until the slide-out finishes,
-  // or the drawer is seen dropping past the bottom of the plate.
-  const [clipping, setClipping] = useState(false);
-  // A callback ref, not useRef: the drawer needs to re-render once the node
-  // exists, and a ref mutation does not trigger that.
-  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
+  // A callback ref, not useRef: the drawer needs to re-render once the mount
+  // node exists, and a ref mutation does not trigger that.
+  const [mount, setMount] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const unsubscribe = engine.subscribe(setSnap);
@@ -50,14 +47,14 @@ export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
 
   return (
     <div className="console-stage">
-      <Panel hot={snap.hot} menuOpen={clipping} panelRef={setPanel}>
+      <Panel hot={snap.hot} mountRef={setMount}>
         <Marquee
           asset={snap.asset}
           interval={snap.interval}
           riders={snap.riders}
           expiryLabel={snap.expiryLabel}
           strike={snap.strike}
-          onOpenMenu={() => { engine.wake(); setClipping(true); setMenuOpen(true); }}
+          onOpenMenu={() => { engine.wake(); setMenuOpen(true); }}
         />
 
         <Window engine={engine} s={snap} />
@@ -72,9 +69,8 @@ export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
         <NavMenu
           open={menuOpen}
           onOpenChange={setMenuOpen}
-          container={panel}
+          container={mount}
           onNavigate={navigate}
-          onAnimationEnd={(isOpen) => { if (!isOpen) setClipping(false); }}
         />
       </Panel>
 
