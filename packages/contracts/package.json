@@ -1,0 +1,10 @@
+{
+  "name": "@bullrun/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vv",
+    "deploy": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast -vvv"
+  }
+}

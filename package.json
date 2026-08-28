@@ -1,0 +1,24 @@
+{
+  "name": "bullrun",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.33.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm --filter @bullrun/sdk build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev": "pnpm --filter @bullrun/web dev",
+    "doctor": "pnpm --filter @bullrun/scripts doctor",
+    "probe": "pnpm --filter @bullrun/scripts probe",
+    "e2e": "pnpm --filter @bullrun/scripts e2e",
+    "test:contracts": "pnpm --filter @bullrun/contracts test",
+    "deploy:escrow": "pnpm --filter @bullrun/contracts deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "tsx": "^4.20.3",
+    "@types/node": "^22.15.3"
+  }
+}

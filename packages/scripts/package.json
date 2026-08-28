@@ -1,0 +1,23 @@
+{
+  "name": "@bullrun/scripts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "doctor": "tsx --env-file-if-exists=../../.env src/doctor.ts",
+    "probe": "tsx --env-file-if-exists=../../.env src/probe-unknowns.ts",
+    "e2e": "tsx --env-file-if-exists=../../.env src/e2e-duel.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bullrun/sdk": "workspace:*",
+    "viem": "^2.31.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}

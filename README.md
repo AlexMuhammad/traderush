@@ -1,0 +1,137 @@
+# BULLRUN
+
+A peer-to-peer duel layer on top of DreamDEX Event Contracts.
+
+Normally you trade an Up/Down event contract against the order book. BULLRUN adds a second
+path: **two specific people put up equal stakes, a contract mints the pair for them, and the
+winner takes the pot.** No order book, no market maker, no liquidity requirement.
+
+> **Unaudited. Somnia Shannon testnet (chain `50312`) only. Do not use with real funds.**
+
+Split/merge is a standard primitive — Polymarket has had `splitPosition` / `mergePositions`
+since launch. Our contribution is the product layer on top of it: the challenge, the link, the
+lobby, and the settlement view. **Builder fees apply to book orders only, never to duels.**
+
+---
+
+## How a duel works
+
+Each side stakes `S`. Pot = `2S`. The escrow mints `n = 2S` complete sets, costing `2S`
+collateral, producing `2S` Up and `2S` Down. One leg goes to each party. The winner redeems
+`2S` — the whole pot. The loser's leg redeems 0 and must not revert.
+
+Minting `n = S` is the classic mistake: it pays the winner half the pot and strands the rest.
+
+If nobody accepts, `cancel` refunds the challenger exactly `S`. Nothing was ever minted, so an
+unmatched challenge never puts funds at risk.
+
+---
+
+## Layout
+
+```
+apps/web            base front end — plain, functional, no game art
+packages/contracts  DuelEscrow.sol + forge tests + deploy script
+packages/sdk        market adapter (read/write) + duel adapter (escrow)
+packages/scripts    doctor, §9 probe, two-wallet e2e
+docs/UNKNOWNS.md    the three §9 blocking unknowns — fill these in on day 1
+```
+
+**The front end never talks to the chain or the socket directly. It talks to the SDK.**
+This is non-negotiable: the polished game console is swapped in later against the same SDK
+surface, so any number that is wrong here would be wrong there too.
+
+---
+
+## Setup
+
+```bash
+cp .env.example .env      # fill in RPC/REST/WS and two testnet keys
+pnpm install
+pnpm test:contracts       # 20 tests, no network
+pnpm doctor               # prints the LIVE market list and the venue addresses
+```
+
+`doctor` must print a live market list before anything else is worth doing (M1).
+
+### Deploy the escrow
+
+Contract addresses are **re-fetched at runtime from `GET /v0/markets`** and are never
+hard-coded. `doctor` prints the exact deploy command with them filled in:
+
+```bash
+COLLATERAL=0x… MODULE=0x… OUTCOME=0x… pnpm deploy:escrow
+```
+
+Put the resulting address in `.env` as `DUEL_ESCROW_ADDRESS` and `VITE_DUEL_ESCROW_ADDRESS`.
+
+### The gate
+
+```bash
+pnpm e2e                  # two wallets complete a duel with no UI; records tx hashes
+pnpm dev                  # http://localhost:5173
+```
+
+`pnpm e2e` is M3 and the real gate. **If it is not green by day 3, stop and re-scope.**
+
+---
+
+## Screens
+
+| | | |
+|---|---|---|
+| S1 | Connect | wallet, USDso balance, network guard, one-time approval |
+| S2 | Markets | live table; row click → S3 |
+| S3 | Market | strike, spot, delta, up/down with multiplier, countdown, status |
+| S4 | Create duel | side, stake, pot, payout, accept deadline → `open()` → link |
+| S5 | Lobby | link + copy, countdown, waiting/matched/expired, Cancel |
+| S6 | Live duel | both parties, pot, spot vs strike, who is winning. Read-only |
+| S7 | Result | winner, amount, redeem if not auto-redeemed, oracle link |
+| S8 | Accept | opened from the link; terms and one Accept button, fully guarded |
+
+There is **no claim button**. Settlement lands by itself.
+
+---
+
+## Gotchas implemented
+
+Every one of these silently produces wrong behaviour rather than an obvious error. Each is
+implemented with a comment naming its number.
+
+| # | Gotcha | Where |
+|---|---|---|
+| 1 | Read on-chain status before every write — the indexer lags | `DuelEscrow.open/accept`, `MarketAdapter.assertTradingOnChain`, `DuelAdapter` simulates |
+| 2 | Float prices revert; snap to whole ticks and send a `bigint` | `sdk/src/ticks.ts` `snapPrice` |
+| 3 | Snap size to the lot grid; if it rounds to zero, **skip** | `sdk/src/ticks.ts` `snapSize` |
+| 4 | Order expiry is mandatory — a dead-man's switch | `ticks.ts` `expireTimestampNs` |
+| 5 | Prefer IOC for taker flow | `ticks.ts` `DEFAULT_TIME_IN_FORCE` |
+| 6 | Never key state by pool address — pools are recycled | `MarketAdapter` cache, `Markets.tsx` row keys |
+| 7 | Reconcile against the wallet, not the vault | `MarketAdapter.balance`, `Connect.tsx` |
+| 8 | `loadMarkets()` hides settled markets | `RestClient.listFinalizedMarkets` |
+| 9 | Read `asset` and `intervalSec` as typed fields, never regex the question | `rest.ts` `normalizeMarket` |
+| 10 | Voided pays both sides 0.5 — render as "called off" | `Result.tsx` |
+| 11 | `acceptDeadline` must be ≥ 30s before expiry | `ticks.ts` `assertDeadlineSafe`, `CreateDuel.tsx`, `AcceptDuel.tsx` |
+
+The UI also disables trade/accept a few seconds **before** expiry rather than at zero, and
+dims a stale readout on socket drop instead of showing a frozen price.
+
+---
+
+## Before you write contract logic
+
+`docs/UNKNOWNS.md` holds the three §9 blocking unknowns. They cannot be answered from
+documentation and are cheap to test:
+
+```bash
+pnpm probe
+```
+
+Answer all three in writing before touching the escrow's mint path. If #2 comes back NO, the
+duel design collapses — escalate rather than working around it.
+
+---
+
+## Out of scope
+
+Game console visuals, animation, sound. Leaderboards, points, tokens. Mainnet. Mobile apps.
+Chat. Tournaments. Our own order matching. Anything requiring a backend service.
