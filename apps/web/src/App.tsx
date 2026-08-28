@@ -11,6 +11,7 @@ import { Lobby } from './screens/Lobby';
 import { LiveDuel } from './screens/LiveDuel';
 import { Result } from './screens/Result';
 import { AcceptDuel } from './screens/AcceptDuel';
+import { GameConsole } from './console/GameConsole';
 
 interface WalletCtx {
   conn: Connection | null;
@@ -98,6 +99,8 @@ function Routes() {
       <hr />
       <p className="muted">
         chain {cfg.chainId} · escrow {cfg.escrowAddress ?? `not deployed on ${cfg.network}`}
+        {' · '}
+        <a href="/console" onClick={(e) => { e.preventDefault(); navigate('/console'); }}>game console</a>
       </p>
     </>
   );
@@ -137,6 +140,14 @@ function Banner() {
 }
 
 export function App() {
+  const [path] = usePath();
+
+  // The console owns the whole viewport and carries its own styling, so it
+  // bypasses the base front end's chrome entirely. Simulated for now
+  // (console/engine/market.ts); it will be fed from the SDK once binary market
+  // discovery lands.
+  if (path === '/console') return <GameConsole />;
+
   return (
     <SdkProvider>
       <WalletProvider>
