@@ -11,6 +11,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "dev": "pnpm --filter @bullrun/web dev",
     "doctor": "pnpm --filter @bullrun/scripts doctor",
+    "faucet": "pnpm --filter @bullrun/scripts faucet",
     "probe": "pnpm --filter @bullrun/scripts probe",
     "e2e": "pnpm --filter @bullrun/scripts e2e",
     "deploy:escrow": "pnpm --filter @bullrun/contracts deploy",

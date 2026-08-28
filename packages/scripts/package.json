@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "doctor": "tsx --env-file-if-exists=../../.env src/doctor.ts",
+    "faucet": "tsx --env-file-if-exists=../../.env src/faucet.ts",
     "probe": "tsx --env-file-if-exists=../../.env src/probe-unknowns.ts",
     "e2e": "tsx --env-file-if-exists=../../.env src/e2e-duel.ts",
     "typecheck": "tsc --noEmit"
