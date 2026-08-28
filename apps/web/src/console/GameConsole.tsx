@@ -9,6 +9,7 @@ import { OrderPad } from './components/OrderPad';
 import { Ticket } from './components/Ticket';
 import { CallKeys } from './components/CallKeys';
 import { Footer } from './components/Footer';
+import { NavMenu } from './components/NavMenu';
 import './console.css';
 
 /**
@@ -28,9 +29,16 @@ import './console.css';
  * The market is simulated — see `engine/market.ts`. Swapping in real data means
  * replacing that one module; nothing in `components/` reads it directly.
  */
-export function GameConsole() {
+export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
   const engine = useMemo(() => new Engine(), []);
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Clipping outlives `menuOpen`: it must stay on until the slide-out finishes,
+  // or the drawer is seen dropping past the bottom of the plate.
+  const [clipping, setClipping] = useState(false);
+  // A callback ref, not useRef: the drawer needs to re-render once the node
+  // exists, and a ref mutation does not trigger that.
+  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const unsubscribe = engine.subscribe(setSnap);
@@ -42,13 +50,14 @@ export function GameConsole() {
 
   return (
     <div className="console-stage">
-      <Panel hot={snap.hot}>
+      <Panel hot={snap.hot} menuOpen={clipping} panelRef={setPanel}>
         <Marquee
           asset={snap.asset}
           interval={snap.interval}
           riders={snap.riders}
           expiryLabel={snap.expiryLabel}
           strike={snap.strike}
+          onOpenMenu={() => { engine.wake(); setClipping(true); setMenuOpen(true); }}
         />
 
         <Window engine={engine} s={snap} />
@@ -59,6 +68,14 @@ export function GameConsole() {
 
         <CallKeys engine={engine} s={snap} />
         <Footer engine={engine} s={snap} />
+
+        <NavMenu
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          container={panel}
+          onNavigate={navigate}
+          onAnimationEnd={(isOpen) => { if (!isOpen) setClipping(false); }}
+        />
       </Panel>
 
       <p className="console-hint">

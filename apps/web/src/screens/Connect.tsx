@@ -65,7 +65,7 @@ export function Connect() {
   }
 
   return (
-    <section className="panel">
+    <section className="panel" id="connect">
       <h2>Connected</h2>
       <dl>
         <dt>address</dt><dd><code>{conn.account.address}</code></dd>

@@ -11,7 +11,7 @@ export function Markets({ navigate }: { navigate: (to: string) => void }) {
   if (!markets.length) return <p className="muted">no markets returned by GET /v0/markets</p>;
 
   return (
-    <section>
+    <section id="markets">
       <h2>Markets</h2>
       <table>
         <thead>

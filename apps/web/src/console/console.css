@@ -36,6 +36,10 @@
 
   min-height: 100vh;
   display: grid;
+  /* place-items centres each child inside its own row; the ROWS themselves stay
+     packed at the top, which is why the console sat high. place-content centres
+     the row group in the viewport — both are needed. */
+  place-content: center;
   place-items: center;
   padding: 24px 12px;
   overflow-x: hidden;
@@ -87,7 +91,13 @@
     transparent 40%, transparent 68%, rgba(255,255,255,.09) 86%, transparent 100%);
 }
 
-.panel > * { position: relative; z-index: 1; }
+/* The drawer and its overlay are portalled in as children of the plate, so they
+   are excluded here — `position: relative` would defeat the whole arrangement. */
+.panel > *:not(.drawer):not(.drawer-overlay) { position: relative; z-index: 1; }
+
+/* Clip only while the drawer is sliding. Clipping permanently would cut the
+   30px lamp glow off the call keys at the plate's edge. */
+.panel.menu-open { overflow: hidden; }
 
 /* Near expiry, or while being hunted. */
 .panel.hot {
@@ -511,4 +521,191 @@
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ------------------------------------------------------------- the menu key */
+
+/* A flush panel fitting rather than a pressable control: a shallow well and a
+   cap with a 2px skirt, sized to sit on the header line without crowding it. */
+.menu-key {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.menu-key__housing {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #454B4F 0%, #22262A 45%, #171A1D 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0,0,0,.8),
+    inset 0 -1px 0 rgba(255,255,255,.2),
+    0 1px 0 rgba(255,255,255,.75);
+}
+.menu-key__cap {
+  position: absolute;
+  left: 2px; right: 2px; top: 2px; bottom: 4px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: linear-gradient(#EDEFF1 0%, #C3C8CC 46%, #9DA3A8 54%, #8A9094 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -1px 2px rgba(0,0,0,.26),
+    0 2px 0 var(--skirt),
+    0 3px 4px rgba(0,0,0,.45);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+/* Three engraved bars: dark line, light line under it. */
+.menu-key__cap i {
+  display: block;
+  width: 13px;
+  height: 1px;
+  background: #3A4045;
+  box-shadow: 0 1px 0 rgba(255,255,255,.7);
+}
+.menu-key:active .menu-key__cap {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.5),
+    inset 0 3px 5px rgba(0,0,0,.3),
+    0 0 0 var(--skirt);
+}
+
+.maker__right { display: flex; align-items: center; gap: 8px; }
+
+/* ---------------------------------------------------------------- the drawer */
+
+/* vaul is scoped to the panel with `container`, and sets no inline `position`,
+   so these two rules are what keep it inside the console instead of pinned to
+   the viewport. */
+.drawer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(6,7,8,.62);
+}
+
+.drawer {
+  position: absolute;
+  left: 6px; right: 6px; bottom: 6px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  padding: 7px 9px 10px;
+  border-radius: 12px;
+  outline: none;
+  background: linear-gradient(#2E3337 0%, #191C1F 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 -2px 6px rgba(0,0,0,.5),
+    0 -8px 22px rgba(0,0,0,.65);
+}
+
+.drawer__handle {
+  width: 42px;
+  height: 4px;
+  margin: 1px auto 8px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.20);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,.5);
+  flex: 0 0 auto;
+}
+
+.drawer__title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #7E868C;
+  text-shadow: 0 1px 0 rgba(0,0,0,.6);
+  margin: 0 2px 7px;
+}
+
+.drawer__list { display: flex; flex-direction: column; gap: 5px; }
+
+/* Each row is a steel plaque set into the drawer face — same construction as
+   the panel's own recessed readouts. */
+.drawer__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  background: linear-gradient(#A2A7AB, #7C8286 55%, #8E9498);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.5),
+    inset 0 -2px 4px rgba(0,0,0,.28),
+    0 2px 0 #16181A,
+    0 3px 5px rgba(0,0,0,.45);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+.drawer__item > span {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: #20252A;
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+.drawer__item > em {
+  font-family: 'Share Tech Mono', monospace;
+  font-style: normal;
+  font-size: 9px;
+  color: #464D52;
+  text-align: right;
+}
+.drawer__item:active:not(:disabled) {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 3px 6px rgba(0,0,0,.3),
+    0 0 0 #16181A;
+}
+/* Nothing to go to yet. The lamp is out and the row says why. */
+.drawer__item:disabled {
+  cursor: default;
+  background: linear-gradient(#6E7478, #565C60 55%, #62686C);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.45), inset 0 -1px 0 rgba(255,255,255,.16);
+}
+.drawer__item:disabled > span { color: #3E4448; text-shadow: none; }
+.drawer__item:disabled > em { color: #8A5B4E; }
+
+.drawer__close {
+  margin-top: 9px;
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #9AA0A5;
+  background: linear-gradient(#3A4045, #24282B);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.14),
+    0 2px 0 #131517,
+    0 3px 5px rgba(0,0,0,.45);
+}
+.drawer__close:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.4), 0 0 0 #131517;
 }

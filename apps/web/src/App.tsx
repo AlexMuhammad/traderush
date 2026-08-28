@@ -140,13 +140,13 @@ function Banner() {
 }
 
 export function App() {
-  const [path] = usePath();
+  const [path, navigate] = usePath();
 
   // The console owns the whole viewport and carries its own styling, so it
   // bypasses the base front end's chrome entirely. Simulated for now
   // (console/engine/market.ts); it will be fed from the SDK once binary market
   // discovery lands.
-  if (path === '/console') return <GameConsole />;
+  if (path === '/console') return <GameConsole navigate={navigate} />;
 
   return (
     <SdkProvider>

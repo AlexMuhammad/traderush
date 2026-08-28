@@ -13,6 +13,7 @@
     "@bullrun/sdk": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "vaul": "^1.1.2",
     "viem": "^2.31.0"
   },
   "devDependencies": {
