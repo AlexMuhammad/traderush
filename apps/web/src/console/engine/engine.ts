@@ -329,7 +329,11 @@ export class Engine implements Scene {
     const hx = type === 'gore' ? this.bullX : this.bearX;
     const hy = type === 'gore' ? this.bullY : this.bearY;
     const w = this.ctx?.canvas.clientWidth ?? 320;
-    this.attack = { type, t: 0, x: Math.max(60, Math.min(w - 80, hx + 34)), y: hy };
+    // Captured locally, not read back off `this.attack`: these timers fire up to
+    // 2.2s later, and anything that calls resetScene() in between — tuning to
+    // another race, the next window opening — nulls the field out from under them.
+    const atk: Attack = { type, t: 0, x: Math.max(60, Math.min(w - 80, hx + 34)), y: hy };
+    this.attack = atk;
     this.flash = 0.5; this.flashCol = '255,200,87';
 
     if (type === 'gore') {
@@ -342,7 +346,7 @@ export class Engine implements Scene {
     } else {
       this.audio.rear();
       for (const d of [300, 360, 420]) {
-        this.later(() => this.slashes.push({ x: this.attack!.x + 14, y: this.attack!.y - 4, t: 0 }), d);
+        this.later(() => this.slashes.push({ x: atk.x + 14, y: atk.y - 4, t: 0 }), d);
       }
       this.later(() => this.audio.claw(), 290);
       this.later(() => { this.audio.chomp(); this.flash = 1; this.flashCol = '255,255,255'; }, 520);
@@ -353,6 +357,7 @@ export class Engine implements Scene {
     }
 
     this.later(() => {
+      if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
       this.outcome = { win: false, txt: type === 'gore' ? 'GORED' : 'MAULED', sub };
       this.flash = 0.8; this.flashCol = '255,90,72';
@@ -366,13 +371,15 @@ export class Engine implements Scene {
     const hx = beast === 'bull' ? this.bullX : this.bearX;
     const hy = beast === 'bull' ? this.bullY : this.bearY;
     const w = this.ctx?.canvas.clientWidth ?? 320;
-    this.attack = { type: 'stand', beast, t: 0, x: Math.max(90, Math.min(w - 70, hx + 60)), y: hy };
+    const atk: Attack = { type: 'stand', beast, t: 0, x: Math.max(90, Math.min(w - 70, hx + 60)), y: hy };
+    this.attack = atk;
 
     this.audio.brace();
     this.later(() => { this.audio.clash(); this.flash = 1; this.flashCol = '255,255,255'; }, 400);
     this.later(() => { this.audio.repel(); this.flash = 0.7; this.flashCol = '255,215,119'; }, 630);
     this.later(() => this.audio.chord(), 1080);
     this.later(() => {
+      if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
       this.outcome = { win: true, txt: 'HELD THE LINE', sub };
       this.flash = 0.7; this.flashCol = '255,215,119';

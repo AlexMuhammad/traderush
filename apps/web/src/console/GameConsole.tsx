@@ -46,7 +46,7 @@ export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
   if (!snap) return null;
 
   return (
-    <div className="console-stage">
+    <>
       <Panel hot={snap.hot} mountRef={setMount}>
         <Marquee
           asset={snap.asset}
@@ -78,6 +78,6 @@ export function GameConsole({ navigate }: { navigate: (to: string) => void }) {
         Banteng menguasai wilayah atas, beruang wilayah bawah.
         Mereka tidak bisa menyeberang — kamu yang masuk.
       </p>
-    </div>
+    </>
   );
 }

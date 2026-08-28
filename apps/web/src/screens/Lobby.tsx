@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDuel, useSdk, useNow } from '../sdk';
 import { CopyButton, TxState, useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 /** S5 — Lobby. Link, countdown to acceptDeadline, status, Cancel. On Matched → S6. */
 export function Lobby({ duelId, navigate }: { duelId: bigint; navigate: (to: string) => void }) {

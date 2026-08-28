@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSdk } from '../sdk';
 import { useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 /** S1 — Connect. Address, collateral balance, network guard, one-time approval. */
 export function Connect() {

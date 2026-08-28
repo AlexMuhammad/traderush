@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { parseDuelLink } from '@bullrun/sdk';
 import { SdkProvider, useSdk } from './sdk';
+import { WalletProvider } from './walletContext';
 import { usePath } from './router';
-import { connect, switchNetwork, type Connection } from './wallet';
 import { Connect } from './screens/Connect';
 import { Markets } from './screens/Markets';
 import { Market } from './screens/Market';
@@ -11,64 +10,9 @@ import { Lobby } from './screens/Lobby';
 import { LiveDuel } from './screens/LiveDuel';
 import { Result } from './screens/Result';
 import { AcceptDuel } from './screens/AcceptDuel';
-import { GameConsole } from './console/GameConsole';
+import { ConsoleApp } from './console/ConsoleApp';
 
-interface WalletCtx {
-  conn: Connection | null;
-  connecting: boolean;
-  error: string | null;
-  wrongChain: boolean;
-  doConnect: () => void;
-  doSwitch: () => void;
-}
-const WalletContext = createContext<WalletCtx | null>(null);
-export function useWallet(): WalletCtx {
-  const c = useContext(WalletContext);
-  if (!c) throw new Error('useWallet outside provider');
-  return c;
-}
 
-function WalletProvider({ children }: { children: ReactNode }) {
-  const { cfg } = useSdk();
-  const [conn, setConn] = useState<Connection | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const doConnect = () => {
-    setConnecting(true); setError(null);
-    connect(cfg.chain)
-      .then(setConn)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setConnecting(false));
-  };
-
-  const doSwitch = () => {
-    switchNetwork(cfg.chain)
-      .then(() => connect(cfg.chain).then(setConn))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  };
-
-  // Wallets change account and chain out from under the page; re-read rather than
-  // signing against a stale connection.
-  useEffect(() => {
-    const p = window.ethereum;
-    if (!p) return;
-    const refresh = () => { if (conn) connect(cfg.chain).then(setConn).catch(() => setConn(null)); };
-    p.on?.('accountsChanged', refresh);
-    p.on?.('chainChanged', refresh);
-    return () => {
-      p.removeListener?.('accountsChanged', refresh);
-      p.removeListener?.('chainChanged', refresh);
-    };
-  }, [conn, cfg.chain]);
-
-  const wrongChain = Boolean(conn && conn.chainId !== cfg.chainId);
-  return (
-    <WalletContext.Provider value={{ conn, connecting, error, wrongChain, doConnect, doSwitch }}>
-      {children}
-    </WalletContext.Provider>
-  );
-}
 
 function Routes() {
   const [path, navigate] = usePath();
@@ -81,7 +25,7 @@ function Routes() {
   const duelMatch = /^\/duel\/(\d+)$/.exec(path);
   if (duelMatch) {
     const id = BigInt(duelMatch[1]!);
-    return <DuelRoute duelId={id} navigate={navigate} />;
+    return <DuelScreens duelId={id} navigate={navigate} />;
   }
 
   const marketMatch = /^\/market\/(0x[0-9a-fA-F]+)$/.exec(path);
@@ -106,13 +50,8 @@ function Routes() {
   );
 }
 
-/** S5 → S6 → S7 are one route: the duel's own state decides which one renders. */
-function DuelRoute({ duelId, navigate }: { duelId: bigint; navigate: (to: string) => void }) {
-  const [, setTick] = useState(0);
-  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 3000); return () => clearInterval(t); }, []);
-  return <DuelScreens duelId={duelId} navigate={navigate} />;
-}
-
+/** S5 → S6 → S7 are one route: the duel's own state decides which one renders.
+ *  No ticker here — useDuel already polls duels(id) every 3s and pushes. */
 function DuelScreens({ duelId, navigate }: { duelId: bigint; navigate: (to: string) => void }) {
   const { duels } = useSdk();
   if (!duels) return <p className="err">DUEL_ESCROW_ADDRESS is not set — deploy DuelEscrow first (M3).</p>;
@@ -140,24 +79,32 @@ function Banner() {
 }
 
 export function App() {
+  return (
+    <SdkProvider>
+      <WalletProvider>
+        <Shell />
+      </WalletProvider>
+    </SdkProvider>
+  );
+}
+
+/** Inside the providers, so the console and the base front end share one wallet
+ *  connection rather than each opening their own. */
+function Shell() {
   const [path, navigate] = usePath();
 
   // The console owns the whole viewport and carries its own styling, so it
   // bypasses the base front end's chrome entirely. Simulated for now
   // (console/engine/market.ts); it will be fed from the SDK once binary market
   // discovery lands.
-  if (path === '/console') return <GameConsole navigate={navigate} />;
+  if (path === '/console') return <ConsoleApp navigate={navigate} />;
 
   return (
-    <SdkProvider>
-      <WalletProvider>
-        <main>
-          <h1>BULLRUN</h1>
-          <Banner />
-          <hr />
-          <Routes />
-        </main>
-      </WalletProvider>
-    </SdkProvider>
+    <main>
+      <h1>BULLRUN</h1>
+      <Banner />
+      <hr />
+      <Routes />
+    </main>
   );
 }

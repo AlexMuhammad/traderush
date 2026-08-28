@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { binaryMarketsModuleAbi, outcomeToken6909Abi } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk } from '../sdk';
 import { OracleLink, TxState, useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 /** S7 — Result. Winner, amount, REDEEM, oracle link.
  *  Voided renders as "called off — both sides refunded 0.5", NEVER as a loss (§8.10).

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMarket, useSdk } from '../sdk';
 import { StatusBadge, Countdown, StaleWrapper, TxState, useFrozen, OracleLink, useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 /** S3 — one market. Two actions: trade on the book (solo), or create a duel. */
 export function Market({ marketId, navigate }: { marketId: `0x${string}`; navigate: (to: string) => void }) {

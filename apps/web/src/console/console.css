@@ -737,3 +737,155 @@
   transform: translateY(2px);
   box-shadow: inset 0 2px 5px rgba(0,0,0,.4), 0 0 0 #131517;
 }
+
+/* ----------------------------------------------------------------- the gate */
+
+/* Title card and wallet step. The console is already mounted and running
+   underneath — the gate covers it rather than replacing it, so reaching the
+   game is a fade rather than a load, and the machine is visible from the
+   first frame. The gradient is heavier at the bottom, where the controls are,
+   so the CRT still reads through near the top. */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  padding: 24px 16px;
+  background:
+    linear-gradient(180deg,
+      rgba(10,11,12,.72) 0%,
+      rgba(10,11,12,.86) 42%,
+      rgba(8,9,10,.97) 78%,
+      #08090A 100%);
+  -webkit-backdrop-filter: blur(3px) saturate(.7);
+  backdrop-filter: blur(3px) saturate(.7);
+  animation: gate-in .32s ease-out;
+}
+@keyframes gate-in { from { opacity: 0; } to { opacity: 1; } }
+
+.gate__body {
+  width: min(384px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+/* Stencilled on the case, the way a maker's mark is. */
+.wordmark {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: .22em;
+  text-indent: .22em;
+  color: #0E1012;
+  background: linear-gradient(#FFE9A8 0%, #FFC857 48%, #D9971C 100%);
+  padding: 7px 16px 6px;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    inset 0 -2px 4px rgba(0,0,0,.28),
+    0 3px 0 #6E4E0E,
+    0 8px 20px rgba(0,0,0,.6);
+  margin-bottom: 14px;
+}
+
+.gate__headline {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -.01em;
+  color: #F2F4F5;
+  margin: 0;
+}
+
+.gate__sub {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #9AA0A5;
+  max-width: 32ch;
+  margin: 0 0 6px;
+}
+
+.gate__warn {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #FF9E8E;
+  max-width: 34ch;
+  margin: 0;
+}
+
+/* The one lit control on the screen — same lamp as a live call key. */
+.gate__start {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #4A3206;
+  text-shadow: 0 1px 0 rgba(255,255,255,.45);
+  background: linear-gradient(#FFF9E8 0%, #FFD679 46%, #F0B93C 54%, #C98D14 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -2px 4px rgba(0,0,0,.18),
+    0 4px 0 var(--lamp-lo),
+    0 7px 14px rgba(0,0,0,.55),
+    0 0 34px rgba(255,200,87,.5);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+.gate__start:active:not(:disabled) {
+  transform: translateY(3px);
+  transition-duration: 38ms;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.6),
+    inset 0 4px 8px rgba(0,0,0,.24),
+    0 1px 0 var(--lamp-lo),
+    0 2px 5px rgba(0,0,0,.55),
+    0 0 18px rgba(255,200,87,.45);
+}
+.gate__start:disabled { opacity: .6; cursor: default; }
+
+.gate__demo {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 6px 2px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #C6CACE;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+.gate__demo:hover { color: #FFC857; }
+
+.gate__back {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 4px 2px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #6E757A;
+}
+.gate__back:hover { color: #9AA0A5; }
+
+.gate__fine {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6E757A;
+  max-width: 34ch;
+  margin: 6px 0 0;
+}
+.gate__fine strong { color: #9AA0A5; font-weight: 700; }

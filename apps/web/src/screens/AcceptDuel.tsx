@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { DuelAdapter, UI_FREEZE_SEC } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk, useNow } from '../sdk';
 import { StatusBadge, TxState, useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 interface Link { chainId: number; escrow: `0x${string}`; duelId: bigint }
 

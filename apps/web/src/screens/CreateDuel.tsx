@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { defaultAcceptDeadline, MIN_DEADLINE_MARGIN_SEC } from '@bullrun/sdk';
 import { useMarket, useSdk } from '../sdk';
 import { StatusBadge, TxState, CopyButton, useFrozen, useMoney } from '../components/ui';
-import { useWallet } from '../App';
+import { useWallet } from '../walletContext';
 
 /** S4 — Create duel. Side, stake, computed pot and payout, accept deadline. */
 export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; navigate: (to: string) => void }) {
