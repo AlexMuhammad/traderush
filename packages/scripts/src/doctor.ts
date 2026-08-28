@@ -7,7 +7,7 @@
  *  Nothing here is simulated (§11). Failures are printed, not papered over.
  */
 import { createPublicClient, http, formatUnits } from 'viem';
-import { MarketAdapter, RestClient, erc20Abi, binaryMarketsModuleAbi } from '@bullrun/sdk';
+import { MarketAdapter, erc20Abi } from '@bullrun/sdk';
 import { cfg, fmt } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -68,21 +68,34 @@ async function main() {
     console.log(fmt.bad(`collateral read failed: ${msg(e)}`));
   }
 
-  // --- 4. Where event contracts actually live ------------------------------
-  console.log(fmt.head('4. Market discovery'));
-  const rest = new RestClient(cfg, cfg.apiKey);
+  // --- 4. Live event-contract markets — the M1 gate --------------------------
+  console.log(fmt.head('4. Live event contracts (indexer)'));
+  const market = new MarketAdapter(cfg, { publicClient: pub as never });
   try {
-    const raw = await rest.rawMarkets({ kind: 'all' }) as { markets?: { kind?: string; symbol?: string }[] };
-    const kinds = [...new Set((raw.markets ?? []).map((m) => m.kind))];
-    console.log(fmt.ok(`REST /markets reachable: ${raw.markets?.length ?? 0} rows, kinds [${kinds.join(', ')}]`));
-    // Verified 2026-08-29: the `kind` enum is ["spot","perp","all"]. There is no
-    // binary tier on this endpoint, on either host. PRD §2's claim that the venue
-    // addresses and event contracts are "re-fetchable from GET /v0/markets" is
-    // wrong — binaries come from the indexer via @somnia-chain/markets-sdk.
-    console.log(fmt.warn('Event contracts are NOT on this endpoint (kind enum is spot|perp|all).'));
-    console.log(fmt.warn('Binary market discovery needs @somnia-chain/markets-sdk against the indexer.'));
+    const live = await market.listMarkets();
+    console.log(live.length
+      ? fmt.ok(`${live.length} live binary markets on venue ${cfg.venueId.slice(0, 12)}…`)
+      : fmt.warn('no live markets on the configured venue — VENUE_ID may have moved (§ they do)'));
+    if (live.length) {
+      const now = Math.floor(Date.now() / 1000);
+      console.table(live.map((m) => ({
+        asset: m.symbol, interval: m.intervalSec, status: m.status,
+        strike: m.strike, spot: m.spot, up: m.upPrice.toFixed(3),
+        endsIn: `${m.expiryTime - now}s`,
+        marketId: m.marketId.slice(0, 12) + '…',
+      })));
+      const spotless = live.filter((m) => m.spot === 0);
+      if (spotless.length) {
+        console.log(fmt.warn(`${spotless.length} markets have no underlying price — the feed is testnet-only`));
+      }
+    }
+    // Gotcha §8.8 — settled markets leave the live list entirely.
+    const settled = await market.listFinalizedMarkets(5);
+    console.log(fmt.ok(`${settled.length} settled markets reachable by name (§8.8)`));
   } catch (e) {
-    console.log(fmt.bad(`REST failed: ${msg(e)}`));
+    console.log(fmt.bad(`indexer discovery failed: ${msg(e)}`));
+  } finally {
+    market.close();
   }
 
   // --- 5. Escrow -----------------------------------------------------------
@@ -109,22 +122,9 @@ async function main() {
     }
   }
 
-  // --- 6. Module sanity ----------------------------------------------------
-  console.log(fmt.head('6. Module interface (VERIFY — §4.2)'));
-  try {
-    await pub.readContract({
-      address: cfg.addresses.binaryModule, abi: binaryMarketsModuleAbi,
-      functionName: 'marketStatus', args: [`0x${'00'.repeat(32)}`],
-    });
-    console.log(fmt.ok('marketStatus(bytes32) exists and is callable'));
-  } catch (e) {
-    console.log(fmt.warn(`marketStatus probe: ${msg(e).split('\n')[0]}`));
-    console.log(fmt.warn('The transcribed ABI may not match. Confirm against markets-sdk.'));
-  }
-
   console.log(fmt.head('Next'));
-  console.log('  docs/UNKNOWNS.md — the §9 blockers are still unanswered');
-  console.log('  pnpm probe — answers #1 and #3 once the escrow is deployed');
+  console.log('  pnpm probe — §9 unknowns #1 and #2 (#3 is answered)');
+  console.log('  docs/UNKNOWNS.md — record the answers there');
   void formatUnits;
 }
 

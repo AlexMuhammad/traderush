@@ -103,13 +103,57 @@ The brief lists `0 Listed · 1 Trading · 2 Locked · 4 Resolved · 5 Voided` an
 
 ---
 
+## 6. Every venue signature we transcribed was wrong
+
+PRD §4.2 said "every signature is VERIFY". They were all wrong, and
+`DuelEscrow.sol` calls three of them. The real ABIs are now re-exported from
+`@somnia-chain/markets-sdk` rather than hand-copied, so this class of error
+cannot recur.
+
+| Assumed | Actual |
+|---|---|
+| `mintCompleteSet(bytes32 marketId, uint256 amount)` | `mintCompleteSet(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint256 amount)` |
+| `marketStatus(bytes32) → uint8` | **does not exist** |
+| `outcomeIds(bytes32) → (uint256,uint256)` | **does not exist** |
+| `redeem(bytes32, uint256 tokenId, uint256 amount)` | `redeem(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint8 outcomeIdx, uint256 amount)` |
+
+`markets(bytes32 marketId)` returns the whole record and supplies everything the
+escrow needs in one call: `collateral, originOperatorId, originVenueId, pool,
+yesId, noId, tradingStart, expiry`.
+
+**There is no status enum on-chain.** Status is the trading window:
+`tradingStart <= now < expiry`. Deriving it from the chain's own clock is
+stronger than an indexed enum, and it satisfies gotcha §8.1 directly.
+
+**`DuelEscrow.sol` cannot work as written** — it would deploy and then revert on
+every `accept`. Reworking it against the real interface is the next contract
+task, and it gets simpler: one `markets()` read replaces both `marketStatus()`
+and `outcomeIds()`.
+
+---
+
+## 7. Reference-mode markets carry `strike: "0"`
+
+Half the live markets resolve against a REFERENCE question rather than a strike
+fixed at creation, and their `strike` field reads `"0"` until — and after — the
+window opens. The opening price comes from `getOpeningPrices(marketIds)`.
+
+Read naively, the strike is zero and the entire up/down question is meaningless.
+
+Related: `strike` is documented as "raw, in the oracle's price scale", and that
+scale is exposed nowhere. Parsing it out of the question text is what gotcha §8.9
+forbids. `MarketDiscovery` infers it per asset by comparing the raw strike to the
+live underlying price and rounding to the power of ten between them — measured as
+1e2 on Shannon. Mainnet ships no bundled price feed, so confirm it there.
+
+---
+
 ## What is left
 
-1. **Move market discovery onto `@somnia-chain/markets-sdk`.** `MarketAdapter.listMarkets`
-   and `watch` still read the spot REST endpoint, so S2/S3 render nothing real. This is the
-   biggest remaining piece and it gates M5/M6.
-2. **The §9 unknowns remain unanswered** (`docs/UNKNOWNS.md`), but are now testable: the
-   module address is known and verified to have code.
-3. **`outcomeIds()` reverted** on a zero marketId in `doctor`. Expected for a nonexistent
-   market, but the ABI is still unconfirmed against a real one — this is §9 unknown #3.
-4. **Deploy + `pnpm e2e`** — M3, still the real gate.
+1. **Rework `DuelEscrow.sol` against the real module interface** (finding 6). It cannot
+   work as written. This is now the critical path.
+2. **§9 unknowns #1 and #2** (`docs/UNKNOWNS.md`). #2 is the one that can still sink the
+   design, and it needs two wallets and a resolved market.
+3. **Deploy + `pnpm e2e`** — M3, still the real gate.
+4. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
+   that invents numbers; nothing in `console/components/` reads it directly.

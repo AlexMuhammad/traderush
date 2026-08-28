@@ -30,6 +30,24 @@ const CORE = {
   oracleHub: '0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b',
 } as const;
 
+/** Every address the app can reach for. Named rather than a loose record so a
+ *  caller cannot silently read `undefined` off a key that does not exist. */
+export interface DeploymentAddresses {
+  /** The collateral token: tUSDC (6dp) on testnet, USDso (18dp) on mainnet. */
+  collateral: Address;
+  /** BinaryMarketsModule — mintCompleteSet / mergeCompleteSet / redeem / markets. */
+  binaryModule: Address;
+  binarySettlement: Address;
+  marketsCore: Address;
+  clobFactory: Address;
+  binaryPoolImpl: Address;
+  collateralRouter: Address;
+  marketCreatorFactory: Address;
+  oracleHub: Address;
+  /** Per-network; only a discovery hint, the module emits every MarketCreated. */
+  marketCreator: Address;
+}
+
 export interface Deployment {
   network: Network;
   chainId: number;
@@ -48,7 +66,7 @@ export interface Deployment {
   restUrl: string;
   explorerUrl: string;
   oracleUrl: string;
-  addresses: Record<string, Address> & { collateral: Address; binaryModule: Address };
+  addresses: DeploymentAddresses;
   /** Book granularity in raw units. Binary market rows carry no tickSize/lotSize
    *  (unlike spot), so these are NOT discoverable and must come from config. */
   tick: bigint;

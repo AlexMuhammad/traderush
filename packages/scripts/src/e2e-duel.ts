@@ -8,7 +8,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import {
   DuelAdapter, MarketAdapter, txUrl,
   defaultAcceptDeadline, assertDeadlineSafe, MIN_DEADLINE_MARGIN_SEC,
-  outcomeToken6909Abi, binaryMarketsModuleAbi,
+  erc6909Abi, binarySettlementAbi,
 } from '@bullrun/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
@@ -29,7 +29,7 @@ async function main() {
   const walletA = createWalletClient({ account: A, chain: cfg.chain, transport: http(cfg.rpcUrl) });
   const walletB = createWalletClient({ account: B, chain: cfg.chain, transport: http(cfg.rpcUrl) });
 
-  const market = new MarketAdapter(cfg, { apiKey: process.env.DREAMDEX_API_KEY, publicClient: pub });
+  const market = new MarketAdapter(cfg, { publicClient: pub });
   const duels = new DuelAdapter(cfg, undefined, { publicClient: pub });
   const venue = await market.addresses();
   const decimals = await market.collateralDecimals();
@@ -84,13 +84,15 @@ async function main() {
   if (matched.opponent.toLowerCase() !== B.address.toLowerCase()) throw new Error('opponent mismatch');
 
   // --- assert the duel arithmetic on-chain (§1) ------------------------------
-  const ids = await pub.readContract({
-    address: venue.module, abi: binaryMarketsModuleAbi, functionName: 'outcomeIds', args: [marketId],
-  }) as readonly [bigint, bigint];
-  const [upId, downId] = ids;
+  // The indexer carries the outcome ids; no derivation and no module call.
+  const upId = target.ref.upId;
+  const downId = target.ref.downId;
+  const outcomeToken = await pub.readContract({
+    address: cfg.addresses.binarySettlement, abi: binarySettlementAbi, functionName: 'outcomeToken',
+  }) as `0x${string}`;
   const [aUp, bDown, escrowCollateral] = await Promise.all([
-    pub.readContract({ address: venue.outcomeToken, abi: outcomeToken6909Abi, functionName: 'balanceOf', args: [A.address, upId] }),
-    pub.readContract({ address: venue.outcomeToken, abi: outcomeToken6909Abi, functionName: 'balanceOf', args: [B.address, downId] }),
+    pub.readContract({ address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf', args: [A.address, upId] }) as Promise<bigint>,
+    pub.readContract({ address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf', args: [B.address, downId] }) as Promise<bigint>,
     market.balance(duels.escrow),
   ]);
 

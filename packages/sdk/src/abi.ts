@@ -1,5 +1,41 @@
-/** Hand-written ABIs. DuelEscrow is ours and therefore exact; the venue ABIs are
- *  transcribed from documentation and every entry is VERIFY (§4.2). */
+/** DuelEscrow's ABI is ours and therefore exact.
+ *
+ *  The VENUE ABIs are NOT transcribed any more — they are re-exported straight
+ *  from @somnia-chain/markets-sdk, which is generated from the deployed
+ *  contracts. Transcribing them by hand is exactly what PRD §4.2 warned about,
+ *  and every signature we had transcribed turned out to be wrong:
+ *
+ *    assumed  mintCompleteSet(bytes32 marketId, uint256 amount)
+ *    actual   mintCompleteSet(uint32 operatorId, bytes32 venueId,
+ *                             bytes32 marketId, uint256 amount)
+ *
+ *    assumed  marketStatus(bytes32) -> uint8
+ *    actual   does not exist. `markets(bytes32)` returns the whole record,
+ *             including tradingStart/expiry, which is what status derives from.
+ *
+ *    assumed  outcomeIds(bytes32) -> (uint256, uint256)
+ *    actual   does not exist. `markets(bytes32)` carries yesId/noId, and they
+ *             equal outcomeId(pool, nonce, idx).
+ *
+ *    assumed  redeem(bytes32, uint256 tokenId, uint256 amount)
+ *    actual   redeem(uint32 operatorId, bytes32 venueId, bytes32 marketId,
+ *                    uint8 outcomeIdx, uint256 amount)
+ *
+ *  See docs/FINDINGS.md. */
+export {
+  binaryModuleReadAbi,
+  binaryModuleWriteAbi,
+  binarySettlementAbi,
+  erc6909Abi,
+} from '@somnia-chain/markets-sdk';
+
+/** Field order of `binaryModule.markets(bytes32)`. Named so a caller reads
+ *  `record[MARKET.expiry]` instead of `record[13]`. */
+export const MARKET = {
+  oracleQuestionId: 0, outcomeSlotCount: 1, voidPolicy: 2, collateral: 3,
+  originOperatorId: 4, originVenueId: 5, oracleAdapter: 6, creator: 7,
+  market: 8, pool: 9, yesId: 10, noId: 11, tradingStart: 12, expiry: 13,
+} as const;
 
 export const duelEscrowAbi = [
   {
@@ -77,17 +113,3 @@ export const erc20Abi = [
   { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
 ] as const;
 
-/** VERIFY (§4.2, §9 unknown #3). */
-export const binaryMarketsModuleAbi = [
-  { type: 'function', name: 'mintCompleteSet', stateMutability: 'nonpayable', inputs: [{ name: 'marketId', type: 'bytes32' }, { name: 'amount', type: 'uint256' }], outputs: [] },
-  { type: 'function', name: 'mergeCompleteSet', stateMutability: 'nonpayable', inputs: [{ name: 'marketId', type: 'bytes32' }, { name: 'amount', type: 'uint256' }], outputs: [] },
-  { type: 'function', name: 'redeem', stateMutability: 'nonpayable', inputs: [{ name: 'marketId', type: 'bytes32' }, { name: 'tokenId', type: 'uint256' }, { name: 'amount', type: 'uint256' }], outputs: [] },
-  { type: 'function', name: 'marketStatus', stateMutability: 'view', inputs: [{ name: 'marketId', type: 'bytes32' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'outcomeIds', stateMutability: 'view', inputs: [{ name: 'marketId', type: 'bytes32' }], outputs: [{ name: 'upId', type: 'uint256' }, { name: 'downId', type: 'uint256' }] },
-] as const;
-
-/** VERIFY (§4.2). */
-export const outcomeToken6909Abi = [
-  { type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ name: 'receiver', type: 'address' }, { name: 'id', type: 'uint256' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'id', type: 'uint256' }], outputs: [{ type: 'uint256' }] },
-] as const;

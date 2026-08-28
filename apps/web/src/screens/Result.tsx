@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { binaryMarketsModuleAbi, outcomeToken6909Abi } from '@bullrun/sdk';
+import { binaryModuleWriteAbi, binarySettlementAbi, erc6909Abi, type BinaryRef } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk } from '../sdk';
 import { OracleLink, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../walletContext';
@@ -16,12 +16,14 @@ import { useWallet } from '../walletContext';
 export function Result({ duelId }: { duelId: bigint }) {
   const duel = useDuel(duelId);
   const market = useMarket(duel?.marketId ?? null);
-  const { market: adapter } = useSdk();
+  const { market: adapter, cfg } = useSdk();
   const { conn } = useWallet();
   const money = useMoney();
 
   const [held, setHeld] = useState<bigint | null>(null);
-  const [myId, setMyId] = useState<bigint | null>(null);
+  const [ref, setRef] = useState<BinaryRef | null>(null);
+  /** 0 = YES/UP, 1 = NO/DOWN — the module's own outcome index. */
+  const [myIdx, setMyIdx] = useState<0 | 1>(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<string | null>(null);
@@ -33,20 +35,30 @@ export function Result({ duelId }: { duelId: bigint }) {
     let alive = true;
     void (async () => {
       try {
-        const venue = await adapter.addresses();
-        const ids = await adapter.publicClient.readContract({
-          address: venue.module, abi: binaryMarketsModuleAbi,
-          functionName: 'outcomeIds', args: [duel.marketId],
-        }) as readonly [bigint, bigint];
+        // The indexer already carries the outcome ids and the market's ORIGIN
+        // venue — both are needed to redeem, and neither is derivable from the
+        // marketId alone.
+        const r = await adapter.ref(duel.marketId);
+        if (!r) throw new Error(`market ${duel.marketId} is not in the indexer`);
+
         const me = conn.account.address.toLowerCase();
         const iAmChallenger = me === duel.challenger.toLowerCase();
         const iAmUp = iAmChallenger ? duel.challengerUp : !duel.challengerUp;
-        const id = iAmUp ? ids[0] : ids[1];
+        const idx: 0 | 1 = iAmUp ? 0 : 1;
+
+        // The ERC-6909 singleton is named by the settlement contract rather
+        // than guessed at.
+        const outcomeToken = await adapter.publicClient.readContract({
+          address: cfg.addresses.binarySettlement, abi: binarySettlementAbi,
+          functionName: 'outcomeToken',
+        }) as `0x${string}`;
+
         const bal = await adapter.publicClient.readContract({
-          address: venue.outcomeToken, abi: outcomeToken6909Abi,
-          functionName: 'balanceOf', args: [conn.account.address, id],
-        });
-        if (alive) { setMyId(id); setHeld(bal); }
+          address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf',
+          args: [conn.account.address, idx === 0 ? r.upId : r.downId],
+        }) as bigint;
+
+        if (alive) { setRef(r); setMyIdx(idx); setHeld(bal); }
       } catch (e) { if (alive) setError(e instanceof Error ? e.message : String(e)); }
     })();
     return () => { alive = false; };
@@ -62,15 +74,16 @@ export function Result({ duelId }: { duelId: bigint }) {
   const iWon = me === winner.toLowerCase();
 
   const redeem = async () => {
-    if (!conn || myId === null || held === null || held === 0n) return;
+    if (!conn || !ref || held === null || held === 0n) return;
     setPending(true); setError(null);
     try {
-      const venue = await adapter.addresses();
-      // The loser's leg redeems 0 and must not revert (§11), so this is safe to press
-      // on either side.
+      // redeem is scoped by the market's origin venue, not by whichever venue
+      // it was read through. The loser's leg redeems 0 and must not revert
+      // (§11), so this is safe to press on either side.
       const { request } = await adapter.publicClient.simulateContract({
-        account: conn.account, address: venue.module, abi: binaryMarketsModuleAbi,
-        functionName: 'redeem', args: [duel.marketId, myId, held],
+        account: conn.account, address: cfg.addresses.binaryModule,
+        abi: binaryModuleWriteAbi, functionName: 'redeem',
+        args: [ref.operatorId, ref.venueId, duel.marketId, myIdx, held],
       });
       const tx = await conn.wallet.writeContract(request);
       await adapter.publicClient.waitForTransactionReceipt({ hash: tx });

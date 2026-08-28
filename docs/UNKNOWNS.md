@@ -1,8 +1,7 @@
 # §9 — Blocking unknowns
 
-**Status: UNANSWERED.** These block contract logic, not follow it. Run `pnpm probe`
-against a 15-minute market and fill this file in on day 1. Nothing downstream is
-trustworthy until all three have a written answer here.
+**Status: #3 ANSWERED. #1 and #2 still open.** Run `pnpm probe` and fill the rest
+in. Nothing downstream is trustworthy until each has a written answer here.
 
 ---
 
@@ -35,23 +34,42 @@ Procedure (needs two wallets and a resolved market):
 
 ---
 
-## #3 How are `upId` / `downId` derived from `marketId`?
+## #3 How are `upId` / `downId` derived from `marketId`? — ANSWERED
 
-- **Answer:** _(unanswered)_
-- **Evidence:** _(does `outcomeIds()` exist? if not, what does packages/core do?)_
-- **Tested on:** _(date, marketId)_
+- **Answer:** They are not derived from `marketId` at all. They derive from the
+  POOL and its nonce:
 
-**If `outcomeIds()` does not exist:** read the derivation out of
-`github.com/somnia-chain/dreamdex-bot-kit` `packages/core` and adjust
-`IBinaryMarketsModule` plus `packages/sdk/src/abi.ts`. The ids may derive as
-`keccak(marketId, outcome)` or live inside the `markets(marketId)` record.
+  ```
+  id = (uint160(pool) << 72) | (nonce << 8) | idx        idx: 0 = UP/YES, 1 = DOWN/NO
+  ```
+
+  In practice nothing has to compute it. Both ids are carried on every indexed
+  market row as `yesTokenId` / `noTokenId`, and the on-chain record
+  `binaryModule.markets(marketId)` returns them as `yesId` / `noId`.
+
+  `outcomeIds(bytes32)` does **not** exist on the module.
+
+- **Evidence:** `outcomeId(pool, nonce, idx)` from `@somnia-chain/markets-sdk`
+  reproduces the indexer's ids exactly, checked across ten live Shannon markets.
+  Example: pool `0xb20dd6a2…`, nonce 42, idx 0 →
+  `4800327862127088248229621037605621891398115974915084856122694860548608`,
+  identical to the row's `yesTokenId`. The chain agrees: `markets()` returns the
+  same pair.
+- **Tested on:** 2026-08-29, Shannon testnet.
+
+**Consequence:** pools are recycled, so `(pool, nonce)` — not the pool alone — is
+what identifies a window. This is the mechanism behind gotcha §8.6.
 
 ---
 
-## Non-blocking
+## Non-blocking — ANSWERED
 
 **Are BTC/ETH event-contract markets live on Shannon, and with what depth?**
 
-- **Answer:** _(unanswered — `pnpm doctor` prints this)_
+- **Answer:** Yes. Both assets, on two venues. On operator 2's venue
+  (`0x679795a0…`, the one in `networks.ts`): 6 live markets at 1h, 4h and 24h.
+  Operator 4's venue also runs 60s and 300s windows. Books carry resting orders
+  on both sides for most markets; the 24h ones often have an ask but no bid.
+- **Tested on:** 2026-08-29 via `pnpm doctor`.
 
 Duels do not need depth; solo book trading does.
