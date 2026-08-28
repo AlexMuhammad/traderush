@@ -56,6 +56,27 @@ open an `AudioContext` any earlier.
 `Engine.later()` records them so `stop()` can cancel the lot — otherwise a
 sequence outlives the component and fires into a dead canvas.
 
+## Testing it
+
+```bash
+pnpm smoke
+```
+
+Drives the real `Engine` against a stubbed canvas: idle, trading into danger,
+all three cinematics through their full timelines, a window resolving with the
+real timers running out, tuning across all four races, board/bail, the speed
+cycle, and teardown.
+
+It asserts invariants, never values — the simulation is random by design, so
+anything keyed to a particular price would flake. It exists because `tsc` cannot
+see the failures that actually happen here: a null read inside a timer, an index
+walking off a keyframe table, a cinematic branch a normal session reaches once.
+It has already caught a crash that survived a full typecheck and a clean build.
+
+It is not a substitute for looking at the thing. It proves the engine does not
+throw and that the state transitions hold; it says nothing about whether the
+animals look right.
+
 ## Simulated data
 
 `engine/market.ts` is the only module that invents numbers. Everything else

@@ -13,8 +13,9 @@
     "doctor": "pnpm --filter @bullrun/scripts doctor",
     "probe": "pnpm --filter @bullrun/scripts probe",
     "e2e": "pnpm --filter @bullrun/scripts e2e",
-    "test:contracts": "pnpm --filter @bullrun/contracts test",
-    "deploy:escrow": "pnpm --filter @bullrun/contracts deploy"
+    "deploy:escrow": "pnpm --filter @bullrun/contracts deploy",
+    "smoke": "pnpm --filter @bullrun/web smoke",
+    "test:contracts": "pnpm --filter @bullrun/contracts test"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

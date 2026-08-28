@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx test/console-smoke.mts"
   },
   "dependencies": {
     "@bullrun/sdk": "workspace:*",
@@ -21,6 +22,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.9.2",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "tsx": "^4.20.3"
   }
 }
