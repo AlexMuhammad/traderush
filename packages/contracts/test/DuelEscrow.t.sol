@@ -21,6 +21,15 @@ contract DuelEscrowTest is Test {
     bytes32 constant MARKET = keccak256("BTC-UP-DOWN-15M-0001");
     uint128 constant STAKE  = 10e18;
 
+    // Mirrors a real market: an origin venue, a recycled pool with a nonce, and a
+    // window. Status is the window — the module has no status function.
+    address constant POOL      = 0x7eDA47f9B2B44881FA36C8A4569CE4B5C24221Cc;
+    uint64  constant NONCE     = 42;
+    uint32  constant OPERATOR  = 2;
+    bytes32 constant VENUE     = bytes32(uint256(0x679795));
+    uint64  constant WINDOW    = 900;
+    uint64  expiry;
+
     event Opened(uint256 indexed id, address indexed challenger, bytes32 indexed marketId,
                  bool challengerUp, uint128 stake, uint64 acceptDeadline);
     event Matched(uint256 indexed id, address indexed opponent, uint256 minted);
@@ -33,7 +42,8 @@ contract DuelEscrowTest is Test {
         module     = new MockBinaryMarketsModule(collateral, outcome);
         escrow     = new DuelEscrow(address(collateral), address(module), address(outcome));
 
-        module.setStatus(MARKET, 1); // Trading
+        expiry = uint64(block.timestamp) + WINDOW;
+        module.register(MARKET, POOL, NONCE, uint64(block.timestamp), expiry, OPERATOR, VENUE);
 
         collateral.mint(alice, 1_000e18);
         collateral.mint(bob,   1_000e18);
@@ -41,8 +51,14 @@ contract DuelEscrowTest is Test {
         vm.prank(bob);   collateral.approve(address(escrow), type(uint256).max);
     }
 
+    /// @dev Comfortably inside the window and clear of MIN_DEADLINE_MARGIN.
     function _deadline() internal view returns (uint64) {
-        return uint64(block.timestamp + 300);
+        return expiry - 60;
+    }
+
+    function _ids() internal view returns (uint256 upId, uint256 downId) {
+        upId = module.outcomeIdFor(MARKET, 0);
+        downId = module.outcomeIdFor(MARKET, 1);
     }
 
     function _open(bool up) internal returns (uint256 id) {
@@ -76,11 +92,47 @@ contract DuelEscrowTest is Test {
         assertEq(uint8(s), uint8(DuelEscrow.Status.Open));
     }
 
-    function test_open_revertsWhenMarketNotTrading() public {
-        module.setStatus(MARKET, 2); // Locked
+    function test_open_revertsBeforeTheWindowOpens() public {
+        module.setWindow(MARKET, uint64(block.timestamp) + 100, expiry);
         vm.prank(alice);
         vm.expectRevert(DuelEscrow.MarketNotTrading.selector);
         escrow.open(MARKET, true, STAKE, _deadline());
+    }
+
+    function test_open_revertsAfterTheWindowShuts() public {
+        vm.warp(expiry + 1);
+        vm.prank(alice);
+        vm.expectRevert(DuelEscrow.MarketNotTrading.selector);
+        escrow.open(MARKET, true, STAKE, uint64(block.timestamp + 10));
+    }
+
+    function test_open_revertsOnUnknownMarket() public {
+        vm.prank(alice);
+        vm.expectRevert(DuelEscrow.MarketUnknown.selector);
+        escrow.open(keccak256("nope"), true, STAKE, _deadline());
+    }
+
+    /// @dev A market settled in a different token would silently escrow the wrong one.
+    function test_open_revertsOnWrongCollateral() public {
+        module.setCollateral(MARKET, address(0xBEEF));
+        vm.prank(alice);
+        vm.expectRevert(DuelEscrow.WrongCollateral.selector);
+        escrow.open(MARKET, true, STAKE, _deadline());
+    }
+
+    /// @dev Gotcha §8.11, now enforced on-chain: an accept that lands in a locking
+    ///      market reverts inside mintCompleteSet and burns gas for both parties.
+    function test_open_revertsWhenDeadlineTooCloseToExpiry() public {
+        vm.prank(alice);
+        vm.expectRevert(DuelEscrow.DeadlineTooLate.selector);
+        escrow.open(MARKET, true, STAKE, expiry - 29);
+    }
+
+    function test_open_acceptsDeadlineExactlyAtTheMargin() public {
+        vm.prank(alice);
+        uint256 id = escrow.open(MARKET, true, STAKE, expiry - 30);
+        (, , , , uint64 dl, ,) = escrow.duels(id);
+        assertEq(dl, expiry - 30);
     }
 
     function test_open_revertsDeadlineInPast() public {
@@ -106,7 +158,7 @@ contract DuelEscrowTest is Test {
         vm.prank(bob);
         escrow.accept(id);
 
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         // Duel arithmetic §1: pot = 2S, each side holds 2S of its own leg.
         assertEq(outcome.balanceOf(alice, upId), n);
         assertEq(outcome.balanceOf(bob, downId), n);
@@ -121,7 +173,7 @@ contract DuelEscrowTest is Test {
 
         assertEq(collateral.balanceOf(address(escrow)), 0);
         assertEq(outcome.balanceOf(address(escrow), 0), 0);
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         assertEq(outcome.balanceOf(address(escrow), upId), 0);
         assertEq(outcome.balanceOf(address(escrow), downId), 0);
     }
@@ -131,7 +183,7 @@ contract DuelEscrowTest is Test {
         vm.prank(bob);
         escrow.accept(id);
 
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         assertEq(outcome.balanceOf(alice, downId), uint256(STAKE) * 2);
         assertEq(outcome.balanceOf(bob, upId), uint256(STAKE) * 2);
     }
@@ -145,7 +197,9 @@ contract DuelEscrowTest is Test {
 
     function test_accept_revertsAfterDeadline() public {
         uint256 id = _open(true);
-        vm.warp(block.timestamp + 301);
+        // Past the accept deadline but still inside the market's window, so this
+        // isolates DeadlinePassed from MarketNotTrading.
+        vm.warp(_deadline() + 1);
         vm.prank(bob);
         vm.expectRevert(DuelEscrow.DeadlinePassed.selector);
         escrow.accept(id);
@@ -164,9 +218,11 @@ contract DuelEscrowTest is Test {
         escrow.accept(id);
     }
 
-    function test_accept_revertsWhenMarketNotTrading() public {
+    function test_accept_revertsAfterTheWindowShuts() public {
         uint256 id = _open(true);
-        module.setStatus(MARKET, 2); // Locked — gotcha §8.11
+        // Deliberately not warped past the accept deadline: the market itself is
+        // what has gone, and that must be caught on its own.
+        module.setWindow(MARKET, uint64(block.timestamp), uint64(block.timestamp));
         vm.prank(bob);
         vm.expectRevert(DuelEscrow.MarketNotTrading.selector);
         escrow.accept(id);
@@ -199,7 +255,7 @@ contract DuelEscrowTest is Test {
 
     function test_cancel_afterDeadline_anyone() public {
         uint256 id = _open(true);
-        vm.warp(block.timestamp + 301);
+        vm.warp(_deadline() + 1);
 
         vm.prank(bob);
         escrow.cancel(id);
@@ -239,7 +295,7 @@ contract DuelEscrowTest is Test {
         assertTrue(attacker.reentered(), "hook never fired - test is not exercising the guard");
         assertTrue(attacker.reentryReverted(), "accept was re-entered");
 
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         assertEq(outcome.balanceOf(address(attacker), downId), uint256(STAKE) * 2);
         assertEq(outcome.balanceOf(address(attacker), upId), 0);
         assertEq(collateral.balanceOf(address(escrow)), 0);
@@ -253,18 +309,18 @@ contract DuelEscrowTest is Test {
         escrow.accept(id);
 
         uint256 n = uint256(STAKE) * 2;
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         module.resolve(MARKET, true); // Up wins — Alice
 
         uint256 aliceBefore = collateral.balanceOf(alice);
         vm.prank(alice);
-        module.redeem(MARKET, upId, n);
+        module.redeem(OPERATOR, VENUE, MARKET, 0, n);
         assertEq(collateral.balanceOf(alice) - aliceBefore, n, "winner takes the whole pot");
 
         // §11 — the loser's leg must redeem 0 without reverting.
         uint256 bobBefore = collateral.balanceOf(bob);
         vm.prank(bob);
-        module.redeem(MARKET, downId, n);
+        module.redeem(OPERATOR, VENUE, MARKET, 1, n);
         assertEq(collateral.balanceOf(bob), bobBefore);
     }
 
@@ -274,13 +330,13 @@ contract DuelEscrowTest is Test {
         escrow.accept(id);
 
         uint256 n = uint256(STAKE) * 2;
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         module.voidMarket(MARKET); // §8.10 — "called off", not a loss
 
         uint256 a0 = collateral.balanceOf(alice);
         uint256 b0 = collateral.balanceOf(bob);
-        vm.prank(alice); module.redeem(MARKET, upId, n);
-        vm.prank(bob);   module.redeem(MARKET, downId, n);
+        vm.prank(alice); module.redeem(OPERATOR, VENUE, MARKET, 0, n);
+        vm.prank(bob);   module.redeem(OPERATOR, VENUE, MARKET, 1, n);
 
         assertEq(collateral.balanceOf(alice) - a0, STAKE, "each side gets its own stake back");
         assertEq(collateral.balanceOf(bob) - b0, STAKE);
@@ -298,7 +354,7 @@ contract DuelEscrowTest is Test {
         vm.prank(bob);
         escrow.accept(id);
 
-        (uint256 upId, uint256 downId) = module.outcomeIds(MARKET);
+        (uint256 upId, uint256 downId) = _ids();
         assertEq(outcome.balanceOf(alice, upId), uint256(stake) * 2);
         assertEq(outcome.balanceOf(bob, downId), uint256(stake) * 2);
         assertEq(collateral.balanceOf(address(escrow)), 0);

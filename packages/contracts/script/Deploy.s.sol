@@ -5,8 +5,12 @@ import {Script, console2} from "forge-std/Script.sol";
 import {DuelEscrow} from "../src/DuelEscrow.sol";
 
 /// @notice Deploys DuelEscrow to Shannon (50312).
-/// @dev Addresses are NOT hard-coded (§2): pass them in from `pnpm doctor`, which
-///      re-fetches them at runtime from GET /v0/markets.
+/// @dev Addresses are NOT hard-coded: pass them in from `pnpm doctor`, which prints
+///      the exact command with them filled in.
+///
+///      OUTCOME is the ERC-6909 singleton, which is NOT the module — it comes from
+///      `BinarySettlement.outcomeToken()`. Passing the module here compiles and
+///      deploys, then fails on the first leg transfer.
 ///
 ///   COLLATERAL=0x.. MODULE=0x.. OUTCOME=0x.. PRIVATE_KEY_A=0x.. \
 ///   forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast

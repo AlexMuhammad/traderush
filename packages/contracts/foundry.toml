@@ -6,6 +6,10 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
+# `markets()` returns fourteen values. Destructuring even a subset of them blows
+# the legacy codegen's stack, and the compiler names via-IR as the fix. It is
+# also the pipeline the optimizer is actually built around now.
+via_ir = true
 evm_version = "cancun"
 remappings = [
   "openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",

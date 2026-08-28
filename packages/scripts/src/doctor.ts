@@ -7,7 +7,7 @@
  *  Nothing here is simulated (§11). Failures are printed, not papered over.
  */
 import { createPublicClient, http, formatUnits } from 'viem';
-import { MarketAdapter, erc20Abi } from '@bullrun/sdk';
+import { MarketAdapter, erc20Abi, binarySettlementAbi } from '@bullrun/sdk';
 import { cfg, fmt } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -102,10 +102,19 @@ async function main() {
   console.log(fmt.head('5. DuelEscrow'));
   if (!cfg.escrowAddress) {
     console.log(fmt.warn(`DUEL_ESCROW_ADDRESS_${cfg.network.toUpperCase()} unset — not deployed on ${cfg.network} yet (M3)`));
+    // The ERC-6909 singleton is NOT the module. BinarySettlement names it.
+    let outcomeToken = '<read outcomeToken() from BinarySettlement>';
+    try {
+      outcomeToken = await pub.readContract({
+        address: cfg.addresses.binarySettlement, abi: binarySettlementAbi,
+        functionName: 'outcomeToken',
+      }) as string;
+    } catch (e) { console.log(fmt.warn(`outcomeToken() failed: ${msg(e)}`)); }
+
     console.log('\nDeploy with:');
     console.log(`  COLLATERAL=${cfg.addresses.collateral} \\`);
     console.log(`  MODULE=${cfg.addresses.binaryModule} \\`);
-    console.log(`  OUTCOME=${cfg.addresses.binaryModule} \\`);
+    console.log(`  OUTCOME=${outcomeToken} \\`);
     console.log(`  RPC_URL=${cfg.rpcUrl} pnpm deploy:escrow`);
   } else {
     try {

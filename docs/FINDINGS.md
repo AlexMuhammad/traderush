@@ -125,10 +125,23 @@ yesId, noId, tradingStart, expiry`.
 `tradingStart <= now < expiry`. Deriving it from the chain's own clock is
 stronger than an indexed enum, and it satisfies gotcha §8.1 directly.
 
-**`DuelEscrow.sol` cannot work as written** — it would deploy and then revert on
-every `accept`. Reworking it against the real interface is the next contract
-task, and it gets simpler: one `markets()` read replaces both `marketStatus()`
-and `outcomeIds()`.
+**`DuelEscrow.sol` has been reworked against this interface.** One `markets()`
+read now replaces both missing functions, and two guards became possible that
+were not before:
+
+- **§8.11 is enforced on-chain.** The escrow knows the expiry, so
+  `acceptDeadline + 30 <= expiry` is a contract rule rather than something the
+  client is trusted to respect.
+- **Collateral is checked.** A market settling in a different token would
+  otherwise have escrowed the wrong one.
+
+`markets()` returns fourteen values, which overflows the legacy codegen's stack,
+so the package compiles with `via_ir`.
+
+One address to get right at deploy: the ERC-6909 singleton is **not** the module.
+It comes from `BinarySettlement.outcomeToken()` — `0xB52c5934…` on Shannon.
+Passing the module deploys fine and then fails on the first leg transfer.
+`pnpm doctor` reads it and prints the correct command.
 
 ---
 
@@ -150,10 +163,8 @@ live underlying price and rounding to the power of ten between them — measured
 
 ## What is left
 
-1. **Rework `DuelEscrow.sol` against the real module interface** (finding 6). It cannot
-   work as written. This is now the critical path.
-2. **§9 unknowns #1 and #2** (`docs/UNKNOWNS.md`). #2 is the one that can still sink the
-   design, and it needs two wallets and a resolved market.
-3. **Deploy + `pnpm e2e`** — M3, still the real gate.
+1. **§9 unknowns #1 and #2** (`docs/UNKNOWNS.md`). #2 is the one that can still sink the
+   design, and it needs two wallets and a resolved market. This is the critical path.
+2. **Deploy + `pnpm e2e`** — M3, still the real gate. Needs two funded testnet wallets.
 4. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
    that invents numbers; nothing in `console/components/` reads it directly.

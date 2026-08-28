@@ -73,6 +73,7 @@ export const duelEscrowAbi = [
   { type: 'function', name: 'collateral', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'module', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'outcome', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'MIN_DEADLINE_MARGIN', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint64' }] },
   {
     type: 'event', name: 'Opened',
     inputs: [
@@ -99,6 +100,9 @@ export const duelEscrowAbi = [
   { type: 'error', name: 'NotOpen', inputs: [] },
   { type: 'error', name: 'DeadlinePassed', inputs: [] },
   { type: 'error', name: 'DeadlineInPast', inputs: [] },
+  { type: 'error', name: 'DeadlineTooLate', inputs: [] },
+  { type: 'error', name: 'MarketUnknown', inputs: [] },
+  { type: 'error', name: 'WrongCollateral', inputs: [] },
   { type: 'error', name: 'MarketNotTrading', inputs: [] },
   { type: 'error', name: 'SelfDuel', inputs: [] },
   { type: 'error', name: 'NotChallenger', inputs: [] },
