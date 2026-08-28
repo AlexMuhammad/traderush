@@ -3,7 +3,7 @@ import {
   type PublicClient, type WalletClient, type Account,
 } from 'viem';
 import type { BullrunConfig } from './config.js';
-import { shannon, duelLink } from './config.js';
+import { duelLink } from './config.js';
 import { duelEscrowAbi, erc20Abi } from './abi.js';
 import { assertDeadlineSafe } from './ticks.js';
 import type { Duel, DuelStatus, DuelView, Side, TxResult } from './types.js';
@@ -29,11 +29,15 @@ export class DuelAdapter {
   ) {
     const addr = escrowAddress ?? cfg.escrowAddress;
     if (!addr) {
-      throw new Error('DUEL_ESCROW_ADDRESS is not set — deploy DuelEscrow first (M3) and put it in .env');
+      throw new Error(
+        `DUEL_ESCROW_ADDRESS is not set for ${cfg.network} — deploy DuelEscrow on chain ` +
+        `${cfg.chainId} first (M3). Each network needs its own deploy; set ` +
+        `DUEL_ESCROW_ADDRESS_${cfg.network.toUpperCase()} in .env.`,
+      );
     }
     this.escrow = addr;
     this.publicClient = opts.publicClient ?? (createPublicClient({
-      chain: shannon, transport: http(cfg.rpcUrl),
+      chain: cfg.chain, transport: http(cfg.rpcUrl),
     }) as PublicClient);
     this.pollMs = opts.pollMs ?? 3_000;
   }
@@ -43,7 +47,7 @@ export class DuelAdapter {
   /** One-time approval so `open`/`accept` can pull the stake. */
   async approve(wallet: WalletClient, account: Account, collateral: `0x${string}`, amount: bigint): Promise<TxResult> {
     const hash = await wallet.writeContract({
-      chain: shannon, account, address: collateral,
+      chain: this.cfg.chain, account, address: collateral,
       abi: erc20Abi, functionName: 'approve', args: [this.escrow, amount],
     });
     await this.publicClient.waitForTransactionReceipt({ hash });
@@ -73,7 +77,7 @@ export class DuelAdapter {
       account, address: this.escrow, abi: duelEscrowAbi, functionName: 'open',
       args: [marketId, challengerUp, stake, BigInt(acceptDeadline)],
     });
-    const txHash = await wallet.writeContract({ ...request, chain: shannon });
+    const txHash = await wallet.writeContract({ ...request, chain: this.cfg.chain });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
 
     let duelId: bigint | null = null;
@@ -86,14 +90,14 @@ export class DuelAdapter {
     }
     if (duelId === null) throw new Error(`open() mined in ${txHash} but emitted no Opened event`);
 
-    return { duelId, txHash, link: this.link(this.cfg.chainId, duelId) };
+    return { duelId, txHash, link: this.link(duelId) };
   }
 
   async accept(wallet: WalletClient, account: Account, duelId: bigint): Promise<TxResult> {
     const { request } = await this.publicClient.simulateContract({
       account, address: this.escrow, abi: duelEscrowAbi, functionName: 'accept', args: [duelId],
     });
-    const txHash = await wallet.writeContract({ ...request, chain: shannon });
+    const txHash = await wallet.writeContract({ ...request, chain: this.cfg.chain });
     await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     return { txHash };
   }
@@ -102,7 +106,7 @@ export class DuelAdapter {
     const { request } = await this.publicClient.simulateContract({
       account, address: this.escrow, abi: duelEscrowAbi, functionName: 'cancel', args: [duelId],
     });
-    const txHash = await wallet.writeContract({ ...request, chain: shannon });
+    const txHash = await wallet.writeContract({ ...request, chain: this.cfg.chain });
     await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     return { txHash };
   }
@@ -177,7 +181,7 @@ export class DuelAdapter {
   }
 
   /** §5.3 — /d/<chainId>/<escrowAddress>/<duelId>. No secrets, no signature needed. */
-  link(chainId: number, duelId: bigint | number | string): string {
+  link(duelId: bigint | number | string, chainId: number = this.cfg.chainId): string {
     return duelLink(chainId, this.escrow, duelId);
   }
 

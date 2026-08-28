@@ -1,4 +1,5 @@
 export * from './types.js';
+export * from './networks.js';
 export * from './config.js';
 export * from './ticks.js';
 export * from './abi.js';

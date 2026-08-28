@@ -1,11 +1,11 @@
-import { formatUnits } from 'viem';
 import { useDuel, useMarket } from '../sdk';
-import { Countdown, StatusBadge, StaleWrapper, OracleLink } from '../components/ui';
+import { Countdown, StatusBadge, StaleWrapper, OracleLink, useMoney } from '../components/ui';
 
 /** S6 — Live duel. Read-only. There is no bail-out in duel mode: there is nobody to sell to. */
 export function LiveDuel({ duelId }: { duelId: bigint }) {
   const duel = useDuel(duelId);
   const market = useMarket(duel?.marketId ?? null);
+  const money = useMoney();
 
   if (!duel || duel.status !== 'Matched') return null;
   if (!market) return <p className="muted">loading market state…</p>;
@@ -24,16 +24,16 @@ export function LiveDuel({ duelId }: { duelId: bigint }) {
           <dt>challenger</dt>
           <dd>
             <code>{duel.challenger}</code> — {duel.challengerUp ? 'UP' : 'DOWN'} ·
-            {' '}{formatUnits(duel.stake, 18)} USDso
+            {' '}{money.format(duel.stake)}
             {challengerWinning ? <span className="ok"> · currently winning</span> : <span className="muted"> · currently behind</span>}
           </dd>
           <dt>opponent</dt>
           <dd>
             <code>{duel.opponent}</code> — {duel.challengerUp ? 'DOWN' : 'UP'} ·
-            {' '}{formatUnits(duel.stake, 18)} USDso
+            {' '}{money.format(duel.stake)}
             {!challengerWinning ? <span className="ok"> · currently winning</span> : <span className="muted"> · currently behind</span>}
           </dd>
-          <dt>pot</dt><dd>{formatUnits(duel.pot, 18)} USDso — winner takes all</dd>
+          <dt>pot</dt><dd>{money.format(duel.pot)} — winner takes all</dd>
           <dt>strike</dt><dd>{market.strike}</dd>
           <dt>spot</dt><dd>{market.spot}</dd>
           <dt>delta</dt>

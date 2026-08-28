@@ -1,60 +1,92 @@
-import { defineChain } from 'viem';
+import type { Chain } from 'viem';
+import {
+  DEPLOYMENTS, chainFor, parseNetwork,
+  type Address, type Deployment, type Network,
+} from './networks.js';
 
-/** §2 — endpoints and constants. Contract addresses are NOT here on purpose:
- *  they are re-fetchable at runtime from GET /v0/markets. Never hard-code them. */
-export const CHAIN_ID = 50312;
+export type { Network, Address, Deployment } from './networks.js';
+export { DEPLOYMENTS, chainFor, parseNetwork } from './networks.js';
 
-export const DEFAULTS = {
-  rpcUrl: 'https://dream-rpc.somnia.network',
-  restUrl: 'https://stg.api.dreamdex.io/v0',
-  wsUrl: 'wss://stg.api.dreamdex.io/v0/ws/public',
-  oracleUrl: 'https://prd.oracle.somnia.host/questions',
-  explorerUrl: 'https://shannon-explorer.somnia.network',
-} as const;
-
-export interface BullrunConfig {
-  chainId: number;
-  rpcUrl: string;
-  restUrl: string;
-  wsUrl: string;
-  oracleUrl: string;
-  explorerUrl: string;
-  /** Filled in after M3; read from env, never committed. */
-  escrowAddress: `0x${string}` | null;
+/** Everything network-specific resolves here. To go to mainnet, set ONE variable:
+ *
+ *      NETWORK=mainnet        (scripts)
+ *      VITE_NETWORK=mainnet   (web)
+ *
+ *  Chain id, RPC, indexer, collateral, decimals, tick/lot and venue all follow.
+ *  Any single value can still be overridden from env for the case where a redeploy
+ *  lands before this map is updated. */
+export interface BullrunConfig extends Deployment {
+  /** Per-network escrow. A mainnet deploy is a DIFFERENT address than testnet,
+   *  so this is read per network and never shared. */
+  escrowAddress: Address | null;
+  chain: Chain;
+  apiKey?: string;
 }
 
 type EnvBag = Record<string, string | undefined>;
 
-/** Reads Vite (`VITE_*`) or Node (`process.env`) without assuming either exists. */
 export function loadConfig(env: EnvBag = {}): BullrunConfig {
+  // Accept both plain and VITE_-prefixed names so scripts and the web app read
+  // the same .env without two sets of keys.
   const get = (k: string) => env[`VITE_${k}`] ?? env[k];
-  const escrow = get('DUEL_ESCROW_ADDRESS');
+
+  const network: Network = parseNetwork(get('NETWORK'));
+  const d = DEPLOYMENTS[network];
+
+  const num = (k: string, fallback: number): number => {
+    const raw = get(k);
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const n = Number(raw);
+    // A typo'd number must not become NaN and silently disable a guard.
+    if (!Number.isFinite(n)) throw new Error(`${k}="${raw}" is not a number`);
+    return n;
+  };
+  const big = (k: string, fallback: bigint): bigint => {
+    const raw = get(k);
+    if (raw === undefined || raw.trim() === '') return fallback;
+    return BigInt(raw);
+  };
+  const addr = (k: string, fallback: Address): Address => {
+    const raw = get(k)?.trim();
+    return raw && /^0x[0-9a-fA-F]{40}$/.test(raw) ? (raw as Address) : fallback;
+  };
+
+  // The escrow is per-network: DUEL_ESCROW_ADDRESS_MAINNET wins on mainnet, so
+  // one .env can carry both deployments and the switch stays a single variable.
+  const escrowRaw = (get(`DUEL_ESCROW_ADDRESS_${network.toUpperCase()}`) ?? get('DUEL_ESCROW_ADDRESS') ?? '').trim();
+
   return {
-    chainId: Number(get('CHAIN_ID') ?? CHAIN_ID),
-    rpcUrl: get('RPC_URL') ?? DEFAULTS.rpcUrl,
-    restUrl: get('REST_URL') ?? DEFAULTS.restUrl,
-    wsUrl: get('WS_URL') ?? DEFAULTS.wsUrl,
-    oracleUrl: get('ORACLE_URL') ?? DEFAULTS.oracleUrl,
-    explorerUrl: get('EXPLORER_URL') ?? DEFAULTS.explorerUrl,
-    escrowAddress: escrow && escrow.startsWith('0x') ? (escrow as `0x${string}`) : null,
+    ...d,
+    chainId: num('CHAIN_ID', d.chainId),
+    decimals: num('DECIMALS', d.decimals),
+    rpcUrl: get('RPC_URL') ?? d.rpcUrl,
+    wsRpcUrl: get('WS_RPC_URL') ?? d.wsRpcUrl,
+    indexerUrl: get('INDEXER_URL') ?? d.indexerUrl,
+    restUrl: get('REST_URL') ?? d.restUrl,
+    explorerUrl: get('EXPLORER_URL') ?? d.explorerUrl,
+    oracleUrl: get('ORACLE_URL') ?? d.oracleUrl,
+    tick: big('MM_TICK', d.tick),
+    lot: big('MM_LOT', d.lot),
+    venueId: addr('VENUE_ID', d.venueId) as Address,
+    addresses: {
+      ...d.addresses,
+      collateral: addr('COLLATERAL', d.addresses.collateral),
+      binaryModule: addr('BINARY_MODULE', d.addresses.binaryModule),
+    },
+    escrowAddress: /^0x[0-9a-fA-F]{40}$/.test(escrowRaw) ? (escrowRaw as Address) : null,
+    chain: chainFor(network),
+    apiKey: get('DREAMDEX_API_KEY'),
   };
 }
 
-export const shannon = defineChain({
-  id: CHAIN_ID,
-  name: 'Somnia Shannon Testnet',
-  nativeCurrency: { name: 'Somnia Test Token', symbol: 'STT', decimals: 18 },
-  rpcUrls: { default: { http: [DEFAULTS.rpcUrl] } },
-  blockExplorers: { default: { name: 'Shannon Explorer', url: DEFAULTS.explorerUrl } },
-  testnet: true,
-});
-
 export const txUrl = (cfg: BullrunConfig, hash: string) => `${cfg.explorerUrl}/tx/${hash}`;
-export const addressUrl = (cfg: BullrunConfig, addr: string) => `${cfg.explorerUrl}/address/${addr}`;
+export const addressUrl = (cfg: BullrunConfig, a: string) => `${cfg.explorerUrl}/address/${a}`;
 export const oracleUrl = (cfg: BullrunConfig, questionId: string) =>
   `${cfg.oracleUrl}/${questionId}?view=graph`;
 
 /** §5.3 — link format. State lives on-chain, so the link carries no secrets and no
- *  stake/side query params, which would be display-only and could disagree with the chain. */
+ *  stake/side query params, which would be display-only and could disagree with the
+ *  chain. The chainId in the path is what makes a testnet link refuse to open against
+ *  a mainnet app. */
 export const duelLink = (chainId: number, escrow: string, duelId: bigint | number | string) =>
   `/d/${chainId}/${escrow}/${duelId}`;

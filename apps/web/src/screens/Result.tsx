@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
-import { formatUnits } from 'viem';
 import { binaryMarketsModuleAbi, outcomeToken6909Abi } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk } from '../sdk';
-import { OracleLink, TxState } from '../components/ui';
+import { OracleLink, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
-/** S7 — Result. Winner, amount, redeem if not auto-redeemed, oracle link.
- *  Voided renders as "called off — both sides refunded 0.5", NEVER as a loss (§8.10). */
+/** S7 — Result. Winner, amount, REDEEM, oracle link.
+ *  Voided renders as "called off — both sides refunded 0.5", NEVER as a loss (§8.10).
+ *
+ *  CORRECTION to PRD §6.2 ("No claim button anywhere. Settlement lands by itself").
+ *  It does not. dreamdex-bot-kit's docs/event-contracts.md is explicit: "Winnings are
+ *  claimed, not received — a settled market pays out only when someone asks it to. The
+ *  position does not decay into collateral on its own." Their own bots call `maybeClaim`
+ *  every loop for exactly this reason. Shipping the PRD's copy would have told a winner
+ *  their money was coming when it was sitting unclaimed. So the button is primary. */
 export function Result({ duelId }: { duelId: bigint }) {
   const duel = useDuel(duelId);
   const market = useMarket(duel?.marketId ?? null);
   const { market: adapter } = useSdk();
   const { conn } = useWallet();
+  const money = useMoney();
 
   const [held, setHeld] = useState<bigint | null>(null);
   const [myId, setMyId] = useState<bigint | null>(null);
@@ -81,30 +88,32 @@ export function Result({ duelId }: { duelId: bigint }) {
         <div className="panel">
           <p className="warn">
             Called off. The market was voided, so both sides redeem 0.5 per contract —
-            each of you gets your {formatUnits(duel.stake, 18)} USDso stake back. Nobody lost.
+            each of you gets your {money.format(duel.stake)} stake back. Nobody lost.
           </p>
         </div>
       ) : (
         <dl>
           <dt>winner</dt>
           <dd><code>{winner}</code> {iWon && <span className="ok">— that is you</span>}</dd>
-          <dt>amount</dt><dd className="ok">{formatUnits(duel.pot, 18)} USDso (the whole pot)</dd>
+          <dt>amount</dt><dd className="ok">{money.format(duel.pot)} (the whole pot)</dd>
           <dt>final</dt><dd>strike {market.strike} · spot {market.spot} · {upWon ? 'UP' : 'DOWN'} won</dd>
         </dl>
       )}
 
       <dl>
         <dt>your leg</dt>
-        <dd>{held === null ? <span className="muted">…</span> : `${formatUnits(held, 18)} contracts`}</dd>
+        <dd>{held === null ? <span className="muted">…</span> : `${money.plain(held)} contracts`}</dd>
         <dt>oracle</dt><dd><OracleLink questionId={market.oracleQuestionId} /></dd>
       </dl>
 
-      <p className="muted">
-        Settlement lands by itself — there is no claim button. The redeem below is only for
-        the case where it has not landed yet.
+      <p className={held && held > 0n ? 'warn' : 'muted'}>
+        {held && held > 0n
+          ? 'Your winnings are NOT paid out automatically. A settled market pays only when '
+            + 'someone asks it to — claim them here.'
+          : 'Nothing left to claim on this leg.'}
       </p>
       <button onClick={() => void redeem()} disabled={pending || held === null || held === 0n}>
-        {pending ? 'pending…' : held === 0n ? 'already redeemed' : 'Redeem'}
+        {pending ? 'pending…' : held === 0n ? 'already claimed' : `Claim ${voided ? 'refund' : 'winnings'}`}
       </button>
       <TxState pending={pending} error={error} hash={hash} />
     </section>

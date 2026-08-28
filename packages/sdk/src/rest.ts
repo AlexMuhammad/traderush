@@ -144,6 +144,7 @@ export function normalizeStatus(row: Record<string, unknown>): MarketStatus {
     const canon = raw.toLowerCase();
     if (canon.startsWith('trad')) return 'Trading';
     if (canon.startsWith('lock')) return 'Locked';
+    if (canon.startsWith('settling')) return 'Settling';
     if (canon.startsWith('resolv') || canon.startsWith('final') || canon.startsWith('settl')) return 'Resolved';
     if (canon.startsWith('void') || canon.startsWith('cancel')) return 'Voided';
     if (canon.startsWith('list')) return 'Listed';

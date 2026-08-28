@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { parseUnits } from 'viem';
 import { useMarket, useSdk } from '../sdk';
-import { StatusBadge, Countdown, StaleWrapper, TxState, useFrozen, OracleLink } from '../components/ui';
+import { StatusBadge, Countdown, StaleWrapper, TxState, useFrozen, OracleLink, useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
 /** S3 — one market. Two actions: trade on the book (solo), or create a duel. */
@@ -10,6 +9,7 @@ export function Market({ marketId, navigate }: { marketId: `0x${string}`; naviga
   const { market } = useSdk();
   const { conn, wrongChain } = useWallet();
   const frozen = useFrozen(state?.expiryTime ?? 0);
+  const money = useMoney();
 
   const [cost, setCost] = useState('1');
   const [pending, setPending] = useState(false);
@@ -26,7 +26,7 @@ export function Market({ marketId, navigate }: { marketId: `0x${string}`; naviga
     setPending(true); setError(null); setHash(null);
     // The SDK re-checks on-chain status before writing (gotcha §8.1) and snaps the
     // price and size to the grid (§8.2, §8.3) — the screen never does arithmetic.
-    market.buy(marketId, side, parseUnits(cost || '0', 18))
+    market.buy(marketId, side, money.parse(cost || '0'))
       .then((p) => setHash(p.txHash))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setPending(false));
@@ -56,10 +56,10 @@ export function Market({ marketId, navigate }: { marketId: `0x${string}`; naviga
       <div className="panel">
         <h3>Trade on book (solo)</h3>
         <label>
-          <span>cost — this is also your maximum loss</span>
+          <span>cost in {money.symbol} — this is also your maximum loss</span>
           <input value={cost} onChange={(e) => setCost(e.target.value)} inputMode="decimal" />
         </label>
-        <p className="muted">Max loss: {cost || '0'} USDso. Builder fees apply to book orders.</p>
+        <p className="muted">Max loss: {cost || '0'} {money.symbol}. Builder fees apply to book orders.</p>
         <div className="row">
           <button disabled={!canWrite || pending} onClick={() => trade('up')}>Buy UP</button>
           <button disabled={!canWrite || pending} onClick={() => trade('down')}>Buy DOWN</button>

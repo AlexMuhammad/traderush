@@ -1,16 +1,20 @@
-export type MarketStatus = 'Listed' | 'Trading' | 'Locked' | 'Resolved' | 'Voided';
+export type MarketStatus = 'Listed' | 'Trading' | 'Locked' | 'Settling' | 'Resolved' | 'Voided';
 
-/// Lifecycle enum from §2. 3 is unused by the venue.
+/// On-chain MarketStatus enum. The PRD listed 3 as unused; the bot kit's
+/// ec-core/markets.ts shows it is `Settling`, so a market CAN sit in a state that
+/// is neither tradeable nor yet redeemable. Treating 3 as unknown would have
+/// rendered a settling market as `Listed`.
 export const STATUS_BY_CODE: Record<number, MarketStatus> = {
   0: 'Listed',
   1: 'Trading',
   2: 'Locked',
+  3: 'Settling',
   4: 'Resolved',
   5: 'Voided',
 };
 
 export const CODE_BY_STATUS: Record<MarketStatus, number> = {
-  Listed: 0, Trading: 1, Locked: 2, Resolved: 4, Voided: 5,
+  Listed: 0, Trading: 1, Locked: 2, Settling: 3, Resolved: 4, Voided: 5,
 };
 
 export type Side = 'up' | 'down';

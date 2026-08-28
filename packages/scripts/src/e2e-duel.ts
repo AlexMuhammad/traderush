@@ -3,10 +3,10 @@
  *
  *  Usage: PRIVATE_KEY_A=0x.. PRIVATE_KEY_B=0x.. DUEL_ESCROW_ADDRESS=0x.. pnpm e2e
  */
-import { createPublicClient, createWalletClient, http, formatUnits } from 'viem';
+import { createPublicClient, createWalletClient, http, formatUnits, type PublicClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
-  DuelAdapter, MarketAdapter, shannon, txUrl,
+  DuelAdapter, MarketAdapter, txUrl,
   defaultAcceptDeadline, assertDeadlineSafe, MIN_DEADLINE_MARGIN_SEC,
   outcomeToken6909Abi, binaryMarketsModuleAbi,
 } from '@bullrun/sdk';
@@ -25,9 +25,9 @@ async function main() {
     throw new Error('PRIVATE_KEY_A and PRIVATE_KEY_B are the same wallet — accept() reverts SelfDuel');
   }
 
-  const pub = createPublicClient({ chain: shannon, transport: http(cfg.rpcUrl) });
-  const walletA = createWalletClient({ account: A, chain: shannon, transport: http(cfg.rpcUrl) });
-  const walletB = createWalletClient({ account: B, chain: shannon, transport: http(cfg.rpcUrl) });
+  const pub = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) }) as PublicClient;
+  const walletA = createWalletClient({ account: A, chain: cfg.chain, transport: http(cfg.rpcUrl) });
+  const walletB = createWalletClient({ account: B, chain: cfg.chain, transport: http(cfg.rpcUrl) });
 
   const market = new MarketAdapter(cfg, { apiKey: process.env.DREAMDEX_API_KEY, publicClient: pub });
   const duels = new DuelAdapter(cfg, undefined, { publicClient: pub });

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 import type { MarketStatus, MarketState } from '@bullrun/sdk';
 import { txUrl, oracleUrl, UI_FREEZE_SEC } from '@bullrun/sdk';
 import { useSdk, useNow } from '../sdk';
@@ -40,8 +40,24 @@ export function TxState({ pending, error, hash }: { pending: boolean; error: str
   return null;
 }
 
-export function Amount({ value, decimals = 18 }: { value: bigint; decimals?: number }) {
-  return <span>{formatUnits(value, decimals)} USDso</span>;
+/** The ONLY place a collateral amount is formatted. Decimals come from the active
+ *  network — 6 on testnet (tUSDC), 18 on mainnet (USDso) — so a hardcoded 18 would
+ *  render every testnet balance a million times too small. */
+export function Amount({ value }: { value: bigint }) {
+  const { cfg } = useSdk();
+  return <span>{formatUnits(value, cfg.decimals)} {cfg.collateralSymbol}</span>;
+}
+
+/** Same formatting, for places that need the bare string. */
+export function useMoney() {
+  const { cfg } = useSdk();
+  return {
+    decimals: cfg.decimals,
+    symbol: cfg.collateralSymbol,
+    format: (v: bigint) => `${formatUnits(v, cfg.decimals)} ${cfg.collateralSymbol}`,
+    plain: (v: bigint) => formatUnits(v, cfg.decimals),
+    parse: (v: string) => parseUnits(v || '0', cfg.decimals),
+  };
 }
 
 export function CopyButton({ text }: { text: string }) {

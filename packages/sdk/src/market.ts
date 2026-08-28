@@ -1,6 +1,5 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
 import type { BullrunConfig } from './config.js';
-import { shannon } from './config.js';
 import { RestClient, normalizeMarket } from './rest.js';
 import { PublicSocket } from './ws.js';
 import { binaryMarketsModuleAbi, erc20Abi } from './abi.js';
@@ -60,15 +59,18 @@ export class MarketAdapter {
   constructor(private readonly cfg: BullrunConfig, opts: MarketAdapterOptions = {}) {
     this.rest = new RestClient(cfg, opts.apiKey);
     this.publicClient = opts.publicClient ?? (createPublicClient({
-      chain: shannon,
+      chain: cfg.chain,
       transport: http(cfg.rpcUrl),
     }) as PublicClient);
     this.socket = opts.makeSocket
-      ? new PublicSocket(cfg.wsUrl, opts.makeSocket)
-      : new PublicSocket(cfg.wsUrl);
+      ? new PublicSocket(cfg.wsRpcUrl, opts.makeSocket)
+      : new PublicSocket(cfg.wsRpcUrl);
     this.orders = opts.orders ?? notWired;
-    this.tickSize = opts.tickSize ?? 10n ** 15n; // 0.001 on an 18-decimal venue
-    this.lotSize = opts.lotSize ?? 10n ** 15n;
+    // Binary market rows carry no tickSize/lotSize (unlike spot), so these are NOT
+    // discoverable and come from the network deployment: 1e15 on mainnet, 1e3 on
+    // testnet. Hard-coding the mainnet grid would reject every testnet order.
+    this.tickSize = opts.tickSize ?? cfg.tick;
+    this.lotSize = opts.lotSize ?? cfg.lot;
 
     this.socket.onStatus((up) => {
       this.connected = up;
@@ -81,10 +83,28 @@ export class MarketAdapter {
     this.socket.onMessage((msg) => this.ingest(msg));
   }
 
-  async addresses(): Promise<VenueAddresses> {
-    this.venue ??= await this.rest.venueAddresses();
-    return this.venue;
+  /** Venue addresses come from the bundled per-network deployment map, NOT from
+   *  GET /v0/markets. Verified 2026-08-29: that endpoint's `kind` enum is
+   *  ["spot","perp","all"] — it has no binary tier at all, on either host, so the
+   *  PRD's "re-fetchable at runtime from GET /markets" does not hold for event
+   *  contracts. The map is overridable per address from env for the case where a
+   *  redeploy lands before this repo is updated. */
+  addresses(): Promise<VenueAddresses> {
+    this.venue ??= {
+      collateral: this.cfg.addresses.collateral,
+      module: this.cfg.addresses.binaryModule,
+      // VERIFY (§9 unknown #3): the bot kit's deployment map has no separate
+      // outcome-token entry, which implies the binaryModule IS the ERC-6909
+      // singleton. `pnpm probe` confirms it by checking balanceOf after a mint.
+      outcomeToken: this.cfg.addresses.binaryModule,
+    };
+    return Promise.resolve(this.venue);
   }
+
+  /** Collateral decimals for the ACTIVE network: 6 on testnet (tUSDC), 18 on
+   *  mainnet (USDso). Read this — never assume 18. */
+  get decimals(): number { return this.cfg.decimals; }
+  get collateralSymbol(): string { return this.cfg.collateralSymbol; }
 
   async listMarkets(): Promise<MarketSummary[]> {
     const markets = await this.rest.listMarkets();
@@ -224,11 +244,20 @@ export class MarketAdapter {
     });
   }
 
+  /** Reads decimals off the token, so a wrong entry in the deployment map fails
+   *  loudly instead of mis-rendering every balance by a factor of 1e12. */
   async collateralDecimals(): Promise<number> {
     const { collateral } = await this.addresses();
-    return Number(await this.publicClient.readContract({
+    const onChain = Number(await this.publicClient.readContract({
       address: collateral, abi: erc20Abi, functionName: 'decimals',
     }));
+    if (onChain !== this.cfg.decimals) {
+      throw new Error(
+        `collateral ${collateral} reports ${onChain} decimals but the ${this.cfg.network} ` +
+        `deployment map says ${this.cfg.decimals}. Fix networks.ts or set DECIMALS.`,
+      );
+    }
+    return onChain;
   }
 
   close(): void { this.socket.close(); }

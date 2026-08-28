@@ -6,7 +6,9 @@ Normally you trade an Up/Down event contract against the order book. BULLRUN add
 path: **two specific people put up equal stakes, a contract mints the pair for them, and the
 winner takes the pot.** No order book, no market maker, no liquidity requirement.
 
-> **Unaudited. Somnia Shannon testnet (chain `50312`) only. Do not use with real funds.**
+> **Unaudited.** Built and tested on Shannon testnet (chain `50312`). A mainnet path exists
+> and is one config line away, but nothing here has been audited — do not point it at real
+> funds without one.
 
 Split/merge is a standard primitive — Polymarket has had `splitPosition` / `mergePositions`
 since launch. Our contribution is the product layer on top of it: the challenge, the link, the
@@ -27,6 +29,36 @@ unmatched challenge never puts funds at risk.
 
 ---
 
+## Networks — switching is one line
+
+Nothing in the source names a chain. Everything network-specific lives in
+`packages/sdk/src/networks.ts` and resolves through `loadConfig()`:
+
+```bash
+NETWORK=testnet   # chain 50312, tUSDC, 6 decimals, faucet     (default)
+NETWORK=mainnet   # chain 5031,  USDso, 18 decimals, real money
+```
+
+Chain id, RPC, indexer, collateral address, **decimals**, tick/lot grid, explorer and venue id
+all follow from it. Each network gets its own escrow deploy
+(`DUEL_ESCROW_ADDRESS_TESTNET` / `_MAINNET`), so one `.env` can hold both and the switch can
+never point at the wrong one. Duel links carry the chain id, so a testnet link refuses to open
+against a mainnet build.
+
+Verify either one before trusting it:
+
+```bash
+pnpm doctor                  # testnet
+NETWORK=mainnet pnpm doctor  # mainnet
+```
+
+`doctor` checks every mapped address actually has code on the chain, and cross-checks the
+collateral's real `decimals()` against the map — a stale entry fails loudly instead of
+quietly mis-rendering every amount.
+
+> Collateral is **6 decimals on testnet** and 18 on mainnet. Never hardcode 18: the UI
+> formats through one helper that reads the active network.
+
 ## Layout
 
 ```
@@ -35,7 +67,12 @@ packages/contracts  DuelEscrow.sol + forge tests + deploy script
 packages/sdk        market adapter (read/write) + duel adapter (escrow)
 packages/scripts    doctor, §9 probe, two-wallet e2e
 docs/UNKNOWNS.md    the three §9 blocking unknowns — fill these in on day 1
+docs/FINDINGS.md    where the build brief is wrong, verified against the live venue
 ```
+
+**Read `docs/FINDINGS.md` before the brief.** Five of the brief's stated facts do not hold
+against the live venue — including where event contracts are discoverable, the collateral's
+decimals, and whether settlement is automatic (it is not).
 
 **The front end never talks to the chain or the socket directly. It talks to the SDK.**
 This is non-negotiable: the polished game console is swapped in later against the same SDK
@@ -89,7 +126,8 @@ pnpm dev                  # http://localhost:5173
 | S7 | Result | winner, amount, redeem if not auto-redeemed, oracle link |
 | S8 | Accept | opened from the link; terms and one Accept button, fully guarded |
 
-There is **no claim button**. Settlement lands by itself.
+Winnings are **claimed, not received** — a settled market pays only when someone asks it to,
+so S7 leads with the claim button. The build brief says the opposite; see `docs/FINDINGS.md`.
 
 ---
 

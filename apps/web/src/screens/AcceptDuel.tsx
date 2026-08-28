@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { formatUnits } from 'viem';
-import { DuelAdapter, CHAIN_ID, UI_FREEZE_SEC } from '@bullrun/sdk';
+import { DuelAdapter, UI_FREEZE_SEC } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk, useNow } from '../sdk';
-import { StatusBadge, TxState } from '../components/ui';
+import { StatusBadge, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
 interface Link { chainId: number; escrow: `0x${string}`; duelId: bigint }
@@ -13,6 +12,7 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
   const { cfg, market } = useSdk();
   const { conn, wrongChain, doConnect, doSwitch, connecting } = useWallet();
   const now = useNow();
+  const money = useMoney();
 
   // The link names its own escrow, so an old link keeps working after a redeploy.
   const adapter = useMemo(
@@ -32,8 +32,14 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
     market.balance(conn.account.address).then(setBalance).catch(() => setBalance(null));
   }, [conn, wrongChain, market]);
 
-  if (link.chainId !== CHAIN_ID) {
-    return <p className="err">This link is for chain {link.chainId}. BULLRUN runs on {CHAIN_ID} only.</p>;
+  // A testnet link must never open against a mainnet build, or the reader would be
+  // shown terms from a duel that does not exist on the chain they are about to sign on.
+  if (link.chainId !== cfg.chainId) {
+    return (
+      <p className="err">
+        This link is for chain {link.chainId}, but this build is {cfg.network} (chain {cfg.chainId}).
+      </p>
+    );
   }
   if (duel === undefined) return <p className="muted">reading duel #{String(link.duelId)} on-chain…</p>;
   if (duel === null) return <p className="err">No duel #{String(link.duelId)} at escrow {link.escrow}.</p>;
@@ -47,12 +53,12 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
 
   const blockers = [
     !conn && 'connect your wallet',
-    wrongChain && `wrong network — switch to chain ${CHAIN_ID}`,
+    wrongChain && `wrong network — switch to ${cfg.chainName} (chain ${cfg.chainId})`,
     duel.status === 'Matched' && 'this duel has already been matched',
     duel.status === 'Cancelled' && 'this duel was cancelled and the stake refunded',
     duel.status === 'Open' && deadlinePassed && 'the accept deadline has passed',
     selfDuel && 'you opened this duel — you cannot accept your own',
-    insufficient && `insufficient balance: you need ${formatUnits(duel.stake, 18)} USDso`,
+    insufficient && `insufficient balance: you need ${money.format(duel.stake)}`,
     notTrading && `market is ${state?.status}; only Trading accepts mints`,
     nearExpiry && 'too close to expiry — accepting now would revert for both parties (§8.11)',
   ].filter(Boolean) as string[];
@@ -80,10 +86,10 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
         <dt>your side</dt><dd><strong>{mySide}</strong></dd>
         <dt>market</dt>
         <dd>{state ? `${state.symbol} · ${state.intervalSec}s · strike ${state.strike} · spot ${state.spot}` : <code>{duel.marketId}</code>}</dd>
-        <dt>your stake</dt><dd>{formatUnits(duel.stake, 18)} USDso</dd>
-        <dt>pot</dt><dd>{formatUnits(duel.pot, 18)} USDso</dd>
-        <dt>payout if you win</dt><dd className="ok">{formatUnits(duel.pot, 18)} USDso</dd>
-        <dt>max loss</dt><dd className="err">{formatUnits(duel.stake, 18)} USDso</dd>
+        <dt>your stake</dt><dd>{money.format(duel.stake)}</dd>
+        <dt>pot</dt><dd>{money.format(duel.pot)}</dd>
+        <dt>payout if you win</dt><dd className="ok">{money.format(duel.pot)}</dd>
+        <dt>max loss</dt><dd className="err">{money.format(duel.stake)}</dd>
         <dt>accept deadline</dt>
         <dd>{deadlinePassed ? <span className="warn">passed</span> : `${duel.acceptDeadline - now}s left`}</dd>
       </dl>
@@ -92,16 +98,16 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
 
       <div className="row">
         {!conn && <button onClick={doConnect} disabled={connecting}>Connect wallet</button>}
-        {wrongChain && <button onClick={doSwitch}>Switch to Shannon</button>}
+        {wrongChain && <button onClick={doSwitch}>Switch to {cfg.chainName}</button>}
         <button onClick={accept} disabled={blockers.length > 0 || pending}>
-          {pending ? 'pending…' : `Accept — stake ${formatUnits(duel.stake, 18)} USDso`}
+          {pending ? 'pending…' : `Accept — stake ${money.format(duel.stake)}`}
         </button>
         <button onClick={() => navigate(`/duel/${link.duelId}`)}>view duel</button>
       </div>
 
       <TxState pending={pending} error={error} hash={hash} />
       <p className="muted">
-        Accepting mints {formatUnits(duel.pot, 18)} complete sets and hands you the {mySide} leg.
+        Accepting mints {money.plain(duel.pot)} complete sets and hands you the {mySide} leg.
         No builder fee applies to duels.
       </p>
     </section>

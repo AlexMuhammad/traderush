@@ -1,116 +1,131 @@
-/** M1 acceptance: `doctor` prints a LIVE market list.
+/** M1 gate. Verifies the ACTIVE network end to end: RPC, deployment map, collateral,
+ *  and the escrow. Run it before anything else, and again after switching NETWORK.
  *
- *  Everything here reads the real venue. Nothing is simulated (§11). If a call fails,
- *  the failure is printed — it is not papered over with a placeholder. */
-import { createPublicClient, http } from 'viem';
-import { MarketAdapter, RestClient, shannon } from '@bullrun/sdk';
+ *      pnpm doctor                 # testnet (default)
+ *      NETWORK=mainnet pnpm doctor # mainnet
+ *
+ *  Nothing here is simulated (§11). Failures are printed, not papered over.
+ */
+import { createPublicClient, http, formatUnits } from 'viem';
+import { MarketAdapter, RestClient, erc20Abi, binaryMarketsModuleAbi } from '@bullrun/sdk';
 import { cfg, fmt } from './env.js';
 
-async function main() {
-  console.log(fmt.head('BULLRUN doctor — Shannon testnet only'));
-  console.log(`chainId ${cfg.chainId}   rpc ${cfg.rpcUrl}`);
-  console.log(`rest    ${cfg.restUrl}`);
-  console.log(`ws      ${cfg.wsUrl}`);
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-  // --- 1. RPC reachable and on the right chain -------------------------------
+async function main() {
+  console.log(fmt.head(`BULLRUN doctor — network: ${cfg.network.toUpperCase()}`));
+  if (cfg.network === 'mainnet') {
+    console.log(fmt.warn('MAINNET. Collateral is real USDso. This code is unaudited.'));
+  }
+  console.log(`chainId   ${cfg.chainId}`);
+  console.log(`rpc       ${cfg.rpcUrl}`);
+  console.log(`indexer   ${cfg.indexerUrl}`);
+  console.log(`rest      ${cfg.restUrl}   (spot/perp only — see step 3)`);
+  console.log(`venueId   ${cfg.venueId}`);
+  console.log(`tick/lot  ${cfg.tick} / ${cfg.lot}`);
+
+  const pub = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) });
+
+  // --- 1. RPC on the right chain -------------------------------------------
   console.log(fmt.head('1. RPC'));
-  const pub = createPublicClient({ chain: shannon, transport: http(cfg.rpcUrl) });
   try {
     const [id, block] = await Promise.all([pub.getChainId(), pub.getBlockNumber()]);
-    if (id !== cfg.chainId) {
-      console.log(fmt.bad(`RPC reports chain ${id}, expected ${cfg.chainId} — WRONG NETWORK`));
-    } else {
-      console.log(fmt.ok(`chain ${id}, head block ${block}`));
-    }
+    console.log(id === cfg.chainId
+      ? fmt.ok(`chain ${id}, head block ${block}`)
+      : fmt.bad(`RPC reports chain ${id}, config says ${cfg.chainId} — WRONG NETWORK`));
   } catch (e) {
     console.log(fmt.bad(`RPC unreachable: ${msg(e)}`));
   }
 
-  // --- 2. REST: the live market list ----------------------------------------
-  console.log(fmt.head('2. GET /v0/markets'));
-  const rest = new RestClient(cfg, process.env.DREAMDEX_API_KEY);
-  let markets: Awaited<ReturnType<RestClient['listMarkets']>> = [];
-  try {
-    markets = await rest.listMarkets();
-    console.log(fmt.ok(`${markets.length} markets`));
-  } catch (e) {
-    console.log(fmt.bad(`markets failed: ${msg(e)}`));
-    console.log(fmt.warn('Raw payload follows so you can fix the normalizer in packages/sdk/src/rest.ts:'));
-    try { console.log(JSON.stringify(await rest.rawMarkets(), null, 2).slice(0, 4000)); }
-    catch { /* already reported */ }
-  }
-
-  if (markets.length) {
-    const now = Math.floor(Date.now() / 1000);
-    const rows = markets.slice(0, 25).map((m) => ({
-      marketId: m.marketId.slice(0, 12) + '…',
-      asset: m.symbol,                      // §8.9 — typed field
-      intervalSec: m.intervalSec,           // §8.9 — typed field
-      status: m.status,
-      strike: m.strike,
-      spot: m.spot,
-      up: m.upPrice,
-      down: m.upPrice ? +(1 - m.upPrice).toFixed(4) : 0,
-      expiresIn: m.expiryTime ? `${m.expiryTime - now}s` : '?',
-    }));
-    console.table(rows);
-
-    const trading = markets.filter((m) => m.status === 'Trading');
-    console.log(trading.length
-      ? fmt.ok(`${trading.length} Trading — these accept orders and mints`)
-      : fmt.warn('no market is Trading right now; only Trading accepts orders and mints (§2)'));
-
-    // §9 non-blocking: are BTC/ETH event contracts live, and with what depth?
-    for (const asset of ['BTC', 'ETH']) {
-      const hit = markets.filter((m) => m.symbol.toUpperCase().includes(asset));
-      console.log(hit.length
-        ? fmt.ok(`${asset}: ${hit.length} market(s), intervals ${[...new Set(hit.map((m) => m.intervalSec))].join('/')}s`)
-        : fmt.warn(`${asset}: no market found`));
-    }
-
-    // Gotcha §8.8 — the default sweep hides settled markets.
+  // --- 2. Deployment map: does every address actually have code? ------------
+  // A stale entry must fail loudly rather than produce silent no-op calls.
+  console.log(fmt.head('2. Deployment addresses'));
+  for (const [name, addr] of Object.entries(cfg.addresses)) {
     try {
-      const finalized = await rest.listFinalizedMarkets();
-      console.log(fmt.ok(`${finalized.length} finalized markets (queried explicitly — §8.8)`));
+      const code = await pub.getCode({ address: addr });
+      const size = code ? (code.length - 2) / 2 : 0;
+      console.log(size > 0
+        ? fmt.ok(`${name.padEnd(22)} ${addr}  (${size} bytes)`)
+        : fmt.bad(`${name.padEnd(22)} ${addr}  NO CODE — stale entry in networks.ts`));
     } catch (e) {
-      console.log(fmt.warn(`finalized query failed: ${msg(e)}`));
+      console.log(fmt.bad(`${name.padEnd(22)} ${addr}  ${msg(e)}`));
     }
   }
 
-  // --- 3. Venue addresses, fetched at runtime (§2) ---------------------------
-  console.log(fmt.head('3. Venue addresses (runtime-fetched, never hard-coded)'));
+  // --- 3. Collateral: decimals are the thing that silently breaks a UI ------
+  console.log(fmt.head('3. Collateral'));
   try {
-    const adapter = new MarketAdapter(cfg, { apiKey: process.env.DREAMDEX_API_KEY });
-    const a = await adapter.addresses();
-    console.log(fmt.ok(`collateral   ${a.collateral}`));
-    console.log(fmt.ok(`module       ${a.module}`));
-    console.log(fmt.ok(`outcomeToken ${a.outcomeToken}`));
-    adapter.close();
-    console.log('\nDeploy with:');
-    console.log(`  COLLATERAL=${a.collateral} MODULE=${a.module} OUTCOME=${a.outcomeToken} pnpm deploy:escrow`);
+    const [dec, sym] = await Promise.all([
+      pub.readContract({ address: cfg.addresses.collateral, abi: erc20Abi, functionName: 'decimals' }),
+      pub.readContract({ address: cfg.addresses.collateral, abi: erc20Abi, functionName: 'symbol' }),
+    ]);
+    console.log(Number(dec) === cfg.decimals
+      ? fmt.ok(`${sym}, ${dec} decimals — matches the ${cfg.network} map`)
+      : fmt.bad(`${sym} reports ${dec} decimals but networks.ts says ${cfg.decimals}. ` +
+                `Every amount in the UI would be wrong by 1e${Math.abs(Number(dec) - cfg.decimals)}.`));
+    if (cfg.faucet) console.log(fmt.warn(`testnet collateral has a public faucet(uint256)`));
   } catch (e) {
-    console.log(fmt.bad(msg(e)));
+    console.log(fmt.bad(`collateral read failed: ${msg(e)}`));
   }
 
-  // --- 4. Escrow, if deployed ----------------------------------------------
-  console.log(fmt.head('4. DuelEscrow'));
+  // --- 4. Where event contracts actually live ------------------------------
+  console.log(fmt.head('4. Market discovery'));
+  const rest = new RestClient(cfg, cfg.apiKey);
+  try {
+    const raw = await rest.rawMarkets({ kind: 'all' }) as { markets?: { kind?: string; symbol?: string }[] };
+    const kinds = [...new Set((raw.markets ?? []).map((m) => m.kind))];
+    console.log(fmt.ok(`REST /markets reachable: ${raw.markets?.length ?? 0} rows, kinds [${kinds.join(', ')}]`));
+    // Verified 2026-08-29: the `kind` enum is ["spot","perp","all"]. There is no
+    // binary tier on this endpoint, on either host. PRD §2's claim that the venue
+    // addresses and event contracts are "re-fetchable from GET /v0/markets" is
+    // wrong — binaries come from the indexer via @somnia-chain/markets-sdk.
+    console.log(fmt.warn('Event contracts are NOT on this endpoint (kind enum is spot|perp|all).'));
+    console.log(fmt.warn('Binary market discovery needs @somnia-chain/markets-sdk against the indexer.'));
+  } catch (e) {
+    console.log(fmt.bad(`REST failed: ${msg(e)}`));
+  }
+
+  // --- 5. Escrow -----------------------------------------------------------
+  console.log(fmt.head('5. DuelEscrow'));
   if (!cfg.escrowAddress) {
-    console.log(fmt.warn('DUEL_ESCROW_ADDRESS unset — not deployed yet (M3)'));
+    console.log(fmt.warn(`DUEL_ESCROW_ADDRESS_${cfg.network.toUpperCase()} unset — not deployed on ${cfg.network} yet (M3)`));
+    console.log('\nDeploy with:');
+    console.log(`  COLLATERAL=${cfg.addresses.collateral} \\`);
+    console.log(`  MODULE=${cfg.addresses.binaryModule} \\`);
+    console.log(`  OUTCOME=${cfg.addresses.binaryModule} \\`);
+    console.log(`  RPC_URL=${cfg.rpcUrl} pnpm deploy:escrow`);
   } else {
     try {
       const { DuelAdapter } = await import('@bullrun/sdk');
-      const duels = new DuelAdapter(cfg);
+      const duels = new DuelAdapter(cfg, undefined, { publicClient: pub as never });
       const v = await duels.venue();
-      console.log(fmt.ok(`${cfg.escrowAddress} wired to collateral ${v.collateral}, module ${v.module}, outcome ${v.outcome}`));
+      const okCollateral = v.collateral.toLowerCase() === cfg.addresses.collateral.toLowerCase();
+      const okModule = v.module.toLowerCase() === cfg.addresses.binaryModule.toLowerCase();
+      console.log(fmt.ok(`${cfg.escrowAddress} deployed`));
+      console.log(okCollateral ? fmt.ok(`  collateral matches`) : fmt.bad(`  collateral ${v.collateral} != map`));
+      console.log(okModule ? fmt.ok(`  module matches`) : fmt.bad(`  module ${v.module} != map`));
     } catch (e) {
       console.log(fmt.bad(`escrow read failed: ${msg(e)}`));
     }
   }
 
-  console.log(fmt.head('§9 blocking unknowns'));
-  console.log('Run `pnpm probe` and write the answers into docs/UNKNOWNS.md before contract logic.');
-}
+  // --- 6. Module sanity ----------------------------------------------------
+  console.log(fmt.head('6. Module interface (VERIFY — §4.2)'));
+  try {
+    await pub.readContract({
+      address: cfg.addresses.binaryModule, abi: binaryMarketsModuleAbi,
+      functionName: 'marketStatus', args: [`0x${'00'.repeat(32)}`],
+    });
+    console.log(fmt.ok('marketStatus(bytes32) exists and is callable'));
+  } catch (e) {
+    console.log(fmt.warn(`marketStatus probe: ${msg(e).split('\n')[0]}`));
+    console.log(fmt.warn('The transcribed ABI may not match. Confirm against markets-sdk.'));
+  }
 
-const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  console.log(fmt.head('Next'));
+  console.log('  docs/UNKNOWNS.md — the §9 blockers are still unanswered');
+  console.log('  pnpm probe — answers #1 and #3 once the escrow is deployed');
+  void formatUnits;
+}
 
 main().catch((e) => { console.error(e); process.exit(1); });

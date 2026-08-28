@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { formatUnits, parseUnits } from 'viem';
 import { defaultAcceptDeadline, MIN_DEADLINE_MARGIN_SEC } from '@bullrun/sdk';
 import { useMarket, useSdk } from '../sdk';
-import { StatusBadge, TxState, CopyButton, useFrozen } from '../components/ui';
+import { StatusBadge, TxState, CopyButton, useFrozen, useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
 /** S4 — Create duel. Side, stake, computed pot and payout, accept deadline. */
@@ -11,6 +10,7 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
   const { duels, cfg } = useSdk();
   const { conn, wrongChain } = useWallet();
   const frozen = useFrozen(state?.expiryTime ?? 0);
+  const money = useMoney();
 
   const [side, setSide] = useState<'up' | 'down'>('up');
   const [stakeStr, setStakeStr] = useState('1');
@@ -23,7 +23,7 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
   if (!duels) return <p className="err">DUEL_ESCROW_ADDRESS is not set — deploy DuelEscrow first (M3).</p>;
 
   let stake = 0n;
-  try { stake = parseUnits(stakeStr || '0', 18); } catch { /* shown below */ }
+  try { stake = money.parse(stakeStr || '0'); } catch { /* shown below */ }
   const pot = stake * 2n;
   const acceptDeadline = state.expiryTime ? state.expiryTime - marginSec : 0;
   const deadlineOk = marginSec >= MIN_DEADLINE_MARGIN_SEC;
@@ -72,7 +72,7 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
       </label>
 
       <label>
-        <span>stake per side (USDso)</span>
+        <span>stake per side ({money.symbol})</span>
         <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
       </label>
 
@@ -92,11 +92,11 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
 
       <div className="panel">
         <dl>
-          <dt>your stake</dt><dd>{formatUnits(stake, 18)} USDso</dd>
-          <dt>opponent stake</dt><dd>{formatUnits(stake, 18)} USDso</dd>
-          <dt>pot</dt><dd>{formatUnits(pot, 18)} USDso</dd>
-          <dt>payout if you win</dt><dd className="ok">{formatUnits(pot, 18)} USDso (×2)</dd>
-          <dt>max loss</dt><dd className="err">{formatUnits(stake, 18)} USDso</dd>
+          <dt>your stake</dt><dd>{money.format(stake)}</dd>
+          <dt>opponent stake</dt><dd>{money.format(stake)}</dd>
+          <dt>pot</dt><dd>{money.format(pot)}</dd>
+          <dt>payout if you win</dt><dd className="ok">{money.format(pot)} (×2)</dd>
+          <dt>max loss</dt><dd className="err">{money.format(stake)}</dd>
           <dt>accept deadline</dt>
           <dd>{acceptDeadline ? new Date(acceptDeadline * 1000).toLocaleTimeString() : '—'}</dd>
         </dl>

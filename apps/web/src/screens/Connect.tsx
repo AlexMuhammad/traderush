@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { formatUnits } from 'viem';
-import { CHAIN_ID } from '@bullrun/sdk';
 import { useSdk } from '../sdk';
+import { useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
-/** S1 — Connect. Address, USDso balance, network guard, one-time approval. */
+/** S1 — Connect. Address, collateral balance, network guard, one-time approval. */
 export function Connect() {
-  const { market, duels } = useSdk();
+  const { market, duels, cfg } = useSdk();
+  const money = useMoney();
   const { conn, connecting, error, wrongChain, doConnect, doSwitch } = useWallet();
   const [balance, setBalance] = useState<bigint | null>(null);
   const [decimals, setDecimals] = useState(18);
@@ -73,11 +73,11 @@ export function Connect() {
         <dd>
           {conn.chainId}{' '}
           {wrongChain
-            ? <span className="err">— wrong network, BULLRUN is chain {CHAIN_ID} only</span>
-            : <span className="ok">— Shannon</span>}
+            ? <span className="err">— wrong network — this build is {cfg.network}, chain {cfg.chainId}</span>
+            : <span className="ok">— {cfg.chainName}</span>}
         </dd>
         <dt>balance</dt>
-        <dd>{balance === null ? <span className="muted">…</span> : `${formatUnits(balance, decimals)} USDso`}</dd>
+        <dd>{balance === null ? <span className="muted">…</span> : money.format(balance)}</dd>
         <dt>escrow approval</dt>
         <dd>
           {allowance === null
@@ -88,10 +88,10 @@ export function Connect() {
         </dd>
       </dl>
       <div className="row">
-        {wrongChain && <button onClick={doSwitch}>Switch to Shannon</button>}
+        {wrongChain && <button onClick={doSwitch}>Switch to {cfg.chainName}</button>}
         {!wrongChain && duels && allowance !== null && allowance === 0n && (
           <button onClick={() => void approve()} disabled={approving}>
-            {approving ? 'approving…' : 'Approve USDso (one time)'}
+            {approving ? 'approving…' : `Approve ${money.symbol} (one time)`}
           </button>
         )}
       </div>

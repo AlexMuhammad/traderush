@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { formatUnits } from 'viem';
 import { useDuel, useSdk, useNow } from '../sdk';
-import { CopyButton, TxState } from '../components/ui';
+import { CopyButton, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../App';
 
 /** S5 — Lobby. Link, countdown to acceptDeadline, status, Cancel. On Matched → S6. */
@@ -10,6 +9,7 @@ export function Lobby({ duelId, navigate }: { duelId: bigint; navigate: (to: str
   const { duels } = useSdk();
   const { conn } = useWallet();
   const now = useNow();
+  const money = useMoney();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export function Lobby({ duelId, navigate }: { duelId: bigint; navigate: (to: str
   // S6 and S7 render this duel instead once it is matched.
   if (duel.status !== 'Open') return null;
 
-  const url = `${window.location.origin}${duels!.link(duels!.publicClient.chain?.id ?? 0, duelId)}`;
+  const url = `${window.location.origin}${duels!.link(duelId)}`;
   const left = duel.acceptDeadline - now;
   const expired = left <= 0;
   const isChallenger = conn?.account.address.toLowerCase() === duel.challenger.toLowerCase();
@@ -41,8 +41,8 @@ export function Lobby({ duelId, navigate }: { duelId: bigint; navigate: (to: str
       <h2>Duel #{String(duelId)} · {expired ? 'expired' : 'waiting'}</h2>
       <dl>
         <dt>challenger</dt><dd><code>{duel.challenger}</code> — {duel.challengerUp ? 'UP' : 'DOWN'}</dd>
-        <dt>stake per side</dt><dd>{formatUnits(duel.stake, 18)} USDso</dd>
-        <dt>pot</dt><dd>{formatUnits(duel.pot, 18)} USDso</dd>
+        <dt>stake per side</dt><dd>{money.format(duel.stake)}</dd>
+        <dt>pot</dt><dd>{money.format(duel.pot)}</dd>
         <dt>accept deadline</dt>
         <dd>{expired ? <span className="warn">passed</span> : `${Math.floor(left / 60)}m ${left % 60}s left`}</dd>
       </dl>

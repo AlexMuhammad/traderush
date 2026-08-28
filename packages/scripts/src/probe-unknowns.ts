@@ -10,17 +10,17 @@
  *
  *  Write the answers into docs/UNKNOWNS.md. That file is the M1 deliverable.
  */
-import { createPublicClient, createWalletClient, http, encodeFunctionData, keccak256, encodePacked } from 'viem';
+import { createPublicClient, createWalletClient, http, encodeFunctionData, keccak256, encodePacked, type PublicClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { MarketAdapter, binaryMarketsModuleAbi, outcomeToken6909Abi, erc20Abi, shannon } from '@bullrun/sdk';
+import { MarketAdapter, binaryMarketsModuleAbi, outcomeToken6909Abi, erc20Abi } from '@bullrun/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function main() {
   const account = privateKeyToAccount(requireEnv('PRIVATE_KEY_A') as `0x${string}`);
-  const pub = createPublicClient({ chain: shannon, transport: http(cfg.rpcUrl) });
-  const wallet = createWalletClient({ account, chain: shannon, transport: http(cfg.rpcUrl) });
+  const pub = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) }) as PublicClient;
+  const wallet = createWalletClient({ account, chain: cfg.chain, transport: http(cfg.rpcUrl) });
 
   const adapter = new MarketAdapter(cfg, { apiKey: process.env.DREAMDEX_API_KEY });
   const venue = await adapter.addresses();

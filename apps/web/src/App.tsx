@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { CHAIN_ID, parseDuelLink } from '@bullrun/sdk';
+import { parseDuelLink } from '@bullrun/sdk';
 import { SdkProvider, useSdk } from './sdk';
 import { usePath } from './router';
-import { connect, switchToShannon, type Connection } from './wallet';
+import { connect, switchNetwork, type Connection } from './wallet';
 import { Connect } from './screens/Connect';
 import { Markets } from './screens/Markets';
 import { Market } from './screens/Market';
@@ -28,21 +28,22 @@ export function useWallet(): WalletCtx {
 }
 
 function WalletProvider({ children }: { children: ReactNode }) {
+  const { cfg } = useSdk();
   const [conn, setConn] = useState<Connection | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const doConnect = () => {
     setConnecting(true); setError(null);
-    connect()
+    connect(cfg.chain)
       .then(setConn)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setConnecting(false));
   };
 
   const doSwitch = () => {
-    switchToShannon()
-      .then(() => connect().then(setConn))
+    switchNetwork(cfg.chain)
+      .then(() => connect(cfg.chain).then(setConn))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
@@ -51,16 +52,16 @@ function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const p = window.ethereum;
     if (!p) return;
-    const refresh = () => { if (conn) connect().then(setConn).catch(() => setConn(null)); };
+    const refresh = () => { if (conn) connect(cfg.chain).then(setConn).catch(() => setConn(null)); };
     p.on?.('accountsChanged', refresh);
     p.on?.('chainChanged', refresh);
     return () => {
       p.removeListener?.('accountsChanged', refresh);
       p.removeListener?.('chainChanged', refresh);
     };
-  }, [conn]);
+  }, [conn, cfg.chain]);
 
-  const wrongChain = Boolean(conn && conn.chainId !== CHAIN_ID);
+  const wrongChain = Boolean(conn && conn.chainId !== cfg.chainId);
   return (
     <WalletContext.Provider value={{ conn, connecting, error, wrongChain, doConnect, doSwitch }}>
       {children}
@@ -96,7 +97,7 @@ function Routes() {
       <Markets navigate={navigate} />
       <hr />
       <p className="muted">
-        chain {cfg.chainId} · escrow {cfg.escrowAddress ?? 'not deployed'} · unaudited, testnet only
+        chain {cfg.chainId} · escrow {cfg.escrowAddress ?? `not deployed on ${cfg.network}`}
       </p>
     </>
   );
@@ -121,15 +122,27 @@ function DuelScreens({ duelId, navigate }: { duelId: bigint; navigate: (to: stri
   );
 }
 
+/** The active network is stated in the header, not assumed. A mainnet build must
+ *  never be mistaken for the testnet one. */
+function Banner() {
+  const { cfg } = useSdk();
+  return (
+    <p className="muted">
+      Peer-to-peer duels on DreamDEX Event Contracts. Unaudited.{' '}
+      <strong className={cfg.network === 'mainnet' ? 'err' : 'ok'}>
+        {cfg.network} · chain {cfg.chainId} · {cfg.collateralSymbol}
+      </strong>
+    </p>
+  );
+}
+
 export function App() {
   return (
     <SdkProvider>
       <WalletProvider>
         <main>
           <h1>BULLRUN</h1>
-          <p className="muted">
-            Peer-to-peer duels on DreamDEX Event Contracts. Shannon testnet only. Unaudited.
-          </p>
+          <Banner />
           <hr />
           <Routes />
         </main>
