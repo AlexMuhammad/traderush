@@ -142,21 +142,24 @@ export function RoomPanel({
           <Key className="action" disabled={connecting} onPress={doConnect}>
             {connecting ? 'connecting…' : 'Sign in to join'}
           </Key>
-        ) : allow.enough === false ? (
-          <Key className="action" disabled={allow.approving}
-               onPress={() => void allow.approve(conn.wallet, conn.account)}>
-            {allow.approving ? 'approving…' : `Approve ${money.symbol}`}
-          </Key>
         ) : (
           <Key className="action" disabled={!canJoin}
-               onPress={() => run(() => rooms.join(conn.wallet, conn.account, roomId, side, stake))}>
-            {pending ? 'pending…' : `Back ${side.toUpperCase()} with ${money.format(stake)}`}
+               onPress={() => run(async () => {
+                 // The approval rides along with the join rather than standing
+                 // in front of it. See useRoomAllowance.ensure.
+                 await allow.ensure(conn.wallet, conn.account, stake);
+                 return rooms.join(conn.wallet, conn.account, roomId, side, stake);
+               })}>
+            {allow.approving ? 'approving…'
+              : pending ? 'pending…'
+              : `Back ${side.toUpperCase()} with ${money.format(stake)}`}
           </Key>
         )}
 
         <p className="note">
           Join as many times as you like, either side, until entry closes. The odds above
           move as people pile in.
+          {allow.enough === false && ' Your first join on this wallet signs twice: permission, then the join.'}
         </p>
         <div className="linkline">
           <code>{url}</code>
@@ -193,17 +196,60 @@ export function RoomPanel({
 
   // ------------------------------------------------------------------ claim
   const claimable = seat ? seat.shareUp + seat.shareDown : 0n;
+  // Everything still coming to this wallet, whichever half of the journey it is
+  // sitting in. One number, so one key can be labelled with it.
+  const owed = seat?.settled ? ((held?.up ?? 0n) + (held?.down ?? 0n)) : claimable;
   const settledMarket = settled && state;
   const voided = state?.status === 'Voided';
   const upWon = state ? state.spot > state.strike : false;
 
-  const redeem = async () => {
-    if (!conn || !ref || !held) return;
+  /** Read what this wallet holds of the two outcome tokens, from the chain. */
+  const readHeld = async (r: BinaryRef): Promise<{ up: bigint; down: bigint }> => {
+    if (!conn) return { up: 0n, down: 0n };
+    const token = await adapter.publicClient.readContract({
+      address: cfg.addresses.binarySettlement, abi: binarySettlementAbi, functionName: 'outcomeToken',
+    }) as `0x${string}`;
+    const read = (id: bigint) => adapter.publicClient.readContract({
+      address: token, abi: erc6909Abi, functionName: 'balanceOf', args: [conn.account.address, id],
+    }) as Promise<bigint>;
+    const [up, down] = await Promise.all([read(r.upId), read(r.downId)]);
+    return { up, down };
+  };
+
+  /**
+   * Take everything this wallet is owed, in one press.
+   *
+   * Underneath it is still two different things — claim moves your share of the
+   * pot out of the escrow as outcome tokens, redeem turns a winning token into
+   * collateral — and the contracts are right to keep them apart. But nobody
+   * holding a winning ticket wants to be taught that distinction before they can
+   * be paid, and a screen that shows Claim, waits, then reveals a second button
+   * called Claim winnings reads as a machine that did not finish the job.
+   *
+   * Balances are read back from the chain between the steps rather than from the
+   * effect's state: the tokens being redeemed are the ones the claim in this same
+   * handler just produced, and that state does not exist yet.
+   */
+  const collect = async () => {
+    if (!conn) return;
     setPending(true); setError(null);
     try {
+      if (!seat?.settled && claimable > 0n) {
+        const { txHash } = await rooms.claim(conn.wallet, conn.account, roomId);
+        setHash(txHash);
+      }
+      // Nothing to redeem against until the market has an answer. The share is
+      // out of the escrow and safe; the payout waits for settlement.
+      if (!settledMarket) return;
+
+      const r = ref ?? await adapter.ref(room.marketId);
+      if (!r) return;
+      setRef(r);
+      const bal = await readHeld(r);
+
       // BinarySettlement, not the module: the module's redeem reverts once the
       // pool is released, and settlement pays against the outcome id itself.
-      for (const [id, amount] of [[ref.upId, held.up], [ref.downId, held.down]] as const) {
+      for (const [id, amount] of [[r.upId, bal.up], [r.downId, bal.down]] as const) {
         if (amount === 0n) continue;
         const { request } = await adapter.publicClient.simulateContract({
           account: conn.account, address: cfg.addresses.binarySettlement,
@@ -236,28 +282,20 @@ export function RoomPanel({
         </Rows>
       )}
 
-      {/* Two steps, and they are different things: claim takes your share of the
-          pot out of the escrow as outcome tokens; redeem turns a winning token
-          into collateral. Nothing pays out until you ask. */}
-      {!seat?.settled && claimable > 0n && (
+      {/* One key for the whole payout. What it has left to do decides its
+          wording, not which of two screens you happen to be on. */}
+      {owed > 0n && (
         <>
           <p className="note warn">
-            Your share of the pot is waiting in the escrow. Claim it first.
+            {settledMarket
+              ? 'Winnings are not paid out automatically — a settled market pays only when asked.'
+              : 'Your share of the pot is waiting in the escrow. Take it out now; it pays when the window settles.'}
           </p>
-          <Key className="action" disabled={!conn || pending}
-               onPress={() => conn && run(() => rooms.claim(conn.wallet, conn.account, roomId))}>
-            {pending ? 'pending…' : `Claim ${money.format(claimable)}`}
-          </Key>
-        </>
-      )}
-
-      {seat?.settled && held && (held.up > 0n || held.down > 0n) && settledMarket && (
-        <>
-          <p className="note warn">
-            Winnings are not paid out automatically — a settled market pays only when asked.
-          </p>
-          <Key className="action" disabled={pending} onPress={() => void redeem()}>
-            {pending ? 'pending…' : voided ? 'Claim refund' : 'Claim winnings'}
+          <Key className="action" disabled={!conn || pending} onPress={() => void collect()}>
+            {pending ? 'pending…'
+              : voided ? 'Collect refund'
+              : settledMarket ? `Collect ${money.format(owed)}`
+              : `Claim ${money.format(owed)}`}
           </Key>
         </>
       )}

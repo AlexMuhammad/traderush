@@ -59,13 +59,20 @@ export function CreateRoomPanel({
   const ready = Boolean(conn) && !wrongChain && stake > 0n && roomFits
     && state.status === 'Trading' && !pending;
 
-  const submit = () => {
+  // One press, two transactions when the wallet has never approved before. The
+  // approval is not a decision anybody makes, so it does not get its own key —
+  // it happens on the way to the thing that was actually asked for, and the
+  // label says which half is running.
+  const submit = async () => {
     if (!conn) return;
     setPending(true); setError(null);
-    rooms.open(conn.wallet, conn.account, marketId, side, stake, entryDeadline, state.expiryTime)
-      .then(setOpened)
-      .catch((e) => setError(e))
-      .finally(() => setPending(false));
+    try {
+      await allow.ensure(conn.wallet, conn.account, stake);
+      setOpened(await rooms.open(
+        conn.wallet, conn.account, marketId, side, stake, entryDeadline, state.expiryTime,
+      ));
+    } catch (e) { setError(e); }
+    finally { setPending(false); }
   };
 
   if (opened) {
@@ -85,57 +92,59 @@ export function CreateRoomPanel({
     );
   }
 
-  return (
-    <Readout title="Open a room" className="tight"
-             right={`${state.symbol} · ${intervalLabel(state.intervalSec)}`}>
-      {/* Picking a side off two numbers is picking blind — this is the shape
-          those two numbers came out of. */}
-      <Trail state={state} />
+  const upPct = Math.round(state.upPrice * 100);
+  const sides = [
+    { side: 'up' as const, name: 'UP', pct: upPct, mult: 1 / state.upPrice },
+    { side: 'down' as const, name: 'DOWN', pct: 100 - upPct, mult: 1 / (1 - state.upPrice) },
+  ];
+  const trend = state.spot >= state.strike ? 'up' : 'dn';
 
-      {/* One instrument strip instead of three stacked rows: the same three
-          numbers, read across in a glance rather than down a list. */}
-      <div className="strip">
-        <div>
-          <span>strike</span>
-          <b>{state.strike ? price(state.strike) : '—'}</b>
+  // Built from the game face's own parts rather than from a readout panel: the
+  // question strip, the dark window, the call keys, the steel order tray. A duel
+  // screen that invents its own furniture reads as a second front end bolted to
+  // the same shell — which is exactly what this is not.
+  return (
+    <>
+      <div className="q">
+        <span className="exp">{intervalLabel(state.intervalSec)}</span>
+        Open a room on <b>{state.symbol}</b> and take the first side.
+      </div>
+
+      <div className="window">
+        <div className="crt">
+          <Trail state={state} />
+          <div className="scan" />
         </div>
-        <div>
-          <span>spot</span>
-          <b className={state.spot >= state.strike ? 'up' : 'dn'}>
-            {state.spot ? price(state.spot) : '—'}
-          </b>
-        </div>
-        {/* Named as the BOOK's view, because a bare percentage on the side keys
-            read like "52% of players picked UP" — and the room is empty. */}
-        <div>
-          <span>book</span>
-          <b>
-            <em className="up">{Math.round(state.upPrice * 100)}</em>
-            {'/'}
-            <em className="dn">{Math.round((1 - state.upPrice) * 100)}</em>
-          </b>
+        <div className="readout">
+          <span className={`px ${trend}`}>{state.spot ? price(state.spot) : '—'}</span>
+          <span className={`dl ${trend}`}>
+            {state.spot >= state.strike ? '+' : ''}{(state.spot - state.strike).toFixed(2)}
+          </span>
+          <span>strike {state.strike ? price(state.strike) : '—'}</span>
         </div>
       </div>
 
-      <div className="calls calls--slim">
-        {(['up', 'down'] as const).map((sd) => (
-          <Key key={sd} lit={side === sd} onPress={() => setSide(sd)}>
-            <SideIcon side={sd} />
-            <span className="nm">{sd.toUpperCase()}</span>
+      {/* The same two keys as the game face, saying the same two things. */}
+      <div className="calls">
+        {sides.map((k) => (
+          <Key key={k.side} lit={side === k.side} onPress={() => setSide(k.side)}>
+            <SideIcon side={k.side} />
+            <span className="nm">{k.name}</span>
+            <span className="pct">{k.pct}%</span>
+            <span className="mul">×{k.mult.toFixed(1)} book</span>
           </Key>
         ))}
       </div>
 
-      {/* Stake and entry-close sit side by side: two settings, one band, so the
-          form does not run the height of the screen. */}
-      <div className="duo">
+      <div className="order">
         <label className="field">
-          <span>stake ({money.symbol})</span>
+          <span>your stake ({money.symbol})</span>
           <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
         </label>
+
         <label className="field">
-          <span>entry closes</span>
-          <div className="seg seg--slim">
+          <span>entry closes at</span>
+          <div className="seg">
             {[0.25, 0.5, 0.75].map((f) => {
               const ok = usable(f);
               const left = at(f) - now;
@@ -153,71 +162,54 @@ export function CreateRoomPanel({
             })}
           </div>
         </label>
+
+        {roomFits ? (
+          <div className="calc">
+            <span>entry shuts in</span>
+            <span>{human(Math.max(0, entryDeadline - now))}</span>
+          </div>
+        ) : (
+          <div className="calc calc--bad">
+            <span>too short</span>
+            <span>needs {MIN_DEADLINE_MARGIN_SEC}s clear of expiry</span>
+          </div>
+        )}
       </div>
 
-      {/* The two things that actually change what happens, on one line each.
-          The reasoning behind them is a fold — it is worth reading once, not
-          on every visit. */}
-      {roomFits ? (
-        <>
-          <p className="hint">
-            <span>entry shuts in</span> <b>{human(Math.max(0, entryDeadline - now))}</b>
-            <i />
-            <span>payout</span> <b className="warn">floats with the split</b>
-          </p>
-          <details className="fold">
-            <summary>why these two matter</summary>
-            <p>
-              Closing entry early stops a late joiner watching most of the window play
-              out and then taking the short side with almost nothing at risk.
-            </p>
-            <p>
-              Nobody has joined yet, so there is no split and no multiple — those appear
-              once people back a side. The winning side splits the whole pot by stake,
-              so the more that piles onto your side, the less each takes.
-            </p>
-          </details>
-        </>
-      ) : (
-        <p className="note err">
-          This window closes in {human(remaining)} — too short for a room. People need time
-          to join, and the escrow refuses an entry deadline inside the last
-          {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
+      <details className="fold">
+        <summary>how a room pays</summary>
+        <p>
+          Closing entry early stops a late joiner watching most of the window play out
+          and then taking the short side with almost nothing at risk.
         </p>
-      )}
+        <p>
+          Payouts float: the winning side splits the whole pot by stake, so the more
+          that piles onto your side, the less each takes. Nobody has joined yet, so
+          there is no split and no multiple until they do.
+        </p>
+      </details>
 
-      {/* The commit pair, laid out the way a handheld lays them out: two round
-          caps set on a diagonal, each named by the strip underneath rather than
-          by text crammed into the cap. A round key cannot grow into a banner,
-          which is the whole point — the panel above it stays the screen. */}
-      <div className="pad">
-        <div className="pad__slot">
-          <Key className="round round--b" onPress={onBack}>B</Key>
-          <span className="pad__lab">back</span>
-        </div>
-        <div className="pad__slot pad__slot--a">
-          {allow.enough === false ? (
-            <>
-              <Key className="round round--a" disabled={allow.approving}
-                   onPress={() => conn && void allow.approve(conn.wallet, conn.account)}>A</Key>
-              <span className="pad__lab on">
-                {allow.approving ? 'approving…' : `approve ${money.symbol}`}
-              </span>
-            </>
-          ) : (
-            <>
-              <Key className="round round--a" disabled={!ready} onPress={submit}>A</Key>
-              <span className="pad__lab on">{pending ? 'opening…' : 'open the room'}</span>
-            </>
-          )}
-        </div>
+      {/* The same shape as the call keys above, because it is the same kind of
+          choice: two options, equal weight, side by side. The round pad set them
+          on a diagonal at two different sizes, which said one of them was an
+          afterthought — and it ended the screen on a shape that appears nowhere
+          else on the machine. Lit is the commit; the way out is plain steel, the
+          way it is everywhere else here. */}
+      <div className="calls calls--act">
+        <Key onPress={onBack}>
+          <span className="nm">back</span>
+        </Key>
+        <Key lit={ready} disabled={!ready} onPress={() => void submit()}>
+          <span className="nm">
+            {allow.approving ? 'approving…' : pending ? 'opening…' : 'open the room'}
+          </span>
+        </Key>
       </div>
 
       {allow.enough === false ? (
-        <p className="hint">The escrow needs permission to move your stake. Asked once.</p>
+        <p className="hint">First room on this wallet signs twice: permission, then the room.</p>
       ) : null}
       {error ? <Fault error={error} /> : null}
-      {allow.error ? <Fault error={allow.error} /> : null}
-    </Readout>
+    </>
   );
 }
