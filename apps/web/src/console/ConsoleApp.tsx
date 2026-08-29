@@ -218,12 +218,7 @@ export function ConsoleApp() {
 
         <Footer engine={engine} s={snap} />
       </Panel>
-
-      <p className="console-hint">
-        Banteng menguasai wilayah atas, beruang wilayah bawah.
-        Mereka tidak bisa menyeberang — kamu yang masuk.
-      </p>
-
+      
       {stage !== 'playing' && (
         <div className="gate">
           {stage === 'start' ? (

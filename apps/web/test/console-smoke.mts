@@ -178,6 +178,50 @@ step('actions');
 engine.stop();
 step('teardown');
 
+// 8b — a live result survives the next window opening underneath it.
+//      The venue rolls within seconds of a close, and applying that roll
+//      immediately wiped the GORED / HELD THE LINE card before it could be
+//      read. The roll has to wait for the result.
+{
+  const openTime = Math.floor(Date.now() / 1000) - 61;
+  const mk = (id: string, open: number) => ({
+    marketId: id, symbol: 'BTC', intervalSec: 60,
+    strike: 100, spot: 101, upP: 0.6,
+    openTime: open, expiryTime: open + 60, status: 'Trading' as const,
+  });
+
+  type Slots = ReturnType<typeof mk>[];
+  // A holder rather than a bare `let`: assigned only inside the callback, which
+  // narrows a plain variable to `never` at every later use.
+  const sink: { push: ((slots: Slots) => void) | null } = { push: null };
+  const feed = {
+    live: true,
+    subscribe(cb: (slots: Slots) => void) {
+      sink.push = cb;
+      cb([mk('0xold', openTime), mk('0xold', openTime), mk('0xold', openTime), mk('0xold', openTime)]);
+      return () => {};
+    },
+  };
+
+  const live: any = new Engine(feed as never);
+  live.attachCanvas(canvas);
+  live.start();
+  const inner = live as { tickClock(): void };
+
+  inner.tickClock();                       // crosses the expiry -> locks
+  check('an expired live window locks', live.snapshot().phase !== 'trade', live.snapshot().phase);
+
+  // The venue opens the next one while the result is still coming.
+  const fresh = Math.floor(Date.now() / 1000);
+  sink.push?.([mk('0xnew', fresh), mk('0xnew', fresh), mk('0xnew', fresh), mk('0xnew', fresh)]);
+  check('the roll is parked, not applied', live.race.marketId === '0xold', live.race.marketId);
+
+  await spin(3200);                        // lock 2.2s + the cinematic
+  check('the result still exists after a roll arrived', live.outcome !== null);
+  step(`live result survives a roll → ${live.outcome?.txt}`);
+  live.stop();
+}
+
 // 8 — the LIVE clock ticks once a second.
 //     It is derived from the market's openTime on every clock tick, not when
 //     the feed polls. Deriving it from the poll made the countdown jump several

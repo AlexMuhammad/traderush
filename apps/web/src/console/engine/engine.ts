@@ -70,6 +70,18 @@ export class Engine implements Scene {
   private readonly feed?: MarketFeed;
   private unsubscribeFeed: (() => void) | null = null;
 
+  /**
+   * True from the moment a window locks until its result has had its moment.
+   *
+   * The venue opens the next window within seconds of closing the last one, and
+   * the feed reports it on the next poll. Applying that roll immediately wiped
+   * the scene — including the GORED / MAULED / HELD THE LINE card — before it
+   * could be read. The roll waits instead.
+   */
+  private holdingResult = false;
+  /** The next window, parked until the result is done with the screen. */
+  private pendingSlot: FeedSlot | null = null;
+
   private ctx: CanvasRenderingContext2D | null = null;
   private raf = 0;
   private priceTimer = 0;
@@ -256,6 +268,32 @@ export class Engine implements Scene {
     this.publish();
   }
 
+  /** Swap the current dial onto a new window and clear the last one's scene. */
+  private rollTo(slot: FeedSlot): void {
+    const i = this.raceIndex;
+    const now = Math.floor(Date.now() / 1000);
+    this.races[i] = {
+      marketId: slot.marketId,
+      symbol: slot.symbol,
+      win: slot.intervalSec || 900,
+      t: Math.max(0, now - slot.openTime),
+      openTime: slot.openTime,
+      strike: slot.strike,
+      spot: slot.spot,
+      upP: slot.upP,
+      hist: [slot.spot || slot.strike],
+      pos: null,
+      phase: 'trade',
+      wasDanger: false,
+      settled: this.races[i]?.settled ?? [],
+    };
+    this.pendingSlot = null;
+    this.resetScene();
+    this.labelWindow();
+    this.statusOverride = null;
+    this.publish();
+  }
+
   /** The header line and the expiry stamp for whatever is on the dials now. */
   private labelWindow(): void {
     const R = this.race;
@@ -267,6 +305,7 @@ export class Engine implements Scene {
   }
 
   private resetScene(): void {
+    this.holdingResult = false;
     this.particles = []; this.slashes = []; this.rings = [];
     this.outcome = null; this.attack = null;
     this.lunge = 0; this.lastBeepAt = -1;
@@ -291,6 +330,24 @@ export class Engine implements Scene {
     slots.forEach((slot, i) => {
       const prev = this.races[i];
       const rolled = !prev || prev.marketId !== slot.marketId;
+
+      if (rolled && i === this.raceIndex && prev) {
+        // The clock usually notices the expiry first, but the feed can get here
+        // in the same second. Do not let a roll skip the settlement of a window
+        // someone had a position in.
+        if (prev.phase === 'trade' && now >= prev.openTime + prev.win && prev.openTime) {
+          prev.phase = 'lock';
+          this.holdingResult = true;
+          this.statusOverride = 'TIME';
+          this.audio.horn();
+          this.shake = 8;
+          this.later(() => this.resolve(), LOCK_SECONDS * 1000);
+        }
+        if (this.holdingResult) {
+          this.pendingSlot = slot;   // park it; the result owns the screen
+          return;
+        }
+      }
 
       if (rolled) {
         this.races[i] = {
@@ -387,6 +444,7 @@ export class Engine implements Scene {
 
     if (R.t >= R.win) {
       R.phase = 'lock';
+      this.holdingResult = true;
       this.statusOverride = 'TIME';
       this.audio.horn();
       this.shake = 8;
@@ -444,8 +502,14 @@ export class Engine implements Scene {
       // may be an hour away — so the result stays up and the console says it is
       // waiting rather than resetting to a dead race.
       if (this.isLive) {
-        this.statusOverride = 'WAITING FOR NEXT WINDOW';
+        // Same beat as demo: the card holds a moment longer before the next
+        // window is allowed in, so a result is read rather than glimpsed.
+        this.statusOverride = this.pendingSlot ? 'NEXT WINDOW' : 'WAITING FOR NEXT WINDOW';
         this.publish();
+        this.later(() => {
+          this.holdingResult = false;
+          if (this.pendingSlot) this.rollTo(this.pendingSlot);
+        }, 1200);
         return;
       }
       this.statusOverride = 'NEXT PACK FORMING';
