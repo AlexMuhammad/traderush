@@ -4,6 +4,7 @@ import { useAllowance, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
+import { SideIcon } from '../components/SideIcon';
 import { Readout, Row, Rows, TxLine } from '../components/Readout';
 
 /** Stake a side and publish a challenge. The console's S4. */
@@ -84,7 +85,7 @@ export function CreateDuelPanel({
       <div className="calls" style={{ marginTop: 11 }}>
         {(['up', 'down'] as const).map((s) => (
           <Key key={s} lit={side === s} onPress={() => setSide(s)}>
-            <span className="beast">{s === 'up' ? '🐂' : '🐻'}</span>
+            <SideIcon side={s} />
             <span className="nm">{s.toUpperCase()}</span>
             <span className="pct">{Math.round((s === 'up' ? state.upPrice : 1 - state.upPrice) * 100)}%</span>
           </Key>

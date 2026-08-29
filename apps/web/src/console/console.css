@@ -477,7 +477,16 @@
 }
 .key.lit .cap * { color: #5A3E05 !important; }
 
-.cap .beast { font-size: 21px; line-height: 1; }
+/* The side arrow. A light edge beneath it so it reads as moulded into the cap
+   rather than printed on it, and its colour survives the lamp coming on —
+   green and red ARE the information. */
+.cap .sideicon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.85));
+}
+.key.dry .cap .sideicon { filter: grayscale(1) drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
 .cap .nm {
   font-size: 10px;
   letter-spacing: .18em;

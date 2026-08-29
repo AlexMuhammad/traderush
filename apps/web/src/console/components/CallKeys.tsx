@@ -1,6 +1,7 @@
 import type { Engine } from '../engine/engine';
 import type { ConsoleSnapshot } from '../engine/types';
 import { Key } from './Key';
+import { SideIcon } from './SideIcon';
 
 /** The two calls. The bull holds the ground above the strike, the bear below it.
  *
@@ -14,14 +15,8 @@ export function CallKeys({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) 
   const locked = s.phase !== 'trade';
 
   const sides = [
-    {
-      side: 'up' as const, beast: '🐂', name: 'UP',
-      pct: upPct, mult: 1 / s.upP, dry: s.dryUp,
-    },
-    {
-      side: 'down' as const, beast: '🐻', name: 'DOWN',
-      pct: 100 - upPct, mult: 1 / (1 - s.upP), dry: s.dryDown,
-    },
+    { side: 'up' as const, name: 'UP', pct: upPct, mult: 1 / s.upP, dry: s.dryUp },
+    { side: 'down' as const, name: 'DOWN', pct: 100 - upPct, mult: 1 / (1 - s.upP), dry: s.dryDown },
   ];
 
   return (
@@ -38,7 +33,7 @@ export function CallKeys({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) 
           }}
           onPress={() => engine.board(k.side)}
         >
-          <span className="beast">{k.beast}</span>
+          <SideIcon side={k.side} />
           <span className="nm">{k.name}</span>
           <span className="pct">{k.pct}%</span>
           <span className="mul">{k.dry ? 'no liquidity' : `×${k.mult.toFixed(1)}`}</span>
