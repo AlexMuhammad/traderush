@@ -397,14 +397,20 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.fillStyle = 'rgba(0,0,0,.5)';
     c.fillRect(0, 0, w, h);
     c.textAlign = 'center';
-    c.shadowColor = S.outcome.win ? 'rgba(63,217,139,.9)' : 'rgba(255,90,72,.9)';
+    // Coloured by WHICH ANIMAL took it, not by whether you won. Green is the
+    // bull and red is the bear everywhere else on this machine — the arrows on
+    // the keys, the territories, the price tag — and GORED is the bull's word
+    // even when it is your loss. Colouring it by your result would make green
+    // mean two different things on the same screen.
+    const bull = S.outcome.winner === 'up';
+    c.shadowColor = bull ? 'rgba(63,217,139,.9)' : 'rgba(255,90,72,.9)';
     c.shadowBlur = 22;
-    c.fillStyle = S.outcome.win ? '#5BF0A6' : '#FF7566';
+    c.fillStyle = bull ? '#5BF0A6' : '#FF7566';
     c.font = '700 36px Barlow Condensed, sans-serif';
     c.fillText(S.outcome.txt, w / 2, h / 2 + 2);
     c.shadowBlur = 0;
     c.font = '400 14px Share Tech Mono, monospace';
-    c.fillStyle = S.outcome.win ? 'rgba(91,240,166,.9)' : 'rgba(255,117,102,.9)';
+    c.fillStyle = bull ? 'rgba(91,240,166,.9)' : 'rgba(255,117,102,.9)';
     c.fillText(S.outcome.sub, w / 2, h / 2 + 24);
     c.textAlign = 'left';
   }

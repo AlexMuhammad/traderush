@@ -146,7 +146,16 @@ check('exactly one outcome', outcomes === 1, String(outcomes));
 const settled = engine.snapshot();
 check('status names a winner', /TAKES IT|FORMING/.test(settled.statusText), settled.statusText);
 check('ticket becomes a receipt', settled.ticketNote !== '—', settled.ticketNote);
-step(`resolve → ${engine.outcome?.txt}`);
+// Green is the bull and red is the bear everywhere on this machine, so the
+// result text has to name the ANIMAL that took the window, not your result.
+const o = engine.outcome!;
+const expectedWinner = o.txt === 'GORED' ? 'up' : o.txt === 'MAULED' ? 'down' : o.winner;
+check('the result names the winning animal', o.winner === expectedWinner,
+  `${o.txt} -> ${o.winner}`);
+check('a gore is the bull and a maul is the bear',
+  (o.txt !== 'GORED' || o.winner === 'up') && (o.txt !== 'MAULED' || o.winner === 'down'),
+  `${o.txt}/${o.winner}`);
+step(`resolve → ${engine.outcome?.txt} (${o.winner})`);
 
 // 5 — all four races. Each has its own window length and stagger.
 for (const i of [1, 2, 3, 0]) {

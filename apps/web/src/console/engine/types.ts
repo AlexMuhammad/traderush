@@ -116,7 +116,15 @@ export interface Attack {
   x: number; y: number;
 }
 
-export interface Outcome { win: boolean; txt: string; sub: string }
+export interface Outcome {
+  win: boolean;
+  txt: string;
+  sub: string;
+  /** Which animal took the window. The result text is coloured by THIS, not by
+   *  whether you won: green is the bull and red is the bear everywhere else on
+   *  the machine, and GORED is the bull's word even when it is your loss. */
+  winner: Side;
+}
 
 /** What the React chrome renders. A fresh object is published on every change;
  *  the canvas is never re-rendered by React, only this. */

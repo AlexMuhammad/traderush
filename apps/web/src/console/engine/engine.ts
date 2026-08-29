@@ -569,7 +569,9 @@ export class Engine implements Scene {
 
   /** You lost. The animal whose territory you ended in collects. */
   private playKill(side: Side, sub: string): void {
+    // You were DOWN and lost, so the bull took it — and vice versa.
     const type = side === 'down' ? 'gore' : 'claw';
+    const winner: Side = type === 'gore' ? 'up' : 'down';
     const hx = type === 'gore' ? this.bullX : this.bearX;
     const hy = type === 'gore' ? this.bullY : this.bearY;
     const w = this.ctx?.canvas.clientWidth ?? 320;
@@ -603,7 +605,7 @@ export class Engine implements Scene {
     this.later(() => {
       if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
-      this.outcome = { win: false, txt: type === 'gore' ? 'GORED' : 'MAULED', sub };
+      this.outcome = { win: false, winner, txt: type === 'gore' ? 'GORED' : 'MAULED', sub };
       this.flash = 0.8; this.flashCol = '255,90,72';
       this.centreBurst('255,117,102', 40);
     }, 2200);
@@ -625,7 +627,8 @@ export class Engine implements Scene {
     this.later(() => {
       if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
-      this.outcome = { win: true, txt: 'HELD THE LINE', sub };
+      // You won, so the side you were on is the side that took it.
+      this.outcome = { win: true, winner: side, txt: 'HELD THE LINE', sub };
       this.flash = 0.7; this.flashCol = '255,215,119';
       this.centreBurst('255,215,119', 50);
     }, 1960);
@@ -635,6 +638,7 @@ export class Engine implements Scene {
   private playBystander(winner: Side, sub: string): void {
     this.outcome = {
       win: true,
+      winner,
       txt: winner === 'up' ? 'BULL TAKES IT' : 'BEAR TAKES IT',
       sub,
     };
