@@ -4,12 +4,7 @@ import { useWallet } from '../../walletContext';
 /** Step two. Privy is the front door — email, a social account, or an injected
  *  wallet; anyone without one gets an embedded wallet. What the app receives is
  *  a plain viem client either way. */
-export function ConnectScreen({
-  onBack, onDemo,
-}: {
-  onBack: () => void;
-  onDemo: () => void;
-}) {
+export function ConnectScreen({ onBack }: { onBack: () => void }) {
   const { cfg } = useSdk();
   const { conn, connecting, error, wrongChain, doConnect, doSwitch } = useWallet();
 
@@ -42,16 +37,13 @@ export function ConnectScreen({
 
       {error && <p className="gate__warn">{error}</p>}
 
-      <button type="button" className="gate__demo" onClick={onDemo}>
-        Skip — play the demo instead
-      </button>
-
       {/* Said plainly rather than implied away: signing in does not yet change
           what the console's keys do. The prices are real; the stakes are points
           until book orders are wired. Duels are the real thing. */}
       <p className="gate__fine">
-        The console's prices are live. Its keys stake points, not money — duels are
-        where a wallet actually matters.
+        Prices and windows here are live markets. The console's own keys stake
+        points; a duel stakes {cfg.collateralSymbol}, and that is what the wallet
+        is for.
       </p>
 
       <button type="button" className="gate__back" onClick={onBack}>Back</button>

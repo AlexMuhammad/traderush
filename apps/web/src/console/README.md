@@ -116,8 +116,15 @@ knows which one it is looking at:
 
 | | |
 |---|---|
-| none (demo mode) | `engine/market.ts` simulates four races |
-| `engine/feed.ts` | real event contracts from the indexer |
+| `engine/feed.ts` | real event contracts from the indexer — what anyone actually sees |
+| none | `engine/market.ts` simulates four races. Only the smoke test uses it |
+
+**A wallet is required to reach the console.** Everything in here settles
+on-chain, and a machine you can play but not act on teaches the wrong thing. The
+one exception is an incoming duel link: whoever clicked it was invited and can
+read the terms first — accepting still asks for a wallet. Signing out, or
+switching to a chain this build does not target, puts the gate back rather than
+leaving a dead console on screen.
 
 `LiveFeed` picks a 2×2 that matches the tuner — each asset at its two shortest
 live intervals — and folds each reading onto the dials. The engine keeps `hist`,

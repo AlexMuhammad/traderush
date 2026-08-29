@@ -68,11 +68,15 @@ export function ConsoleApp() {
     return () => { unsubscribe(); engine.stop(); };
   }, [engine]);
 
-  // A wallet already connected on the right chain has nothing to do on the
-  // connect step, so it falls straight through.
+  // The console is not reachable without a wallet: everything in it settles
+  // on-chain, and a machine you can play but not act on teaches the wrong thing.
+  // A wallet already connected on the right chain falls straight through.
   useEffect(() => {
     if (stage === 'connect' && conn && !wrongChain) setStage('playing');
-  }, [stage, conn, wrongChain]);
+    // Signing out, or switching to a chain this build does not target, puts the
+    // gate back rather than leaving a dead console on screen.
+    if (stage === 'playing' && (!conn || wrongChain) && !parseDuelLink(path)) setStage('connect');
+  }, [stage, conn, wrongChain, path]);
 
   // The pad has keys, so the keyboard should work too. Only while a list is up:
   // on the game face the arrows mean nothing and swallowing them is rude.
@@ -88,8 +92,9 @@ export function ConsoleApp() {
     return () => window.removeEventListener('keydown', onKey);
   }, [screen]);
 
-  // An incoming duel link should not sit behind the title card — the person
-  // clicking it was invited, not browsing.
+  // An incoming duel link is the exception. Whoever clicked it was invited, and
+  // should be able to READ the terms before signing in — accepting still needs a
+  // wallet, and AcceptPanel asks for one there.
   useEffect(() => {
     if (parseDuelLink(path)) setStage('playing');
   }, [path]);
@@ -222,15 +227,9 @@ export function ConsoleApp() {
       {stage !== 'playing' && (
         <div className="gate">
           {stage === 'start' ? (
-            <StartScreen
-              onStart={() => setStage('connect')}
-              onDemo={() => { setDemo(true); setStage('playing'); }}
-            />
+            <StartScreen onStart={() => setStage('connect')} />
           ) : (
-            <ConnectScreen
-              onBack={() => setStage('start')}
-              onDemo={() => { setDemo(true); setStage('playing'); }}
-            />
+            <ConnectScreen onBack={() => setStage('start')} />
           )}
         </div>
       )}

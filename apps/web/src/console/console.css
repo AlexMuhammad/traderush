@@ -701,21 +701,6 @@
 }
 .gate__start:disabled { opacity: .6; cursor: default; }
 
-.gate__demo {
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 6px 2px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  color: #C6CACE;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-thickness: 1px;
-}
-.gate__demo:hover { color: #FFC857; }
-
 .gate__back {
   border: none;
   background: none;
