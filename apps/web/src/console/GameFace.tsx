@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Engine } from './engine/engine';
 import type { ConsoleSnapshot } from './engine/types';
 import { Window } from './components/Window';
@@ -17,10 +18,17 @@ import { CallKeys } from './components/CallKeys';
  * The market behind it is simulated (engine/market.ts); the duel screens are
  * not, and closing that gap is the last real inconsistency here.
  */
-export function GameFace({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
+export function GameFace({
+  engine, s, screen,
+}: {
+  engine: Engine;
+  s: ConsoleSnapshot;
+  /** Optional content shown on the glass instead of the game. */
+  screen?: ReactNode;
+}) {
   return (
     <>
-      <Window engine={engine} s={s} />
+      <Window engine={engine} s={s} screen={screen} />
       <Tuner engine={engine} s={s} />
 
       {/* One slot, two states: stake it, or watch it. */}

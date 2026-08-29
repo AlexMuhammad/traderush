@@ -32,6 +32,20 @@ and a React re-render never touches the canvas.
 | `fx.ts` | Particles, shockwave rings, claw slashes |
 | `types.ts` | Shared shapes, including the `ConsoleSnapshot` contract |
 
+## The screen is a display, not just a canvas
+
+`Window` takes an optional `screen` node rendered inside `.crt` — above the
+canvas, **below** `.scan`. That ordering is the whole trick: the scanlines and
+the corner falloff fall across the content, so a market listing reads as
+phosphor rather than as a web page pasted over the glass.
+
+The canvas stays mounted underneath. Coming back to the game is instant, and
+the engine already skips painting a detached canvas.
+
+The menu switches what is on the screen rather than navigating away, so the
+plate, the dials and the keys never leave. Markets is the first of these; the
+duel flows are still panels below the face.
+
 ## Things worth knowing before editing
 
 **The animals cannot cross the strike line.** The bull is clamped above it, the

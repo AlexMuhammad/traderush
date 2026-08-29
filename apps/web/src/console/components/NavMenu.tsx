@@ -10,13 +10,16 @@ import { useWallet } from '../../walletContext';
  *  the viewport.
  */
 export function NavMenu({
-  open, onOpenChange, container, onNavigate,
+  open, onOpenChange, container, onNavigate, onScreen, screen,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The panel's clipping layer, so the drawer rises from inside the console. */
   container: HTMLElement | null;
   onNavigate: (to: string) => void;
+  /** Switches what the CRT shows, rather than leaving the machine. */
+  onScreen: (screen: 'game' | 'markets') => void;
+  screen: 'game' | 'markets';
 }) {
   const { cfg } = useSdk();
   const { conn, wrongChain, connecting, doConnect, doSwitch } = useWallet();
@@ -40,14 +43,24 @@ export function NavMenu({
           <Drawer.Title className="drawer__title">The Run</Drawer.Title>
 
           <nav className="drawer__list">
-            <button className="drawer__item" onClick={() => go('/')}>
+            {/* These change what is ON the screen; they do not take you off the
+                machine. Markets is a listing the console tunes from. */}
+            <button
+              className="drawer__item"
+              disabled={screen === 'game'}
+              onClick={() => { onOpenChange(false); onScreen('game'); }}
+            >
               <span>Play</span>
-              <em>the console</em>
+              <em>{screen === 'game' ? 'on screen' : 'back to the run'}</em>
             </button>
 
-            <button className="drawer__item" onClick={() => go('/markets')}>
+            <button
+              className="drawer__item"
+              disabled={screen === 'markets'}
+              onClick={() => { onOpenChange(false); onScreen('markets'); }}
+            >
               <span>Markets</span>
-              <em>live event contracts</em>
+              <em>{screen === 'markets' ? 'on screen' : 'live event contracts'}</em>
             </button>
 
             {/* Honest dead end: there is no duels index yet. Better a disabled

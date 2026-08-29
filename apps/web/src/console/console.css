@@ -1046,3 +1046,88 @@
 
 .txline { margin-top: 8px; font-family: 'Share Tech Mono', monospace; font-size: 10px; }
 .txline a { color: #7bb0ff; }
+
+/* ------------------------------------------------------- the screen itself */
+
+/* Content shown ON the CRT rather than under it. It sits above the canvas and
+   BELOW `.scan`, so the scanlines and the corner falloff fall across it and it
+   reads as phosphor rather than as a web page pasted over the glass.
+
+   The canvas stays mounted underneath: returning to the game is instant, and
+   the engine skips painting a detached canvas anyway. */
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 9px 10px 8px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(10,16,12,.86), rgba(2,4,3,.97) 80%);
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+}
+
+.screen__bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 9px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #FFC857;
+  text-shadow: 0 0 8px rgba(255,200,87,.5);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255,200,87,.22);
+}
+.screen__bar em { font-style: normal; color: #5E7A66; }
+
+.screen__body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.screen__body::-webkit-scrollbar { width: 4px; }
+.screen__body::-webkit-scrollbar-thumb { background: rgba(255,200,87,.28); border-radius: 2px; }
+
+/* One market. A row of an instrument's list, not a card. */
+.scanrow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0 10px;
+  align-items: baseline;
+  width: 100%;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 5px 6px;
+  border-radius: 3px;
+  color: #9BE8BF;
+  font-family: 'Share Tech Mono', monospace;
+}
+.scanrow:nth-child(odd) { background: rgba(255,255,255,.028); }
+.scanrow:hover { background: rgba(255,200,87,.12); color: #FFE9A8; }
+.scanrow:active { background: rgba(255,200,87,.22); }
+
+.scanrow .name { font-size: 12px; letter-spacing: .06em; }
+.scanrow .odds { font-size: 12px; }
+.scanrow .left { font-size: 10px; color: #C08A3E; min-width: 52px; text-align: right; }
+.scanrow .sub {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  color: #55705E;
+  letter-spacing: .04em;
+}
+.scanrow .up { color: var(--up); }
+.scanrow .dn { color: var(--down); }
+/* The dial you are already tuned to. */
+.scanrow.tuned { box-shadow: inset 2px 0 0 #FFC857; }
+.scanrow.tuned .name { color: #FFC857; }
+
+.screen__empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: #5E7A66;
+  text-align: center;
+}

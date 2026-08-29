@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { Engine } from '../engine/engine';
 import { PROGRESS_SEGMENTS } from '../engine/engine';
 import type { ConsoleSnapshot } from '../engine/types';
@@ -9,7 +9,14 @@ import type { ConsoleSnapshot } from '../engine/types';
  *  re-rendering this component does not re-render the scene. Everything below
  *  the glass is ordinary React driven by the snapshot.
  */
-export function Window({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
+export function Window({
+  engine, s, screen,
+}: {
+  engine: Engine;
+  s: ConsoleSnapshot;
+  /** Shown ON the CRT, over the canvas and under the scanlines. */
+  screen?: ReactNode;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -22,7 +29,10 @@ export function Window({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
   return (
     <div className="window">
       <div className="crt">
+        {/* The canvas stays mounted under any screen: coming back to the game is
+            instant, and the engine skips painting a detached canvas anyway. */}
         <canvas ref={ref} />
+        {screen}
         <div className="scan" />
       </div>
 

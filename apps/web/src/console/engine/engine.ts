@@ -563,6 +563,18 @@ export class Engine implements Scene {
     this.publish();
   }
 
+  /** Tune to a market by id, if it is one of the four dials. Returns false when
+   *  it is not — the caller then has to do something else with it. */
+  tuneToMarket(marketId: string): boolean {
+    const i = this.races.findIndex((r) => r.marketId === marketId);
+    if (i < 0) return false;
+    if (i !== this.raceIndex) this.tune(i);
+    return true;
+  }
+
+  /** The market currently on the dials, for a list that wants to mark it. */
+  get currentMarketId(): string { return this.race.marketId; }
+
   tuneAsset(asset: 0 | 1): void { this.tune(asset * 2 + (this.raceIndex % 2)); }
   tuneInterval(iv: 0 | 1): void { this.tune((this.raceIndex >= 2 ? 2 : 0) + iv); }
 

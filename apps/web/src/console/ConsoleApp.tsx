@@ -11,7 +11,7 @@ import { Marquee } from './components/Marquee';
 import { Footer } from './components/Footer';
 import { NavMenu } from './components/NavMenu';
 import { GameFace } from './GameFace';
-import { MarketsPanel } from './duel/MarketsPanel';
+import { ScreenMarkets } from './components/ScreenMarkets';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
 import { AcceptPanel } from './duel/AcceptPanel';
@@ -36,6 +36,8 @@ export function ConsoleApp() {
   const [path, navigate] = usePath();
   const [stage, setStage] = useState<Stage>('start');
   const [menuOpen, setMenuOpen] = useState(false);
+  /** What the CRT is showing. The menu switches it; the game is the default. */
+  const [screen, setScreen] = useState<'game' | 'markets'>('game');
   const [mount, setMount] = useState<HTMLDivElement | null>(null);
   const { conn, wrongChain } = useWallet();
   const { market } = useSdk();
@@ -72,6 +74,18 @@ export function ConsoleApp() {
 
   const view = renderView(path, navigate);
 
+  const crt = screen === 'markets' ? (
+    <ScreenMarkets
+      currentMarketId={engine.currentMarketId}
+      onPick={(id) => {
+        // If it is one of the dials, just tune to it — that is what a console
+        // does. Anything else can still be duelled on.
+        if (engine.tuneToMarket(id)) setScreen('game');
+        else navigate(`/market/${id}/duel`);
+      }}
+    />
+  ) : undefined;
+
   return (
     <div className="console-stage">
       <Panel hot={snap.hot && view.isGame} mountRef={setMount}>
@@ -84,7 +98,7 @@ export function ConsoleApp() {
           onOpenMenu={() => { engine.wake(); setMenuOpen(true); }}
         />
 
-        {view.isGame ? <GameFace engine={engine} s={snap} /> : view.node}
+        {view.isGame ? <GameFace engine={engine} s={snap} screen={crt} /> : view.node}
 
         <Footer engine={engine} s={snap} />
 
@@ -93,6 +107,8 @@ export function ConsoleApp() {
           onOpenChange={setMenuOpen}
           container={mount}
           onNavigate={navigate}
+          onScreen={(next) => { setScreen(next); navigate('/'); }}
+          screen={screen}
         />
       </Panel>
 
@@ -138,7 +154,7 @@ function renderView(path: string, navigate: (to: string) => void) {
     return {
       isGame: false as const,
       label: `duel #${duel[1]}`,
-      node: <DuelPanel duelId={BigInt(duel[1]!)} onBack={() => navigate('/markets')} />,
+      node: <DuelPanel duelId={BigInt(duel[1]!)} onBack={() => navigate('/')} />,
     };
   }
 
@@ -151,17 +167,9 @@ function renderView(path: string, navigate: (to: string) => void) {
         <CreateDuelPanel
           marketId={create[1] as `0x${string}`}
           onOpened={(id) => navigate(`/duel/${id}`)}
-          onBack={() => navigate('/markets')}
+          onBack={() => navigate('/')}
         />
       ),
-    };
-  }
-
-  if (path === '/markets') {
-    return {
-      isGame: false as const,
-      label: 'markets',
-      node: <MarketsPanel onPick={(id) => navigate(`/market/${id}/duel`)} />,
     };
   }
 
