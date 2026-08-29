@@ -6,14 +6,16 @@ import { useSdk } from '../../sdk';
  *  Same construction as the CRT housing, so a duel screen and the game read as
  *  parts of one machine rather than two front ends. */
 export function Readout({
-  title, right, children,
+  title, right, className, children,
 }: {
   title: string;
   right?: ReactNode;
+  /** Layout variant, e.g. `tight` for the compact instrument panels. */
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="readout-panel">
+    <section className={`readout-panel${className ? ` ${className}` : ''}`}>
       <div className="readout-panel__title">
         <b>{title}</b>
         {right ? <span>{right}</span> : null}
