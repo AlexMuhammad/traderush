@@ -55,8 +55,12 @@ export interface Race {
   symbol: string;
   /** Window length in seconds. */
   win: number;
-  /** Seconds elapsed in this window. */
+  /** Seconds elapsed in this window. Live, this is DERIVED from `openTime` on
+   *  every clock tick — deriving it only when the feed polls made the countdown
+   *  jump three seconds at a time instead of ticking. */
   t: number;
+  /** Unix seconds the window opened. 0 in demo mode, which counts its own time. */
+  openTime: number;
   /** The window's opening price. Above it the bulls hold; below it the bears. */
   strike: number;
   spot: number;

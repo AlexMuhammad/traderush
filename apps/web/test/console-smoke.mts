@@ -178,4 +178,43 @@ step('actions');
 engine.stop();
 step('teardown');
 
+// 8 — the LIVE clock ticks once a second.
+//     It is derived from the market's openTime on every clock tick, not when
+//     the feed polls. Deriving it from the poll made the countdown jump several
+//     seconds at a time — invisible to a typecheck, obvious on the glass.
+{
+  const openTime = Math.floor(Date.now() / 1000) - 30;
+  const slot = {
+    marketId: '0xfeed', symbol: 'BTC', intervalSec: 300,
+    strike: 100, spot: 101, upP: 0.6,
+    openTime, expiryTime: openTime + 300, status: 'Trading' as const,
+  };
+  const feed = {
+    live: true,
+    subscribe(cb: (slots: typeof slot[]) => void) { cb([slot, slot, slot, slot]); return () => {}; },
+  };
+
+  const live: any = new Engine(feed as never);
+  live.attachCanvas(canvas);
+  live.start();
+  const inner = live as { tickClock(): void };
+
+  const first = live.snapshot().clock;
+  inner.tickClock();
+  const second = live.snapshot().clock;
+
+  const secs = (mmss: string) => {
+    const [m, s2] = mmss.split(':').map(Number);
+    return (m ?? 0) * 60 + (s2 ?? 0);
+  };
+  // The wall clock may or may not have crossed a second between the two reads,
+  // so the step is 0 or 1 — never the 3+ a poll-driven clock produced.
+  const stepped = secs(first) - secs(second);
+  check('live clock ticks in seconds', stepped >= 0 && stepped <= 1, `${first} -> ${second}`);
+  check('live clock reads from openTime', Math.abs(secs(first) - 270) <= 2, first);
+  check('live snapshot is marked live', live.snapshot().live === true);
+  live.stop();
+  step('live clock');
+}
+
 console.log(`\nPASS — ${checks} checks, ${snapshots} snapshots, ${canvasOps} canvas ops\n`);

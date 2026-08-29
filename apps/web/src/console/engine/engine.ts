@@ -298,6 +298,7 @@ export class Engine implements Scene {
           symbol: slot.symbol,
           win: slot.intervalSec || 900,
           t: Math.max(0, now - slot.openTime),
+          openTime: slot.openTime,
           strike: slot.strike,
           spot: slot.spot,
           upP: slot.upP,
@@ -316,6 +317,7 @@ export class Engine implements Scene {
       prev.win = slot.intervalSec || prev.win;
       prev.strike = slot.strike || prev.strike;
       prev.upP = slot.upP || prev.upP;
+      prev.openTime = slot.openTime;
       prev.t = Math.max(0, now - slot.openTime);
       if (slot.spot > 0 && slot.spot !== prev.spot) {
         prev.spot = slot.spot;
@@ -335,10 +337,20 @@ export class Engine implements Scene {
 
   private tickPrice = (): void => {
     if (this.race.phase !== 'trade') return;
-    // Live, the price arrives from the feed; there is nothing to invent.
-    if (!this.isLive) tickPrice(this.race, this.speed);
+    // Live, the price arrives from the feed; there is nothing to invent. The
+    // clock is resynced here too — setInterval drifts, and anchoring only on
+    // the 1s tick lets the display skip a second now and then.
+    if (this.isLive) this.syncLiveClock();
+    else tickPrice(this.race, this.speed);
     this.publish();
   };
+
+  /** Elapsed time against the market's own window, from the wall clock. */
+  private syncLiveClock(): void {
+    const R = this.race;
+    if (!R.openTime) return;
+    R.t = Math.max(0, Math.floor(Date.now() / 1000) - R.openTime);
+  }
 
   private tickClock = (): void => {
     // Background races only need simulating when nothing else is driving them.
@@ -350,7 +362,11 @@ export class Engine implements Scene {
     if (R.phase !== 'trade') return;
     // Live, `t` is wall-clock against the market's own window — the demo speed
     // does not apply, because the chain does not care how fast we are watching.
-    if (!this.isLive) R.t += this.speed;
+    // It is recomputed HERE, once a second, rather than when the feed polls:
+    // the feed arrives every few seconds, and deriving the clock from it made
+    // the countdown jump in steps instead of ticking.
+    if (this.isLive) this.syncLiveClock();
+    else R.t += this.speed;
     // 'OPEN' is only the first beat; after that the aggression phase names it.
     if (this.statusOverride === 'OPEN') this.statusOverride = null;
 

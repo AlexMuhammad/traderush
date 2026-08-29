@@ -20,7 +20,7 @@ export function newRace(marketIndex: number, elapsed = 0): Race {
   const spot = strike + (Math.random() - 0.5) * m.base * 0.0006;
   return {
     marketId: '', symbol: m.asset,
-    win: m.sec, t: elapsed, strike, spot, upP: 0.5,
+    win: m.sec, t: elapsed, openTime: 0, strike, spot, upP: 0.5,
     hist: [strike], pos: null, phase: 'trade', wasDanger: false, settled: [],
   };
 }
