@@ -19,10 +19,8 @@ import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
 import { AcceptPanel } from './duel/AcceptPanel';
 import { StartScreen } from './screens/StartScreen';
-import { ConnectScreen } from './screens/ConnectScreen';
 import './console.css';
 
-type Stage = 'start' | 'connect' | 'playing';
 /** What the CRT shows. `create` is the market list in pick-for-duel mode. */
 type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels';
 
@@ -39,11 +37,10 @@ type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels';
  */
 export function ConsoleApp() {
   const [path, navigate] = usePath();
-  const [stage, setStage] = useState<Stage>('start');
   /** What the CRT is showing. The menu key opens `menu`; the game is default. */
   const [screen, setScreen] = useState<Screen>('game');
   const [cursor, setCursor] = useState(0);
-  const { conn, wrongChain, ready, doConnect, doSwitch, doDisconnect, label } = useWallet();
+  const { conn, wrongChain, ready, signingOut, doConnect, doSwitch, doDisconnect, label } = useWallet();
   const { market, cfg } = useSdk();
   const balance = useBalance(conn?.account.address as `0x${string}` | undefined);
 
@@ -68,18 +65,6 @@ export function ConsoleApp() {
     return () => { unsubscribe(); engine.stop(); };
   }, [engine]);
 
-  // The console is not reachable without a wallet: everything in it settles
-  // on-chain, and a machine you can play but not act on teaches the wrong thing.
-  //
-  // But a wallet already connected skips the gate entirely — including the title
-  // card. Someone returning to a restored session has already been introduced.
-  useEffect(() => {
-    if (conn && !wrongChain) { setStage('playing'); return; }
-    // Signing out, or switching to a chain this build does not target, puts the
-    // gate back rather than leaving a dead console on screen. Straight to the
-    // connect step: they have seen the title card.
-    if (stage === 'playing' && !parseDuelLink(path)) setStage('connect');
-  }, [stage, conn, wrongChain, path]);
 
   // The pad has keys, so the keyboard should work too. Only while a list is up:
   // on the game face the arrows mean nothing and swallowing them is rude.
@@ -95,14 +80,19 @@ export function ConsoleApp() {
     return () => window.removeEventListener('keydown', onKey);
   }, [screen]);
 
-  // An incoming duel link is the exception. Whoever clicked it was invited, and
-  // should be able to READ the terms before signing in — accepting still needs a
-  // wallet, and AcceptPanel asks for one there.
-  useEffect(() => {
-    if (parseDuelLink(path)) setStage('playing');
-  }, [path]);
-
   if (!snap) return null;
+
+  // The console is not reachable without a wallet: everything in it settles
+  // on-chain, and a machine you can play but not act on teaches the wrong thing.
+  //
+  // Derived, not a stored step. A wallet arriving opens it, signing out closes
+  // it, and a wrong network holds it — with no state to fall out of step.
+  //
+  // The one exception is an incoming duel link. Whoever clicked it was invited
+  // and should be able to READ the terms before signing in; accepting still
+  // needs a wallet, and AcceptPanel asks for one there.
+  const invited = Boolean(parseDuelLink(path));
+  const gated = ready && !invited && (!conn || wrongChain);
 
   const view = renderView(path, navigate);
 
@@ -156,9 +146,12 @@ export function ConsoleApp() {
             else show('create');
           }
           else if (i.key === 'duels') show('duels');
-          else if (!conn) doConnect();
-          else if (wrongChain) doSwitch();
-          else doDisconnect();
+          else if (i.key === 'switch') doSwitch();
+          else if (i.key === 'signout') {
+            // All the way out: the title card, not the connect step.
+            void doDisconnect().then(() => show('game'));
+          }
+          else doConnect();
         }}
       />
     )
@@ -227,18 +220,10 @@ export function ConsoleApp() {
         <Footer engine={engine} s={snap} />
       </Panel>
       
-      {/* Nothing until Privy has finished restoring: flashing the title card at
-          someone who is already signed in, then snatching it away, is worse than
-          a moment of the console alone. */}
-      {ready && stage !== 'playing' && (
-        <div className="gate">
-          {stage === 'start' ? (
-            <StartScreen onStart={() => setStage('connect')} />
-          ) : (
-            <ConnectScreen onBack={() => setStage('start')} />
-          )}
-        </div>
-      )}
+      {/* Nothing until Privy has finished restoring: flashing the card at
+          someone who is already signed in, then snatching it away, is worse
+          than a moment of the console alone. */}
+      {gated && <div className="gate"><StartScreen /></div>}
     </div>
   );
 }

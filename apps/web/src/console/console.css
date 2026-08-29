@@ -701,19 +701,6 @@
 }
 .gate__start:disabled { opacity: .6; cursor: default; }
 
-.gate__back {
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 4px 2px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 12px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: #6E757A;
-}
-.gate__back:hover { color: #9AA0A5; }
-
 .gate__fine {
   font-size: 11px;
   line-height: 1.5;

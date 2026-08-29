@@ -31,7 +31,9 @@ export interface WalletCtx {
   ready: boolean;
   doConnect: () => void;
   doSwitch: () => void;
-  doDisconnect: () => void;
+  doDisconnect: () => Promise<void>;
+  /** True while the sign-out is in flight. */
+  signingOut: boolean;
   /** How the person is signed in, for the menu to show. */
   label: string | null;
 }
@@ -87,7 +89,11 @@ function PrivyWallet({ children }: { children: ReactNode }) {
   const walletChain = active?.chainId;
 
   useEffect(() => {
-    if (!active || !address) { setConn(null); return; }
+    // `authenticated` is the gate, not just the wallet list. Privy clears the
+    // session before the list empties, and without this the connection is
+    // rebuilt in the gap — a sign-out that does not stick, and a refresh that
+    // walks straight back in.
+    if (!authenticated || !active || !address) { setConn(null); return; }
     let alive = true;
     active.getEthereumProvider()
       .then((provider) => {
@@ -102,7 +108,7 @@ function PrivyWallet({ children }: { children: ReactNode }) {
       })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
     return () => { alive = false; };
-  }, [active, address, walletChain, cfg.chain]);
+  }, [authenticated, active, address, walletChain, cfg.chain]);
 
   const doConnect = () => {
     if (!ready) return;
@@ -119,7 +125,19 @@ function PrivyWallet({ children }: { children: ReactNode }) {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
-  const doDisconnect = () => { setConn(null); void logout(); };
+  const [signingOut, setSigningOut] = useState(false);
+
+  /** A real sign-out: Privy's session is cleared, so a refresh does not walk
+   *  back in. Awaited rather than fired and forgotten — the UI should not say
+   *  "signed out" before it is true. */
+  const doDisconnect = async () => {
+    setSigningOut(true);
+    setConn(null);
+    setError(null);
+    try { await logout(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setSigningOut(false); }
+  };
 
   const wrongChain = Boolean(conn && conn.chainId !== cfg.chainId);
   const label = conn
@@ -134,7 +152,7 @@ function PrivyWallet({ children }: { children: ReactNode }) {
         // resolve its provider into a client, and until it does `conn` is null
         // for a reason that is not "signed out".
         ready: ready && (!authenticated || conn !== null || wallets.length === 0),
-        doConnect, doSwitch, doDisconnect, label,
+        doConnect, doSwitch, doDisconnect, signingOut, label,
       }}
     >
       {children}
@@ -151,7 +169,8 @@ function Unconfigured({ children }: { children: ReactNode }) {
     <WalletContext.Provider
       value={{
         conn: null, connecting: false, error, wrongChain: false, ready: true,
-        doConnect: complain, doSwitch: complain, doDisconnect: () => {}, label: null,
+        doConnect: complain, doSwitch: complain,
+        doDisconnect: async () => {}, signingOut: false, label: null,
       }}
     >
       {children}
