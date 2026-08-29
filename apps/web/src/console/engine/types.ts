@@ -114,8 +114,13 @@ export interface ConsoleSnapshot {
   /** Human interval for the CURRENT dial: 15M, 1H, 24H… The venue runs
    *  intervals the prototype's fixed pair never anticipated. */
   interval: string;
-  /** The four dials, in tuner order, labelled from whatever is actually live. */
-  slots: { asset: string; interval: string }[];
+  /** Every asset with a live market, in dial order. */
+  assets: string[];
+  /** Every interval available for the CURRENT asset, shortest first. The venue
+   *  runs five; a fixed pair of buttons could only ever reach two. */
+  intervals: string[];
+  assetIndex: number;
+  intervalIndex: number;
   /** Index into the four races, for the tuner segments. */
   raceIndex: number;
   riders: string;

@@ -193,9 +193,10 @@ export class Engine implements Scene {
     return {
       asset: this.isLive ? R.symbol : MARKETS[this.raceIndex]!.asset,
       interval: this.isLive ? intervalLabel(R.win) : MARKETS[this.raceIndex]!.interval,
-      slots: this.races.map((r, i) => (this.isLive
-        ? { asset: r.symbol, interval: intervalLabel(r.win) }
-        : { asset: MARKETS[i]!.asset, interval: MARKETS[i]!.interval })),
+      assets: this.assets,
+      intervals: this.intervalsForCurrentAsset.map((r) => this.labelOf(r)),
+      assetIndex: Math.max(0, this.assets.indexOf(this.assetOf(this.race))),
+      intervalIndex: Math.max(0, this.intervalsForCurrentAsset.indexOf(this.race)),
       raceIndex: this.raceIndex,
       riders: this.riders,
       live: this.feed?.live ?? false,
@@ -648,6 +649,35 @@ export class Engine implements Scene {
     this.publish();
   }
 
+  // ---- the dials, as the tuner sees them ---------------------------------
+  //
+  // The venue runs five intervals per asset, not two, so the dial structure is
+  // read off whatever races exist rather than assumed. Demo mode's four fixed
+  // markets fall out of the same code.
+
+  private assetOf(r: Race): string {
+    return this.isLive ? r.symbol : MARKETS[this.races.indexOf(r)]?.asset ?? r.symbol;
+  }
+
+  private labelOf(r: Race): string {
+    return this.isLive ? intervalLabel(r.win) : MARKETS[this.races.indexOf(r)]?.interval ?? intervalLabel(r.win);
+  }
+
+  private get assets(): string[] {
+    const out: string[] = [];
+    for (const r of this.races) {
+      const a = this.assetOf(r);
+      if (!out.includes(a)) out.push(a);
+    }
+    return out;
+  }
+
+  /** Every race on the current asset, shortest window first. */
+  private get intervalsForCurrentAsset(): Race[] {
+    const asset = this.assetOf(this.race);
+    return this.races.filter((r) => this.assetOf(r) === asset).sort((a, b) => a.win - b.win);
+  }
+
   /** Tune to a market by id, if it is one of the four dials. Returns false when
    *  it is not — the caller then has to do something else with it. */
   tuneToMarket(marketId: string): boolean {
@@ -671,8 +701,32 @@ export class Engine implements Scene {
     this.tune(((this.raceIndex + delta) % n + n) % n);
   }
 
-  tuneAsset(asset: 0 | 1): void { this.tune(asset * 2 + (this.raceIndex % 2)); }
-  tuneInterval(iv: 0 | 1): void { this.tune((this.raceIndex >= 2 ? 2 : 0) + iv); }
+  /** Switch asset, keeping the window length where the new asset has one.
+   *  Falling back to the nearest is kinder than dumping you on 24h because BTC
+   *  happens to list a window ETH does not. */
+  tuneAsset(index: number): void {
+    const asset = this.assets[index];
+    if (!asset) return;
+    const want = this.race.win;
+    const candidates = this.races.filter((r) => this.assetOf(r) === asset);
+    if (!candidates.length) return;
+    const best = candidates.reduce((a, b) =>
+      Math.abs(b.win - want) < Math.abs(a.win - want) ? b : a);
+    this.tune(this.races.indexOf(best));
+  }
+
+  tuneInterval(index: number): void {
+    const target = this.intervalsForCurrentAsset[index];
+    if (target) this.tune(this.races.indexOf(target));
+  }
+
+  /** One step along the interval wheel. */
+  stepInterval(delta: 1 | -1): void {
+    const list = this.intervalsForCurrentAsset;
+    const at = list.indexOf(this.race);
+    const next = at + delta;
+    if (next >= 0 && next < list.length) this.tune(this.races.indexOf(list[next]!));
+  }
 
   cycleSpeed(): void {
     const i = SPEEDS.indexOf(this.speed);

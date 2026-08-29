@@ -91,13 +91,15 @@ export class LiveFeed implements MarketFeed {
     }
 
     if (!this.series.length) {
-      // First sight only: each asset's two shortest live intervals.
+      // First sight only: EVERY live interval for each asset, shortest first.
+      // Taking two hid three of the five the venue runs — a dial that cannot
+      // reach most of the markets is worse than no dial.
       for (const asset of ['BTC', 'ETH'] as const) {
         const intervals = [...new Set(
           trading
             .filter((m) => m.symbol.toUpperCase().includes(asset))
             .map((m) => m.intervalSec),
-        )].sort((a, b) => a - b).slice(0, 2);
+        )].sort((a, b) => a - b);
         for (const iv of intervals) this.series.push(key(asset, iv));
       }
     }

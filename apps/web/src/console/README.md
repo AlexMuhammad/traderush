@@ -136,9 +136,11 @@ live intervals — and folds each reading onto the dials. The engine keeps `hist
 
 Three things follow from the markets being real:
 
-- **The tuner's labels are read, not assumed.** The venue runs 1H/4H/24H
-  windows; the prototype's fixed 15M/1H would have been a dial that lies about
-  its own interval.
+- **The dial structure is read, not assumed.** The venue runs FIVE intervals per
+  asset — 1m, 5m, 1h, 4h, 24h. Two fixed buttons could reach two of them, so the
+  window length is a wheel that takes as many as exist and stays the same size:
+  adding a window to the venue does not change the shape of the plate. Switching
+  asset keeps the window length where the new asset has one.
 - **Demo speed does not apply.** `t` is wall-clock against the market's own
   window, because the chain does not care how fast you are watching.
 - **The console never rolls a live window.** The venue opens the next one, which
