@@ -12,7 +12,12 @@ export function Marquee({
   return (
     <>
       <div className="maker eng">
-        <span>The Run · {asset} {interval}</span>
+        <span className="maker__mark">
+          {/* The badge is pixel art: it is rendered at a size the source divides
+              into, and told not to smooth, or the horns turn to fog. */}
+          <img src="/favicon.png" alt="" width={16} height={16} />
+          The Run · {asset} {interval}
+        </span>
         <span className="maker__right">
           {riders}
           <MenuKey onOpen={onOpenMenu} />

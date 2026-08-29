@@ -15,7 +15,7 @@ export function StartScreen() {
 
   return (
     <div className="gate__body">
-      {/* <div className="wordmark">BULLRUN</div> */}
+      <img className="gate__badge" src="/bullrun.png" alt="BULLRUN" width={92} height={92} />
 
       <h1 className="gate__headline">
         {wrongChain ? 'Wrong network.' : 'Stay on the right side.'}
