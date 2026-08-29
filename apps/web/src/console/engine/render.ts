@@ -49,6 +49,22 @@ export interface Scene {
    *  the runner does not flicker. */
   rising: boolean;
 
+  /** The clock the scene is DRAWN at, in seconds into the window.
+   *
+   *  `race.t` is a whole number of seconds — with x mapped to the clock, that is
+   *  a ten pixel jump on every tick. This one runs continuously and is corrected
+   *  toward the real clock, so the trail glides without drifting away from it. */
+  tView: number;
+  /** The vertical scale, eased. Taking min/max of the samples raw meant one new
+   *  extreme rescaled the whole chart between two frames, and the entire trail
+   *  jumped rather than the new point arriving. */
+  scaleLo: number;
+  scaleHi: number;
+  /** The head of the trail, in price, eased. The feed answers every few seconds,
+   *  so the newest sample lands as a step; easing it turns the step into travel
+   *  and keeps the runner welded to the end of his own line. */
+  headP: number;
+
   /** Set by the renderer, read by the chrome. */
   phaseName: string;
   chased: boolean;
@@ -72,7 +88,17 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const R = S.race;
 
-  const progress = Math.min(1, R.t / R.win);
+  // A drawing clock that does not tick. It advances with real time and is pulled
+  // gently onto `race.t`; a jump of more than a few seconds means the window
+  // rolled, and there is nothing to smooth between two different windows.
+  if (S.tView === 0 || Math.abs(S.tView - R.t) > 3) S.tView = R.t;
+  else {
+    S.tView += dt / 1000;
+    S.tView += (R.t - S.tView) * 0.08;
+  }
+  const tNow = Math.max(0, Math.min(R.win, S.tView));
+
+  const progress = Math.min(1, tNow / R.win);
   const urgency = R.phase === 'trade' ? Math.max(0, (progress - 0.90) / 0.10) : 0;
   const { base: baseAggr, name: phaseName } = aggressionFor(progress);
   S.phaseName = phaseName;
@@ -125,8 +151,19 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
   // and nothing on screen for another three seconds.
   if (R.hist.length > 0) {
     // ---- vertical scale: fit the trail and the strike, with generous padding
-    const lo = Math.min(R.strike, ...R.hist);
-    const hi = Math.max(R.strike, ...R.hist);
+    const rawLo = Math.min(R.strike, ...R.hist);
+    const rawHi = Math.max(R.strike, ...R.hist);
+    // Eased. A new high used to rescale the glass between two frames, which
+    // moved every point on the trail at once — the price looked like it jumped
+    // when all that happened was the ruler changed. The padding below is
+    // generous enough that a lagging scale never clips the line.
+    if (!S.scaleLo || !S.scaleHi || Math.abs(rawLo - S.scaleLo) > (rawHi - rawLo) * 6 + 1) {
+      S.scaleLo = rawLo; S.scaleHi = rawHi;
+    } else {
+      S.scaleLo += (rawLo - S.scaleLo) * 0.1;
+      S.scaleHi += (rawHi - S.scaleHi) * 0.1;
+    }
+    const lo = S.scaleLo, hi = S.scaleHi;
     const pad = (hi - lo) * 0.75 + 22;
     const mn = lo - pad, mx = hi + pad;
     const Y = (p: number) => h - 12 - ((p - mn) / (mx - mn)) * (h - 26);
@@ -147,8 +184,8 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     const X = (t: number) => startX + Math.max(0, Math.min(1, t / R.win)) * (finishX - startX);
     // A fresh dial's tape may not reach back to the open. It starts where it
     // starts rather than being stretched across time it never observed.
-    const trailX0 = X(Math.min(R.histStartT, R.t));
-    const nowX = Math.max(trailX0 + 1, X(R.t));
+    const trailX0 = X(Math.min(R.histStartT, tNow));
+    const nowX = Math.max(trailX0 + 1, X(tNow));
     const N = R.hist.length;
     const step = Math.max(0.5, (nowX - trailX0) / Math.max(1, N - 1));
     const ly = Math.round(Y(R.strike)) + 0.5;   // the border between territories
@@ -227,9 +264,18 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.fill();
 
     // ---- the trail ---------------------------------------------------------
+    // The newest sample is eased into place. Everything behind it is history and
+    // is drawn exactly as it was recorded — smoothing the whole line would be
+    // drawing a price that never happened.
+    const rawHead = R.hist[N - 1]!;
+    if (!S.headP || Math.abs(rawHead - S.headP) > Math.max(1, rawHead * 0.02)) S.headP = rawHead;
+    else S.headP += (rawHead - S.headP) * 0.14;
+    const headP = S.headP;
+    const py = (i: number) => Y(i === N - 1 ? headP : R.hist[i]!);
+
     c.beginPath();
     c.moveTo(trailX0, h);
-    for (let i = 0; i < N; i++) c.lineTo(trailX0 + i * step, Y(R.hist[i]!));
+    for (let i = 0; i < N; i++) c.lineTo(trailX0 + i * step, py(i));
     c.lineTo(nowX, h);
     c.closePath();
     const grad = c.createLinearGradient(0, 0, 0, h);
@@ -245,19 +291,19 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     if (N === 1) {
       // A lone sample has no line to draw. A short mark at the price says
       // "watching from here" without inventing a shape.
-      const y = Y(R.hist[0]!);
+      const y = Y(headP);
       c.moveTo(trailX0, y);
       c.lineTo(Math.max(trailX0 + 2, nowX), y);
     } else {
       for (let i = 0; i < N; i++) {
         const x = trailX0 + i * step;
-        i ? c.lineTo(x, Y(R.hist[i]!)) : c.moveTo(x, Y(R.hist[i]!));
+        i ? c.lineTo(x, py(i)) : c.moveTo(x, py(i));
       }
     }
     c.stroke();
     c.shadowBlur = 0;
 
-    const runnerY = Y(R.hist[N - 1]!);
+    const runnerY = Y(headP);
     const slope = N > 3 ? Y(R.hist[N - 1]!) - Y(R.hist[N - 4]!) : 0;
 
     // ---- border crossing ---------------------------------------------------

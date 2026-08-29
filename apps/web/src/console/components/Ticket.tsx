@@ -35,12 +35,22 @@ export function Ticket({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
 
       <div className="tsub">{s.ticketNote}</div>
 
+      {/* What leaving costs, before you press. The exit price is the bid, the
+          ticket's value is the mid, and the gap between them is real money that
+          used to be invisible — the key quoted the mid and paid the mid, so
+          bailing looked free and taught the wrong thing about a venue whose only
+          cost IS the spread. */}
+      {s.canBail && s.bailSpread > 0 && (
+        <div className="tspread">spread costs {money(s.bailSpread)} to leave</div>
+      )}
+
       {s.canBail ? (
         <Key className="exit" onGesture={() => engine.wake()} onPress={() => engine.bail()}>
           {s.bailLabel}
         </Key>
       ) : (
-        // Settled: state the outcome, do not offer a key that does nothing.
+        // Settled, or nobody bidding: state it, do not offer a key that does
+        // nothing. An exit with no counterparty is not a slow exit, it is none.
         <div className={`tdone ${winning ? 'up' : 'dn'}`}>{s.bailLabel}</div>
       )}
     </div>

@@ -61,6 +61,9 @@ export class Engine implements Scene {
   };
 
   hoofT = 0; lungeT = 0; lunge = 0; borderT = 0;
+  /** Owned by the renderer: the eased clock and vertical scale. Zero means
+   *  "unset", which is the renderer's cue to snap rather than glide. */
+  tView = 0; scaleLo = 0; scaleHi = 0; headP = 0;
   phaseName = 'OPEN';
   chased = false;
   rising = true;
@@ -194,7 +197,12 @@ export class Engine implements Scene {
     const progress = Math.min(1, R.t / R.win);
 
     const myOdds = R.pos ? (R.pos.side === 'up' ? upP : 1 - upP) : 0;
+    // What the position is WORTH at the quote, and what it would actually FETCH.
+    // They are not the same number and the difference is the whole point of the
+    // exit key: the mid is the price nobody trades at.
     const value = R.pos ? R.pos.n * myOdds : 0;
+    const exitPrice = this.exitPrice();
+    const exitValue = R.pos && exitPrice !== null ? R.pos.n * exitPrice : null;
     const danger = R.pos ? (R.pos.side === 'up' ? !bullish : bullish) : false;
     const threat = R.pos ? 1 - myOdds : 0;
     const urgent = R.phase === 'trade' && progress > 0.90;
@@ -229,15 +237,18 @@ export class Engine implements Scene {
 
       pos: R.pos,
       pnl: R.pos ? value - R.pos.cost : 0,
-      bailValue: value,
+      bailValue: exitValue ?? value,
       // Just the side. The numbers get their own line rather than being
       // crammed in behind a bullet — "1424 sh @ 50%" made a reader parse
       // jargon to learn something the next line already says plainly.
       ticketSide: R.pos ? (R.pos.side === 'up' ? 'UP' : 'DOWN') : '—',
       ticketOdds: R.pos ? Math.round((R.pos.side === 'up' ? upP : 1 - upP) * 100) : 0,
       ticketNote: this.ticketNote(),
-      bailLabel: this.bailLabel(value),
-      canBail: R.phase === 'trade' && Boolean(R.pos),
+      bailLabel: this.bailLabel(exitValue),
+      // No bid on your side is not a slow exit, it is no exit. A key that offers
+      // one anyway is a control lying about being a control.
+      canBail: R.phase === 'trade' && Boolean(R.pos) && exitValue !== null,
+      bailSpread: R.pos && exitValue !== null ? value - exitValue : 0,
       ground,
 
       balance: this.balance,
@@ -266,10 +277,32 @@ export class Engine implements Scene {
     return won ? `${money(R.pos.cost)} returned ${money(R.pos.n)}` : `${money(R.pos.cost)} lost`;
   }
 
-  private bailLabel(value: number): string {
+  /**
+   * What one share of the held side would sell for, right now, into the book.
+   *
+   * There is ONE book and it is quoted on UP, so the two sides exit through
+   * opposite ends of it:
+   *   selling UP   → hit the bid          → bestBid
+   *   selling DOWN → close by buying UP   → 1 - bestAsk
+   *
+   * Null when that end is empty. Pricing an exit at the mid — which is what this
+   * did — quotes a number no counterparty has offered, and on a thin book the
+   * difference is most of the position.
+   */
+  private exitPrice(): number | null {
+    const R = this.race;
+    if (!R.pos) return null;
+    if (R.pos.side === 'up') return R.bestBid;
+    return R.bestAsk === null ? null : 1 - R.bestAsk;
+  }
+
+  private bailLabel(value: number | null): string {
     const R = this.race;
     if (!R.pos) return 'Bail out';
-    if (R.phase !== 'done') return `Bail out · ${money(value)}`;
+    if (R.phase !== 'done') {
+      // Said as the reason, not as a dead key with a price on it.
+      return value === null ? 'No bid — cannot sell' : `Bail out · ${money(value)}`;
+    }
     return R.pos.side === (R.spot >= R.strike ? 'up' : 'down') ? 'Paid' : 'Lost';
   }
 
@@ -342,6 +375,8 @@ export class Engine implements Scene {
       strike: slot.strike,
       spot: slot.spot,
       upP: slot.upP,
+      bestBid: slot.bestBid,
+      bestAsk: slot.bestAsk,
       ...this.trailFor(slot, Math.max(0, now - slot.openTime)),
       pos: null,
       phase: 'trade',
@@ -371,6 +406,9 @@ export class Engine implements Scene {
     this.particles = []; this.slashes = []; this.rings = [];
     this.outcome = null; this.outcomeT = 0; this.attack = null;
     this.lunge = 0; this.lastBeepAt = -1;
+    // A new window is a different price and a different clock. Easing between
+    // two unrelated windows draws a swoop that never happened.
+    this.tView = 0; this.scaleLo = 0; this.scaleHi = 0; this.headP = 0;
     this.beasts.bull = newBeastState(900);
     this.beasts.bear = newBeastState(1100);
     this.bullX = this.bullY = this.bearX = this.bearY = 0;
@@ -421,6 +459,8 @@ export class Engine implements Scene {
           strike: slot.strike,
           spot: slot.spot,
           upP: slot.upP,
+          bestBid: slot.bestBid,
+          bestAsk: slot.bestAsk,
           ...this.trailFor(slot, Math.max(0, now - slot.openTime)),
           pos: null,
           phase: 'trade',
@@ -437,6 +477,11 @@ export class Engine implements Scene {
       prev.win = slot.intervalSec || prev.win;
       prev.strike = slot.strike || prev.strike;
       prev.upP = slot.upP || prev.upP;
+      // Null is meaningful here — it says that side of the book is EMPTY, which
+      // is exactly when an exit is impossible. It must not fall back to the last
+      // value the way a price does.
+      prev.bestBid = slot.bestBid;
+      prev.bestAsk = slot.bestAsk;
       prev.openTime = slot.openTime;
       prev.t = Math.max(0, now - slot.openTime);
 
@@ -829,7 +874,12 @@ export class Engine implements Scene {
   bail(): void {
     const R = this.race;
     if (!R.pos || R.phase !== 'trade') return;
-    this.balance += R.pos.n * (R.pos.side === 'up' ? R.upP : 1 - R.upP);
+    // Paid at the bid, not the mid. Crediting the mid handed back money the book
+    // was never offering, which made every exit look free and taught the wrong
+    // thing about a venue whose only cost IS the spread.
+    const price = this.exitPrice();
+    if (price === null) { this.audio.reject(); this.shake = 3; return; }
+    this.balance += R.pos.n * price;
     R.pos = null;
     this.shake = 4;
     this.audio.bail();

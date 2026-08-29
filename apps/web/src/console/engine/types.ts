@@ -34,6 +34,10 @@ export interface FeedSlot {
   strike: number;
   spot: number;
   upP: number;
+  /** Top of book as probabilities, or null when that side is empty. The mid is
+   *  what nobody trades at; these are what an exit actually gets. */
+  bestBid: number | null;
+  bestAsk: number | null;
   openTime: number;
   expiryTime: number;
   status: MarketStatus;
@@ -73,6 +77,10 @@ export interface Race {
   spot: number;
   /** Implied probability of UP, 0..1. downP is always 1 - upP. */
   upP: number;
+  /** Top of book, carried so an exit can be priced at what it would fetch
+   *  rather than at the mid. Null means that side of the book is empty. */
+  bestBid: number | null;
+  bestAsk: number | null;
   /** Price trail, oldest first. Capped so the canvas never walks a long array. */
   hist: number[];
   /** Seconds into the window when the FIRST sample was taken. Joining a 4h
@@ -217,6 +225,8 @@ export interface ConsoleSnapshot {
   ticketOdds: number;
   /** Label on the exit key. Becomes Paid/Lost once the window has resolved. */
   bailLabel: string;
+  /** What the spread costs to get out, in points. Zero when there is no exit. */
+  bailSpread: number;
   /** The exit key only works while trading. */
   canBail: boolean;
   /** Right-hand readout: HOME GROUND / IN ITS TERRITORY / HORNS OUT / NO STAKE. */
