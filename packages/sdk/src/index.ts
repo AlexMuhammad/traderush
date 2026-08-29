@@ -11,3 +11,4 @@ export {
   RoomAdapter, parseRoomLink,
   type Room, type Seat, type RoomAdapterOptions,
 } from './room.js';
+export * from './errors.js';

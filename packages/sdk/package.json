@@ -10,7 +10,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node test/errors.mjs"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",

@@ -4,6 +4,7 @@ import { formatUnits } from 'viem';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { intervalLabel } from '../engine/market';
+import { Fault } from './Readout';
 import { ScreenList, type ScreenItem } from './ScreenList';
 
 interface Claimable {
@@ -33,7 +34,7 @@ export function ScreenPositions({
   const [rows, setRows] = useState<Claimable[] | null>(null);
   const [held, setHeld] = useState<ScreenItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState(0);
 
   const money = (v: bigint) => `${formatUnits(v, cfg.decimals)} ${cfg.collateralSymbol}`;
@@ -76,7 +77,7 @@ export function ScreenPositions({
             disabled: true,
           })));
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(e);
       }
     })();
     return () => { alive = false; };
@@ -103,7 +104,7 @@ export function ScreenPositions({
       await market.publicClient.waitForTransactionReceipt({ hash });
       setDone((n) => n + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e);
     } finally { setBusy(null); }
   };
 
@@ -131,8 +132,8 @@ export function ScreenPositions({
         const row = (rows ?? []).find((r) => r.marketId === i.key);
         if (row) void claim(row);
       }}
-      empty={error ?? (!conn ? 'Connect a wallet to see your positions.'
-                             : 'Nothing held and nothing owed.')}
+      empty={error ? <Fault error={error} /> : ((!conn ? 'Connect a wallet to see your positions.'
+                             : 'Nothing held and nothing owed.'))}
     />
   );
 }

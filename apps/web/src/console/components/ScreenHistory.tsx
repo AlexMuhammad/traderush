@@ -3,6 +3,7 @@ import type { DuelView } from '@bullrun/sdk';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';
+import { Fault } from './Readout';
 import { ScreenList, type ScreenItem } from './ScreenList';
 
 /** Duels that are over — settled, or refunded because nobody took them.
@@ -19,7 +20,7 @@ export function ScreenHistory({
   const { conn } = useWallet();
   const money = useMoney();
   const [rows, setRows] = useState<{ duel: DuelView; result: string; tone?: 'up' | 'dn' }[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!duels || !conn) return;
@@ -45,7 +46,7 @@ export function ScreenHistory({
         }
         if (alive) setRows(out);
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(e);
       }
     })();
     return () => { alive = false; };
@@ -69,7 +70,7 @@ export function ScreenHistory({
       bindSelect={bindSelect}
       onSelect={(i) => onOpen(BigInt(i.key))}
       loading={Boolean(conn) && rows === null && !error}
-      empty={error ?? (!conn ? 'Connect a wallet.' : 'Nothing finished yet.')}
+      empty={error ? <Fault error={error} /> : ((!conn ? 'Connect a wallet.' : 'Nothing finished yet.'))}
     />
   );
 }

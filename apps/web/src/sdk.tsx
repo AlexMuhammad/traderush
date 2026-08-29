@@ -6,6 +6,13 @@ import {
   type MarketState, type MarketSummary, type DuelView, type Room, type Seat,
 } from '@bullrun/sdk';
 
+/** A price at `t` seconds after the window opened. */
+export interface TrailPoint { t: number; price: number }
+
+/** The trail's drawn width in user units. More samples than this cannot be
+ *  told apart on screen, so past it they only add noise. */
+const AXIS_COLUMNS = 380;
+
 /** §3 — the front end NEVER talks to the chain or the socket directly. It talks to the SDK.
  *  This is non-negotiable: the game console is swapped in later against the same surface. */
 
@@ -76,6 +83,77 @@ export function useMarket(marketId: string | null): MarketState | null {
     return market.watch(marketId, setState);
   }, [market, marketId]);
   return state;
+}
+
+/**
+ * The window's price shape, for any screen that asks someone to pick a side.
+ *
+ * Two sources, because neither covers a window alone: the tick tape reaches back
+ * about three and a half minutes at full detail, and candles cover the rest of a
+ * long window coarsely. Candles are fetched once per window and cached; the tape
+ * is synchronous and re-read on every poll, so the right-hand edge stays live
+ * while the body of the trail stays still.
+ *
+ * Ticks win wherever the two overlap — they are the finer record.
+ */
+export function useMarketTrail(state: MarketState | null): { points: TrailPoint[]; loading: boolean } {
+  const { market } = useSdk();
+  const symbol = state?.symbol ?? null;
+  const from = state?.openTime ?? 0;
+  const to = state?.expiryTime ?? 0;
+
+  const [backfill, setBackfill] = useState<TrailPoint[] | null>(null);
+  const [ticks, setTicks] = useState<TrailPoint[]>([]);
+
+  useEffect(() => {
+    setBackfill(null);
+    if (!symbol || !to) return;
+    let alive = true;
+    // Bounded by now: asking for candles past the present returns nothing and
+    // would otherwise make the cache key useless for the rest of the window.
+    const end = Math.min(to, Math.floor(Date.now() / 1000));
+    market.discovery.windowCandles(symbol, from, end)
+      .then((rows) => { if (alive) setBackfill(rows); })
+      .catch(() => { if (alive) setBackfill([]); });
+    return () => { alive = false; };
+  }, [market, symbol, from, to]);
+
+  useEffect(() => {
+    setTicks([]);
+    if (!symbol || !to) return;
+    const read = () => setTicks(market.discovery.priceHistory(symbol, from, to));
+    read();
+    const t = setInterval(read, 3_000);
+    return () => clearInterval(t);
+  }, [market, symbol, from, to]);
+
+  const points = useMemo(() => {
+    const by = new Map<number, number>();
+    for (const p of backfill ?? []) by.set(p.t, p.price);
+    for (const p of ticks) by.set(p.t, p.price);
+    const merged = [...by.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([t, price]) => ({ t, price }));
+
+    // On a day-long window the tape's two hundred ticks all land inside the last
+    // three minutes — two pixels of a 380-wide axis, drawn as a noisy vertical
+    // spike that reads as a price move that never happened. Bucketing to the
+    // axis keeps one sample per column wherever the samples happen to cluster.
+    const first = merged[0];
+    const last = merged[merged.length - 1];
+    if (!first || !last || merged.length <= AXIS_COLUMNS) return merged;
+    const span = Math.max(1, last.t - first.t);
+    const out: TrailPoint[] = [];
+    let column = -1;
+    for (const p of merged) {
+      const c = Math.floor(((p.t - first.t) / span) * AXIS_COLUMNS);
+      if (c === column) out[out.length - 1] = p;   // last price wins the column
+      else { out.push(p); column = c; }
+    }
+    return out;
+  }, [backfill, ticks]);
+
+  return { points, loading: backfill === null && ticks.length === 0 };
 }
 
 /** S5/S6/S8 — polls duels(id) every 3s AND listens for Matched (§5.2). */

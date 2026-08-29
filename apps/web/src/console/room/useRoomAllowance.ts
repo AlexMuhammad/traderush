@@ -13,7 +13,7 @@ export function useRoomAllowance(needed: bigint) {
   const { conn } = useWallet();
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [approving, setApproving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const owner = conn?.account.address as `0x${string}` | undefined;
 
   const read = useCallback(() => {
@@ -31,7 +31,7 @@ export function useRoomAllowance(needed: bigint) {
       await rooms.approve(wallet, account, 2n ** 255n);
       read();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e);
     } finally { setApproving(false); }
   };
 

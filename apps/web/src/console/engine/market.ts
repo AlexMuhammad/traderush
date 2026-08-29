@@ -75,6 +75,18 @@ export function intervalLabel(sec: number): string {
   return `${Math.round(sec / 3600)}H`;
 }
 
+/** 8026 -> "2h 14m". A screen that says "entry shuts in 8026s" is making the
+ *  reader do arithmetic to find out whether they have time. */
+export function human(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (s < 86400) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(s / 86400);
+  return `${d}d ${Math.floor((s % 86400) / 3600)}h`;
+}
+
 export const money = (n: number): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

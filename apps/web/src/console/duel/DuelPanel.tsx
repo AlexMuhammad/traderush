@@ -4,7 +4,7 @@ import { useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
-import { Addr, Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Addr, Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
 
 /**
  * One duel, from lobby to payout — the console's S5, S6 and S7.
@@ -21,7 +21,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
   const now = useNow();
 
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [hash, setHash] = useState<string | null>(null);
 
   // Settlement holdings, only once the window is done.
@@ -48,7 +48,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
           args: [conn.account.address, myUp ? r.upId : r.downId],
         }) as bigint;
         if (alive) { setRef(r); setHeld(bal); }
-      } catch (e) { if (alive) setError(e instanceof Error ? e.message : String(e)); }
+      } catch (e) { if (alive) setError(e); }
     })();
     return () => { alive = false; };
   }, [duel, settled, conn, adapter, cfg.addresses.binarySettlement, myUp]);
@@ -59,7 +59,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
   const run = (fn: () => Promise<{ txHash: string }>) => {
     setPending(true); setError(null);
     fn().then((r) => setHash(r.txHash))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(e))
       .finally(() => setPending(false));
   };
 
@@ -102,7 +102,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
         {!canCancel && !expired && duel.status === 'Open' && (
           <p className="note">Only the challenger can cancel before the deadline.</p>
         )}
-        {error && <p className="note err">{error}</p>}
+        {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} />}
         <Key className="action" onPress={onBack}>Back</Key>
       </Readout>
@@ -132,7 +132,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
         await adapter.publicClient.waitForTransactionReceipt({ hash: tx });
         setHash(tx);
         setHeld(0n);
-      } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+      } catch (e) { setError(e); }
       finally { setPending(false); }
     };
 
@@ -171,7 +171,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
           {pending ? 'pending…' : held === 0n ? 'already claimed' : `Claim ${voided ? 'refund' : 'winnings'}`}
         </Key>
 
-        {error && <p className="note err">{error}</p>}
+        {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="claimed" />}
         <Key className="action" onPress={onBack}>Back</Key>
       </Readout>

@@ -3,6 +3,7 @@ import type { Room, Seat } from '@bullrun/sdk';
 import { useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';
+import { Fault } from './Readout';
 import { ScreenList, type ScreenItem } from './ScreenList';
 
 /** Rooms you are in. The escrow keeps no per-player index — adding one would
@@ -20,14 +21,14 @@ export function ScreenRooms({
   const money = useMoney();
   const now = useNow();
   const [list, setList] = useState<{ room: Room; seat: Seat }[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!rooms || !conn) return;
     let alive = true;
     const load = () => rooms.listFor(conn.account.address)
       .then((r) => { if (alive) { setList(r); setError(null); } })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e) => { if (alive) setError(e); });
     load();
     const t = setInterval(load, 6_000);
     return () => { alive = false; clearInterval(t); };
@@ -63,7 +64,7 @@ export function ScreenRooms({
       onSelect={(i) => onOpen(BigInt(i.key))}
       loading={Boolean(conn) && list === null && !error}
       empty={
-        error ?? roomsError ?? (!conn ? 'Connect a wallet to see your rooms.'
+        error ? <Fault error={error} /> : roomsError ?? (!conn ? 'Connect a wallet to see your rooms.'
                                       : 'No rooms yet. Open one from Markets.')
       }
     />

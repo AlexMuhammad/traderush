@@ -3,6 +3,7 @@ import type { DuelView } from '@bullrun/sdk';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';
+import { Fault } from './Readout';
 import { ScreenList, type ScreenItem } from './ScreenList';
 
 /** Your duels, read straight off the escrow.
@@ -21,14 +22,14 @@ export function ScreenDuels({
   const { conn } = useWallet();
   const money = useMoney();
   const [rows, setRows] = useState<DuelView[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!duels || !conn) return;
     let alive = true;
     const load = () => duels.listFor(conn.account.address)
       .then((r) => { if (alive) { setRows(r); setError(null); } })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e) => { if (alive) setError(e); });
     load();
     const t = setInterval(load, 6_000);
     return () => { alive = false; clearInterval(t); };
@@ -58,7 +59,7 @@ export function ScreenDuels({
       onSelect={(i) => onOpen(BigInt(i.key))}
       loading={Boolean(conn) && rows === null && !error}
       empty={
-        error ?? (!conn ? 'Connect a wallet to see your duels.'
+        error ? <Fault error={error} /> : (!conn ? 'Connect a wallet to see your duels.'
                         : !duels ? 'No escrow deployed on this network.'
                         : 'No duels yet. Open one from Markets.')
       }

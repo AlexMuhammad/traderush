@@ -4,7 +4,9 @@ import { useAllowance, useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
-import { Addr, Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Addr, Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Trail } from '../components/Trail';
+import { human, intervalLabel, price } from '../engine/market';
 
 export interface DuelLink { chainId: number; escrow: `0x${string}`; duelId: bigint }
 
@@ -26,7 +28,7 @@ export function AcceptPanel({ link, onAccepted }: { link: DuelLink; onAccepted: 
 
   const [balance, setBalance] = useState<bigint | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [hash, setHash] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,23 +70,24 @@ export function AcceptPanel({ link, onAccepted }: { link: DuelLink; onAccepted: 
     setPending(true); setError(null);
     duels.accept(conn.wallet, conn.account, link.duelId)
       .then((r) => { setHash(r.txHash); onAccepted(); })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(e))
       .finally(() => setPending(false));
   };
 
   return (
     <Readout title={`Duel #${link.duelId}`} right="challenged">
+      {state && <Trail state={state} />}
       <Rows>
         <Row label="challenger"><Addr value={duel.challenger} /> · {duel.challengerUp ? 'UP' : 'DOWN'}</Row>
         <Row label="your side" tone="lamp">{mySide}</Row>
         <Row label="market">
-          {state ? `${state.symbol} · ${state.intervalSec}s · strike ${state.strike} · spot ${state.spot}` : 'reading…'}
+          {state ? `${state.symbol} · ${intervalLabel(state.intervalSec)} · strike ${price(state.strike)} · spot ${price(state.spot)}` : 'reading…'}
         </Row>
         <Row label="your stake">{money.format(duel.stake)}</Row>
         <Row label="pot" tone="lamp">{money.format(duel.pot)}</Row>
         <Row label="you win" tone="up">{money.format(duel.pot)}</Row>
         <Row label="max loss" tone="dn">{money.format(duel.stake)}</Row>
-        <Row label="deadline">{deadlinePassed ? 'passed' : `${duel.acceptDeadline - now}s left`}</Row>
+        <Row label="deadline">{deadlinePassed ? 'passed' : `${human(duel.acceptDeadline - now)} left`}</Row>
       </Rows>
 
       {blockers.map((b) => <p key={b} className="note warn">{b}</p>)}
@@ -107,7 +110,7 @@ export function AcceptPanel({ link, onAccepted }: { link: DuelLink; onAccepted: 
         </Key>
       )}
 
-      {error && <p className="note err">{error}</p>}
+      {error ? <Fault error={error} /> : null}
       {hash && <TxLine hash={hash} label="matched" />}
       <p className="note">
         Accepting mints {money.plain(duel.pot)} complete sets and hands you the {mySide} leg.

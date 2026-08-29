@@ -5,7 +5,9 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Trail } from '../components/Trail';
+import { intervalLabel, price } from '../engine/market';
 
 /** Stake a side and publish a challenge. The console's S4. */
 export function CreateDuelPanel({
@@ -25,7 +27,7 @@ export function CreateDuelPanel({
   const [stakeStr, setStakeStr] = useState('1');
   const [marginSec, setMarginSec] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [opened, setOpened] = useState<{ duelId: bigint; txHash: string; link: string } | null>(null);
 
   let stake = 0n;
@@ -55,7 +57,7 @@ export function CreateDuelPanel({
     setPending(true); setError(null);
     duels.open(conn.wallet, conn.account, marketId, side, stake, acceptDeadline, state.expiryTime)
       .then(setOpened)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(e))
       .finally(() => setPending(false));
   };
 
@@ -75,10 +77,11 @@ export function CreateDuelPanel({
   }
 
   return (
-    <Readout title="Create duel" right={`${state.symbol} · ${state.intervalSec}s`}>
+    <Readout title="Create duel" right={`${state.symbol} · ${intervalLabel(state.intervalSec)}`}>
+      <Trail state={state} />
       <Rows>
-        <Row label="strike">{state.strike || '—'}</Row>
-        <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot || '—'}</Row>
+        <Row label="strike">{state.strike ? price(state.strike) : '—'}</Row>
+        <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot ? price(state.spot) : '—'}</Row>
         {/* The book's view, named as such. A duel pays a flat 2x whatever it
             says, so a bare percentage on the key implied it set the price. */}
         <Row label="book odds">
@@ -146,8 +149,8 @@ export function CreateDuelPanel({
         </Key>
       )}
 
-      {error && <p className="note err">{error}</p>}
-      {allow.error && <p className="note err">{allow.error}</p>}
+      {error ? <Fault error={error} /> : null}
+      {allow.error ? <Fault error={allow.error} /> : null}
       <p className="note">
         Nothing is minted until someone accepts. Unmatched, cancel refunds you exactly.
         No builder fee applies to duels.

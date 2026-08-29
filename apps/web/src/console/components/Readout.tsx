@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { txUrl } from '@bullrun/sdk';
+import { explainError, txUrl } from '@bullrun/sdk';
 import { useSdk } from '../../sdk';
 
 /** A panel cut into the plate — the console's only way of showing text.
@@ -44,6 +44,30 @@ export function Row({ label, tone, children }: { label: string; tone?: 'up' | 'd
       <dt>{label}</dt>
       <dd className={tone}>{children}</dd>
     </>
+  );
+}
+
+/**
+ * A failure, said in a sentence, with viem's version kept out of the way.
+ *
+ * Takes the thrown value rather than a string, so no call site has to decide
+ * what a wallet rejection looks like — every screen gets the same wording for
+ * the same failure, and the raw text stays reachable for a bug report.
+ */
+export function Fault({ error }: { error: unknown }) {
+  if (error === null || error === undefined || error === '') return null;
+  const { title, detail, raw, benign } = explainError(error);
+  return (
+    <div className={`fault${benign ? ' fault--benign' : ''}`}>
+      <p className="fault__title">{title}</p>
+      {detail && <p className="fault__detail">{detail}</p>}
+      {raw && raw !== title && (
+        <details className="fault__more">
+          <summary>technical detail</summary>
+          <pre>{raw}</pre>
+        </details>
+      )}
+    </div>
   );
 }
 

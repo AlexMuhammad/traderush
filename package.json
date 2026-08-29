@@ -18,7 +18,8 @@
     "settle": "pnpm --filter @bullrun/scripts settle",
     "deploy:escrow": "pnpm --filter @bullrun/contracts deploy",
     "smoke": "pnpm --filter @bullrun/web smoke",
-    "test:contracts": "pnpm --filter @bullrun/contracts test"
+    "test:contracts": "pnpm --filter @bullrun/contracts test",
+    "test:errors": "pnpm --filter @bullrun/sdk test"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

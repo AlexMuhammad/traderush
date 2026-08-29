@@ -5,7 +5,9 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Trail } from '../components/Trail';
+import { intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
 
 /**
@@ -36,7 +38,7 @@ export function RoomPanel({
   const [side, setSide] = useState<'up' | 'down'>('up');
   const [stakeStr, setStakeStr] = useState('1');
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [hash, setHash] = useState<string | null>(null);
 
   let stake = 0n;
@@ -63,7 +65,7 @@ export function RoomPanel({
         }) as Promise<bigint>;
         const [up, down] = await Promise.all([read(r.upId), read(r.downId)]);
         if (alive) { setRef(r); setHeld({ up, down }); }
-      } catch (e) { if (alive) setError(e instanceof Error ? e.message : String(e)); }
+      } catch (e) { if (alive) setError(e); }
     })();
     return () => { alive = false; };
   }, [room, settled, conn, adapter, cfg.addresses.binarySettlement, hash]);
@@ -75,7 +77,7 @@ export function RoomPanel({
   const run = (fn: () => Promise<{ txHash: string }>) => {
     setPending(true); setError(null);
     fn().then((r) => setHash(r.txHash))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(e))
       .finally(() => setPending(false));
   };
 
@@ -90,9 +92,10 @@ export function RoomPanel({
 
   const header = (
     <>
+      {state && <Trail state={state} />}
       <Rows>
         <Row label="market">
-          {state ? `${state.symbol} · ${state.intervalSec}s · strike ${state.strike} · spot ${state.spot}` : 'reading…'}
+          {state ? `${state.symbol} · ${intervalLabel(state.intervalSec)} · strike ${price(state.strike)} · spot ${price(state.spot)}` : 'reading…'}
         </Row>
         <Row label="pot" tone="lamp">{money.format(pot)}</Row>
         <Row label="up" tone="up">
@@ -160,7 +163,7 @@ export function RoomPanel({
           <button onClick={() => void navigator.clipboard.writeText(url)}>copy</button>
         </div>
 
-        {error && <p className="note err">{error}</p>}
+        {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="joined" />}
         <Key className="action" onPress={onBack}>Back</Key>
       </Readout>
@@ -181,7 +184,7 @@ export function RoomPanel({
              onPress={() => conn && run(() => rooms.refund(conn.wallet, conn.account, roomId))}>
           {pending ? 'pending…' : seat?.settled ? 'refunded' : `Refund ${money.format(mine)}`}
         </Key>
-        {error && <p className="note err">{error}</p>}
+        {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="refunded" />}
         <Key className="action" onPress={onBack}>Back</Key>
       </Readout>
@@ -212,7 +215,7 @@ export function RoomPanel({
         setHash(tx);
       }
       setHeld({ up: 0n, down: 0n });
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(e); }
     finally { setPending(false); }
   };
 
@@ -269,7 +272,7 @@ export function RoomPanel({
       )}
       {mine === 0n && <p className="note">You are not in this room.</p>}
 
-      {error && <p className="note err">{error}</p>}
+      {error ? <Fault error={error} /> : null}
       {hash && <TxLine hash={hash} />}
       <Key className="action" onPress={onBack}>Back</Key>
     </Readout>

@@ -5,7 +5,9 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Trail } from '../components/Trail';
+import { human, intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
 
 /** Open a room on a market and take the first side. */
@@ -30,7 +32,7 @@ export function CreateRoomPanel({
    *  proportion, not a countdown. */
   const [fraction, setFraction] = useState(0.5);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [opened, setOpened] = useState<{ roomId: bigint; txHash: string; link: string } | null>(null);
 
   let stake = 0n;
@@ -62,7 +64,7 @@ export function CreateRoomPanel({
     setPending(true); setError(null);
     rooms.open(conn.wallet, conn.account, marketId, side, stake, entryDeadline, state.expiryTime)
       .then(setOpened)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(e))
       .finally(() => setPending(false));
   };
 
@@ -84,10 +86,13 @@ export function CreateRoomPanel({
   }
 
   return (
-    <Readout title="Open a room" right={`${state.symbol} · ${state.intervalSec}s`}>
+    <Readout title="Open a room" right={`${state.symbol} · ${intervalLabel(state.intervalSec)}`}>
+      {/* Picking a side off two numbers is picking blind — this is the shape
+          those two numbers came out of. */}
+      <Trail state={state} />
       <Rows>
-        <Row label="strike">{state.strike || '—'}</Row>
-        <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot || '—'}</Row>
+        <Row label="strike">{state.strike ? price(state.strike) : '—'}</Row>
+        <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot ? price(state.spot) : '—'}</Row>
         {/* Named as the BOOK's view, because a bare percentage on the side keys
             read like "52% of players picked UP" — and the room is empty. */}
         <Row label="book odds">
@@ -137,11 +142,11 @@ export function CreateRoomPanel({
           A quarter of the way in, half, or three quarters. Closing earlier means a
           late joiner cannot watch most of the window play out and then take the
           short side with almost nothing at risk.
-          {' '}Entry shuts in {Math.max(0, entryDeadline - now)}s.
+          {' '}Entry shuts in {human(Math.max(0, entryDeadline - now))}.
         </p>
       ) : (
         <p className="note err">
-          This window closes in {remaining}s — too short for a room. People need time
+          This window closes in {human(remaining)} — too short for a room. People need time
           to join, and the escrow refuses an entry deadline inside the last
           {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
         </p>
@@ -169,8 +174,8 @@ export function CreateRoomPanel({
         </Key>
       )}
 
-      {error && <p className="note err">{error}</p>}
-      {allow.error && <p className="note err">{allow.error}</p>}
+      {error ? <Fault error={error} /> : null}
+      {allow.error ? <Fault error={allow.error} /> : null}
       <Key className="action" onPress={onBack}>Back</Key>
     </Readout>
   );
