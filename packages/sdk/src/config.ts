@@ -34,6 +34,14 @@ export interface BullrunConfig extends Deployment {
   scopeToVenue: boolean;
   chain: Chain;
   apiKey?: string;
+  /**
+   * Privy app id — the PUBLIC half. It ships in the browser bundle by design.
+   *
+   * The app SECRET must never appear here, in .env, or anywhere in this repo:
+   * it is a server credential, and this product has no server (§12). Anything
+   * holding it can act as the app.
+   */
+  privyAppId: string | null;
 }
 
 type EnvBag = Record<string, string | undefined>;
@@ -90,6 +98,7 @@ export function loadConfig(env: EnvBag = {}): BullrunConfig {
     escrowAddress: /^0x[0-9a-fA-F]{40}$/.test(escrowRaw) ? (escrowRaw as Address) : null,
     chain: chainFor(network),
     apiKey: get('DREAMDEX_API_KEY'),
+    privyAppId: get('PRIVY_APP_ID')?.trim() || null,
   };
 }
 

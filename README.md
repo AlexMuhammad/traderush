@@ -80,6 +80,21 @@ surface, so any number that is wrong here would be wrong there too.
 
 ---
 
+## Wallets
+
+Connection goes through [Privy](https://privy.io): email, a social account, or an
+injected wallet, with an embedded wallet created for anyone who arrives without
+one. What the app receives is a plain viem `WalletClient` either way, so nothing
+downstream knows how the person got there.
+
+Set `VITE_PRIVY_APP_ID` — the **public** app id, which ships in the browser
+bundle by design. Without it everything still runs (the console's demo needs no
+wallet) and anything that would sign says why.
+
+> The Privy **app secret** is a server credential and this repo has no server
+> (§12). It must never appear in `.env`, in a commit, or in a shell command.
+> Anything holding it can act as your app; if one has been exposed, rotate it.
+
 ## Setup
 
 ```bash

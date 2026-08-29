@@ -1,8 +1,9 @@
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 
-/** Step two. The wallet is the same one the base front end uses — connecting
- *  here connects everywhere. */
+/** Step two. Privy is the front door — email, a social account, or an injected
+ *  wallet; anyone without one gets an embedded wallet. What the app receives is
+ *  a plain viem client either way. */
 export function ConnectScreen({
   onBack, onDemo,
 }: {
@@ -16,17 +17,18 @@ export function ConnectScreen({
     <div className="gate__body">
       <div className="wordmark">BULLRUN</div>
 
-      <h1 className="gate__headline">Connect a wallet.</h1>
+      <h1 className="gate__headline">Sign in.</h1>
       <p className="gate__sub">
         {cfg.network === 'mainnet'
           ? `Somnia mainnet · chain ${cfg.chainId} · real ${cfg.collateralSymbol}.`
           : `Shannon testnet · chain ${cfg.chainId} · ${cfg.collateralSymbol} from the faucet.`}
+        {' '}Email, a social account or your own wallet — no extension required.
       </p>
 
       {wrongChain ? (
         <>
           <p className="gate__warn">
-            Wrong network — this build is {cfg.network}, chain {cfg.chainId}.
+            Your wallet is on another network. This build is {cfg.network}, chain {cfg.chainId}.
           </p>
           <button type="button" className="gate__start" onClick={doSwitch}>
             Switch to {cfg.chainName}
@@ -34,7 +36,7 @@ export function ConnectScreen({
         </>
       ) : (
         <button type="button" className="gate__start" disabled={connecting} onClick={doConnect}>
-          {connecting ? 'Connecting…' : conn ? 'Continue' : 'Connect wallet'}
+          {connecting ? 'One moment…' : conn ? 'Continue' : 'Sign in'}
         </button>
       )}
 
@@ -44,12 +46,12 @@ export function ConnectScreen({
         Skip — play the demo instead
       </button>
 
-      {/* Said plainly rather than implied away: a wallet does not yet change
-          what the console shows. Binary market discovery is not wired, so the
-          prices here are simulated either way. */}
+      {/* Said plainly rather than implied away: signing in does not yet change
+          what the console's keys do. The prices are real; the stakes are points
+          until book orders are wired. Duels are the real thing. */}
       <p className="gate__fine">
-        Market data in the console is still simulated. Connecting does not change
-        that yet — it is what the duel layer will run on.
+        The console's prices are live. Its keys stake points, not money — duels are
+        where a wallet actually matters.
       </p>
 
       <button type="button" className="gate__back" onClick={onBack}>Back</button>

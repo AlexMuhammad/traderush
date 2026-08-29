@@ -42,8 +42,8 @@ export function ConsoleApp() {
   /** What the CRT is showing. The menu key opens `menu`; the game is default. */
   const [screen, setScreen] = useState<Screen>('game');
   const [cursor, setCursor] = useState(0);
-  const { conn, wrongChain } = useWallet();
-  const { market } = useSdk();
+  const { conn, wrongChain, doConnect, doSwitch, doDisconnect, label } = useWallet();
+  const { market, cfg } = useSdk();
 
   // Demo mode keeps the built-in simulation; anything else reads the real
   // event contracts, so the dials, the strike and the countdown are the ones
@@ -98,10 +98,22 @@ export function ConsoleApp() {
 
   const show = (next: Screen) => { setScreen(next); setCursor(0); };
 
+  const walletRow: ScreenItem = conn
+    ? wrongChain
+      ? { key: 'wallet', label: 'Wrong network', sub: `tap to switch to ${cfg.chainName}` }
+      : {
+          key: 'wallet',
+          label: 'Wallet',
+          right: `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`,
+          sub: `${label ?? 'signed in'} · tap to sign out`,
+        }
+    : { key: 'wallet', label: 'Sign in', sub: 'email, social or your own wallet' };
+
   const menuItems: ScreenItem[] = [
     { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
     { key: 'create', label: 'Create duel', sub: 'pick a market and challenge someone' },
     { key: 'duels', label: 'My duels', sub: 'open, live and settled' },
+    walletRow,
     { key: 'play', label: 'Play', sub: 'back to the run' },
   ];
 
@@ -115,7 +127,10 @@ export function ConsoleApp() {
           if (i.key === 'play') show('game');
           else if (i.key === 'markets') show('markets');
           else if (i.key === 'create') show('create');
-          else show('duels');
+          else if (i.key === 'duels') show('duels');
+          else if (!conn) doConnect();
+          else if (wrongChain) doSwitch();
+          else doDisconnect();
         }}
       />
     )
