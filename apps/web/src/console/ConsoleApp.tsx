@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { parseDuelLink } from '@bullrun/sdk';
+import { parseDuelLink, parseRoomLink } from '@bullrun/sdk';
 import { formatUnits } from 'viem';
 import { useWallet } from '../walletContext';
 import { useBalance, useSdk } from '../sdk';
@@ -17,6 +17,9 @@ import { ScreenMarkets } from './components/ScreenMarkets';
 import { ScreenDuels } from './components/ScreenDuels';
 import { ScreenPositions } from './components/ScreenPositions';
 import { ScreenHistory } from './components/ScreenHistory';
+import { ScreenRooms } from './components/ScreenRooms';
+import { CreateRoomPanel } from './room/CreateRoomPanel';
+import { RoomPanel } from './room/RoomPanel';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
 import { AcceptPanel } from './duel/AcceptPanel';
@@ -24,7 +27,9 @@ import { StartScreen } from './screens/StartScreen';
 import './console.css';
 
 /** What the CRT shows. `create` is the market list in pick-for-duel mode. */
-type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels' | 'positions' | 'history';
+type Screen =
+  | 'game' | 'menu' | 'markets' | 'create'
+  | 'createRoom' | 'rooms' | 'duels' | 'positions' | 'history';
 
 /** TestUSDC's own faucet. Not part of the ERC-20 standard, hence a local ABI. */
 const faucetAbi = [
@@ -115,7 +120,7 @@ export function ConsoleApp() {
   // The one exception is an incoming duel link. Whoever clicked it was invited
   // and should be able to READ the terms before signing in; accepting still
   // needs a wallet, and AcceptPanel asks for one there.
-  const invited = Boolean(parseDuelLink(path));
+  const invited = Boolean(parseDuelLink(path) || parseRoomLink(path));
   const gated = ready && !invited && (!conn || wrongChain);
 
   const view = renderView(path, navigate);
@@ -156,6 +161,15 @@ export function ConsoleApp() {
   const menuItems: ScreenItem[] = [
     { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
     {
+      key: 'createRoom',
+      label: 'Open a room',
+      // Rooms lead. A duel needs someone to take your exact size; a room takes
+      // anyone at any size, which is the version most people can actually use.
+      right: duelReady ? `${snap.asset} ${snap.interval}` : undefined,
+      sub: duelReady ? 'many players, either side, any size' : 'pick a market with room for one',
+    },
+    { key: 'rooms', label: 'My rooms', sub: 'open, running and settled' },
+    {
       key: 'create',
       label: 'Create duel',
       // Straight to the market on the dials when it can hold one, so the game
@@ -194,6 +208,11 @@ export function ConsoleApp() {
             if (duelReady) { show('game'); navigate(`/market/${engine.currentMarketId}/duel`); }
             else show('create');
           }
+          else if (i.key === 'createRoom') {
+            if (duelReady) { show('game'); navigate(`/market/${engine.currentMarketId}/room`); }
+            else show('createRoom');
+          }
+          else if (i.key === 'rooms') show('rooms');
           else if (i.key === 'duels') show('duels');
           else if (i.key === 'positions') show('positions');
           else if (i.key === 'history') show('history');
@@ -205,6 +224,13 @@ export function ConsoleApp() {
           }
           else doConnect();
         }}
+      />
+    )
+    : screen === 'rooms' ? (
+      <ScreenRooms
+        cursor={cursor} onCursor={setCursor}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+        onOpen={(id) => { show('game'); navigate(`/room/${id}`); }}
       />
     )
     : screen === 'positions' ? (
@@ -229,10 +255,11 @@ export function ConsoleApp() {
     )
     : (
       <ScreenMarkets
-        title={screen === 'create' ? 'Pick a market' : 'Markets'}
+        title={screen === 'create' || screen === 'createRoom' ? 'Pick a market' : 'Markets'}
         currentMarketId={engine.currentMarketId}
         cursor={cursor} onCursor={setCursor}
         onPick={(id) => {
+          if (screen === 'createRoom') { show('game'); navigate(`/market/${id}/room`); return; }
           if (screen === 'create') { show('game'); navigate(`/market/${id}/duel`); return; }
           // Markets: if it is one of the dials, tune to it — that is what a
           // console does. Anything else still leads to a duel.
@@ -303,6 +330,39 @@ function renderView(path: string, navigate: (to: string) => void) {
       isGame: false as const,
       label: 'incoming duel',
       node: <AcceptPanel link={link} onAccepted={() => navigate(`/duel/${link.duelId}`)} />,
+    };
+  }
+
+  const roomLink = parseRoomLink(path);
+  if (roomLink) {
+    return {
+      isGame: false as const,
+      label: 'a room',
+      node: <RoomPanel roomId={roomLink.roomId} escrow={roomLink.escrow} onBack={() => navigate('/')} />,
+    };
+  }
+
+  const room = /^\/room\/(\d+)$/.exec(path);
+  if (room) {
+    return {
+      isGame: false as const,
+      label: `room #${room[1]}`,
+      node: <RoomPanel roomId={BigInt(room[1]!)} onBack={() => navigate('/')} />,
+    };
+  }
+
+  const createRoom = /^\/market\/(0x[0-9a-fA-F]+)\/room$/.exec(path);
+  if (createRoom) {
+    return {
+      isGame: false as const,
+      label: 'new room',
+      node: (
+        <CreateRoomPanel
+          marketId={createRoom[1] as `0x${string}`}
+          onOpened={(id) => navigate(`/room/${id}`)}
+          onBack={() => navigate('/')}
+        />
+      ),
     };
   }
 

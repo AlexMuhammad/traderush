@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Account, WalletClient } from 'viem';
+import { useWallet as useWalletSafe } from './walletContext';
 import {
-  MarketAdapter, DuelAdapter, loadConfig, type BullrunConfig,
-  type MarketState, type MarketSummary, type DuelView,
+  MarketAdapter, DuelAdapter, RoomAdapter, loadConfig, type BullrunConfig,
+  type MarketState, type MarketSummary, type DuelView, type Room, type Seat,
 } from '@bullrun/sdk';
 
 /** §3 — the front end NEVER talks to the chain or the socket directly. It talks to the SDK.
@@ -13,6 +14,8 @@ interface Ctx {
   market: MarketAdapter;
   duels: DuelAdapter | null;
   duelsError: string | null;
+  rooms: RoomAdapter | null;
+  roomsError: string | null;
 }
 
 const SdkCtx = createContext<Ctx | null>(null);
@@ -25,7 +28,13 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     let duelsError: string | null = null;
     try { duels = new DuelAdapter(cfg); }
     catch (e) { duelsError = e instanceof Error ? e.message : String(e); }
-    return { cfg, market, duels, duelsError };
+
+    let rooms: RoomAdapter | null = null;
+    let roomsError: string | null = null;
+    try { rooms = new RoomAdapter(cfg); }
+    catch (e) { roomsError = e instanceof Error ? e.message : String(e); }
+
+    return { cfg, market, duels, duelsError, rooms, roomsError };
   }, []);
   return <SdkCtx.Provider value={value}>{children}</SdkCtx.Provider>;
 }
@@ -123,6 +132,39 @@ export function useAllowance(owner: `0x${string}` | undefined, needed: bigint) {
     error,
     approve,
   };
+}
+
+/** One room, polled. Like duels, polling is the source of truth: nobody should
+ *  be stranded in a lobby because a socket dropped at the wrong moment. */
+export function useRoom(roomId: bigint | null): Room | null | undefined {
+  const { rooms } = useSdk();
+  const [room, setRoom] = useState<Room | null | undefined>(undefined);
+  useEffect(() => {
+    setRoom(undefined);
+    if (!rooms || roomId === null) return;
+    return rooms.watch(roomId, setRoom);
+  }, [rooms, roomId]);
+  return room;
+}
+
+/** What you put into a room and what you can take out. */
+export function useSeat(roomId: bigint | null, room: Room | null | undefined): Seat | null {
+  const { rooms } = useSdk();
+  const { conn } = useWalletSafe();
+  const [seat, setSeat] = useState<Seat | null>(null);
+  const owner = conn?.account.address;
+
+  useEffect(() => {
+    if (!rooms || roomId === null || !owner) { setSeat(null); return; }
+    let alive = true;
+    rooms.seat(roomId, owner as `0x${string}`)
+      .then((s) => { if (alive) setSeat(s); })
+      .catch(() => { if (alive) setSeat(null); });
+    return () => { alive = false; };
+    // Re-read whenever the room's totals move: your share depends on them.
+  }, [rooms, roomId, owner, room?.totalUp, room?.totalDown, room?.unwound]);
+
+  return seat;
 }
 
 /** The wallet's collateral balance, refreshed. Gotcha §8.7 — read the WALLET,
