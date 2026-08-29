@@ -33,8 +33,9 @@ export function Tuner({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
   };
   const onPointerUp = () => { drag.current = null; };
 
-  const above = s.intervals[s.intervalIndex - 1];
-  const below = s.intervals[s.intervalIndex + 1];
+  // Only the value BELOW is shown, clipped — that one ghost is what says the
+  // list continues. A second one above would balance the box and say less.
+  const below = s.intervals[s.intervalIndex + 1] ?? s.intervals[0];
 
   return (
     <div className="tuner">
@@ -60,13 +61,8 @@ export function Tuner({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
         role="listbox"
         aria-label="window length"
       >
-        <button className="wheel__edge" disabled={!above} onClick={() => step(-1)}>
-          {above ?? ''}
-        </button>
         <div className="wheel__now">{s.intervals[s.intervalIndex] ?? s.interval}</div>
-        <button className="wheel__edge" disabled={!below} onClick={() => step(1)}>
-          {below ?? ''}
-        </button>
+        <div className="wheel__ghost" aria-hidden="true">{below ?? ''}</div>
       </div>
     </div>
   );
