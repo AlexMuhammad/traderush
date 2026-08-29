@@ -25,6 +25,10 @@ export interface WalletCtx {
   error: string | null;
   /** Connected, but pointed at a different chain than this build. */
   wrongChain: boolean;
+  /** Privy has finished restoring any existing session. Until this is true we
+   *  do not yet know whether someone is signed in, and showing them a title
+   *  card only to snatch it away is worse than showing nothing. */
+  ready: boolean;
   doConnect: () => void;
   doSwitch: () => void;
   doDisconnect: () => void;
@@ -124,7 +128,14 @@ function PrivyWallet({ children }: { children: ReactNode }) {
 
   return (
     <WalletContext.Provider
-      value={{ conn, connecting: connecting || !ready, error, wrongChain, doConnect, doSwitch, doDisconnect, label }}
+      value={{
+        conn, connecting: connecting || !ready, error, wrongChain,
+        // Not just Privy's own ready flag: a restored session still has to
+        // resolve its provider into a client, and until it does `conn` is null
+        // for a reason that is not "signed out".
+        ready: ready && (!authenticated || conn !== null || wallets.length === 0),
+        doConnect, doSwitch, doDisconnect, label,
+      }}
     >
       {children}
     </WalletContext.Provider>
@@ -139,7 +150,7 @@ function Unconfigured({ children }: { children: ReactNode }) {
   return (
     <WalletContext.Provider
       value={{
-        conn: null, connecting: false, error, wrongChain: false,
+        conn: null, connecting: false, error, wrongChain: false, ready: true,
         doConnect: complain, doSwitch: complain, doDisconnect: () => {}, label: null,
       }}
     >

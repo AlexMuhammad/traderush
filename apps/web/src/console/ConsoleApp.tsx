@@ -43,7 +43,7 @@ export function ConsoleApp() {
   /** What the CRT is showing. The menu key opens `menu`; the game is default. */
   const [screen, setScreen] = useState<Screen>('game');
   const [cursor, setCursor] = useState(0);
-  const { conn, wrongChain, doConnect, doSwitch, doDisconnect, label } = useWallet();
+  const { conn, wrongChain, ready, doConnect, doSwitch, doDisconnect, label } = useWallet();
   const { market, cfg } = useSdk();
   const balance = useBalance(conn?.account.address as `0x${string}` | undefined);
 
@@ -70,12 +70,15 @@ export function ConsoleApp() {
 
   // The console is not reachable without a wallet: everything in it settles
   // on-chain, and a machine you can play but not act on teaches the wrong thing.
-  // A wallet already connected on the right chain falls straight through.
+  //
+  // But a wallet already connected skips the gate entirely — including the title
+  // card. Someone returning to a restored session has already been introduced.
   useEffect(() => {
-    if (stage === 'connect' && conn && !wrongChain) setStage('playing');
+    if (conn && !wrongChain) { setStage('playing'); return; }
     // Signing out, or switching to a chain this build does not target, puts the
-    // gate back rather than leaving a dead console on screen.
-    if (stage === 'playing' && (!conn || wrongChain) && !parseDuelLink(path)) setStage('connect');
+    // gate back rather than leaving a dead console on screen. Straight to the
+    // connect step: they have seen the title card.
+    if (stage === 'playing' && !parseDuelLink(path)) setStage('connect');
   }, [stage, conn, wrongChain, path]);
 
   // The pad has keys, so the keyboard should work too. Only while a list is up:
@@ -224,7 +227,10 @@ export function ConsoleApp() {
         <Footer engine={engine} s={snap} />
       </Panel>
       
-      {stage !== 'playing' && (
+      {/* Nothing until Privy has finished restoring: flashing the title card at
+          someone who is already signed in, then snatching it away, is worse than
+          a moment of the console alone. */}
+      {ready && stage !== 'playing' && (
         <div className="gate">
           {stage === 'start' ? (
             <StartScreen onStart={() => setStage('connect')} />
