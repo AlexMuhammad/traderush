@@ -46,10 +46,19 @@ The menu key puts a MENU on the glass rather than opening a drawer, and every
 screen is the same object: a cursor moving down a list of rows. `ScreenList` is
 that object; Menu, Markets and My duels are three sets of rows fed into it.
 
-The direction pad (▲ ▼ SELECT BACK) appears only while a list is up — on the
-game face the call keys are the controls and a second cluster would crowd the
-plate. Arrow keys, Enter and Escape do the same thing. SELECT fires whatever a
-click on the cursor row would, via `bindSelect`, so there is one action per row
+The direction cluster is one merged strip in a single well, icons only, and
+**always present** — a control that appears and disappears is not a control on a
+machine, it is a web page. So every key has to mean something on every screen:
+
+| | game face | a list |
+|---|---|---|
+| ▲ ▼ | step through the dials | move the cursor |
+| ● | open the menu | select |
+| ← | dims — nothing to go back to | back to the menu |
+
+Arrow keys, Enter and Escape do the same, bound only while a list is up so the
+game face never swallows a keypress it has no use for. Select fires whatever a
+click on the cursor row would, through `bindSelect`, so a row has one action
 rather than two that can drift apart.
 
 `My duels` scans the escrow client-side: it keeps no per-player index, and

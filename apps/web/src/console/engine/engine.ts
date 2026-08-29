@@ -575,6 +575,14 @@ export class Engine implements Scene {
   /** The market currently on the dials, for a list that wants to mark it. */
   get currentMarketId(): string { return this.race.marketId; }
 
+  /** Step through the dials. On the game face this is what the pad's arrows do,
+   *  so they always mean something rather than sitting dead. */
+  tuneStep(delta: 1 | -1): void {
+    const n = this.races.length;
+    if (!n) return;
+    this.tune(((this.raceIndex + delta) % n + n) % n);
+  }
+
   tuneAsset(asset: 0 | 1): void { this.tune(asset * 2 + (this.raceIndex % 2)); }
   tuneInterval(iv: 0 | 1): void { this.tune((this.raceIndex >= 2 ? 2 : 0) + iv); }
 

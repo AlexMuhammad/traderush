@@ -156,13 +156,27 @@ export function ConsoleApp() {
 
         {view.isGame ? <GameFace engine={engine} s={snap} screen={crt} /> : view.node}
 
-        {/* The pad only exists while a list is up; on the game face the call
-            keys are the controls and a second cluster would crowd the plate. */}
-        {view.isGame && screen !== 'game' && (
+        {/* Always present. The arrows step the dials on the game face and move
+            the cursor on a list, so no key is ever dead — except back, which
+            dims rather than vanishing, the way hardware would. */}
+        {view.isGame && (
           <NavPad
-            onUp={() => { engine.wake(); setCursor((c) => Math.max(0, c - 1)); }}
-            onDown={() => { engine.wake(); setCursor((c) => c + 1); }}
-            onSelect={() => { engine.wake(); select(); }}
+            canBack={screen !== 'game'}
+            onUp={() => {
+              engine.wake();
+              if (screen === 'game') engine.tuneStep(-1);
+              else setCursor((c) => Math.max(0, c - 1));
+            }}
+            onDown={() => {
+              engine.wake();
+              if (screen === 'game') engine.tuneStep(1);
+              else setCursor((c) => c + 1);
+            }}
+            onSelect={() => {
+              engine.wake();
+              if (screen === 'game') show('menu');
+              else select();
+            }}
             onBack={() => { engine.wake(); show(screen === 'menu' ? 'game' : 'menu'); }}
           />
         )}
