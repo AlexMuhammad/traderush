@@ -135,7 +135,11 @@ contract MockBinaryMarketsModule {
         outcome.mint(msg.sender, outcomeIdFor(marketId, 1), amount);
     }
 
-    function mergeCompleteSet(uint32, bytes32, bytes32 marketId, uint256 amount) external {
+    function mergeCompleteSet(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint256 amount)
+        external
+    {
+        Market storage mk = _markets[marketId];
+        require(operatorId == mk.operatorId && venueId == mk.venueId, "wrong venue");
         outcome.burn(msg.sender, outcomeIdFor(marketId, 0), amount);
         outcome.burn(msg.sender, outcomeIdFor(marketId, 1), amount);
         collateralToken.transfer(msg.sender, amount);

@@ -39,6 +39,12 @@ interface IBinaryMarketsModule {
     function mintCompleteSet(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint256 amount)
         external;
 
+    /// @notice The inverse of mintCompleteSet: burns `amount` of BOTH outcomes
+    ///         and returns `amount` collateral. Lets a room that nobody
+    ///         contested unwind cleanly instead of stranding its stakes.
+    function mergeCompleteSet(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint256 amount)
+        external;
+
     /// @notice Burns `amount` of one outcome and pays out whatever it settled for.
     /// @param outcomeIdx 0 = YES/UP, 1 = NO/DOWN.
     function redeem(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint8 outcomeIdx, uint256 amount)
