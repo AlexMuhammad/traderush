@@ -595,6 +595,9 @@ export class Engine implements Scene {
   /** The market currently on the dials, for a list that wants to mark it. */
   get currentMarketId(): string { return this.race.marketId; }
 
+  /** Seconds left in the current window. */
+  windowLeft(): number { return Math.max(0, this.race.win - this.race.t); }
+
   /** Step through the dials. On the game face this is what the pad's arrows do,
    *  so they always mean something rather than sitting dead. */
   tuneStep(delta: 1 | -1): void {

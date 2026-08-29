@@ -1,7 +1,9 @@
 # Definition of done (§11)
 
-- [~] Two people on two devices complete a duel end to end — the CONTRACT path is done
-      (`pnpm e2e` + `pnpm settle`, real payout); the browser path is untested by a human
+- [~] Two people on two devices complete a duel end to end — the CONTRACT path is proven
+      twice over (`pnpm e2e` then `pnpm settle`: open, accept, settle, winner paid the whole
+      pot, loser redeemed 0 without reverting). The BROWSER path is wired and typechecked
+      but has not been driven by a human.
 - [x] Every §4.3 test passes — `pnpm test:contracts`, 25/25 green against mocks that
       mirror the real module interface, not the transcribed one
 - [x] Every §8 gotcha is implemented, with a comment naming which one — see README table

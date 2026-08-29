@@ -100,6 +100,9 @@ export function ConsoleApp() {
 
   const show = (next: Screen) => { setScreen(next); setCursor(0); };
 
+  // A duel needs the 30s accept margin plus time for an opponent to see it.
+  const duelReady = snap.live && Boolean(engine.currentMarketId) && engine.windowLeft() > 90;
+
   const walletRow: ScreenItem = conn
     ? wrongChain
       ? { key: 'wallet', label: 'Wrong network', sub: `tap to switch to ${cfg.chainName}` }
@@ -116,7 +119,16 @@ export function ConsoleApp() {
 
   const menuItems: ScreenItem[] = [
     { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
-    { key: 'create', label: 'Create duel', sub: 'pick a market and challenge someone' },
+    {
+      key: 'create',
+      label: 'Create duel',
+      // Straight to the market on the dials when it can hold one, so the game
+      // and the product are one gesture apart. A 60s window cannot: the 30s
+      // accept margin plus time for someone to actually accept does not fit,
+      // and sending them there only to be told so is a wasted step.
+      right: duelReady ? `${snap.asset} ${snap.interval}` : undefined,
+      sub: duelReady ? 'challenge someone on this window' : 'pick a market with room for one',
+    },
     { key: 'duels', label: 'My duels', sub: 'open, live and settled' },
     walletRow,
     { key: 'play', label: 'Play', sub: 'back to the run' },
@@ -131,7 +143,10 @@ export function ConsoleApp() {
         onSelect={(i) => {
           if (i.key === 'play') show('game');
           else if (i.key === 'markets') show('markets');
-          else if (i.key === 'create') show('create');
+          else if (i.key === 'create') {
+            if (duelReady) { show('game'); navigate(`/market/${engine.currentMarketId}/duel`); }
+            else show('create');
+          }
           else if (i.key === 'duels') show('duels');
           else if (!conn) doConnect();
           else if (wrongChain) doSwitch();
