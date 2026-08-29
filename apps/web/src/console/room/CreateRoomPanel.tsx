@@ -114,11 +114,6 @@ export function CreateRoomPanel({
   // the same shell — which is exactly what this is not.
   return (
     <>
-      <div className="q">
-        <span className="exp">{intervalLabel(state.intervalSec)}</span>
-        Open a room on <b>{state.symbol}</b> and take the first side.
-      </div>
-
       <div className="window">
         <div className="crt">
           <Trail state={state} />
@@ -139,7 +134,7 @@ export function CreateRoomPanel({
           joins. A percentage printed on the key you press reads as your odds,
           and it is not. It moves to the tray below, where the screen's other
           small facts live and it can be labelled for what it is. */}
-      <div className="calls">
+      <div className="calls calls--pick">
         {sides.map((k) => (
           <Key key={k.side} lit={side === k.side} onPress={() => setSide(k.side)}>
             <SideIcon side={k.side} />
@@ -149,8 +144,8 @@ export function CreateRoomPanel({
       </div>
 
       <div className="order">
-        <label className="field">
-          <span>your stake ({money.symbol})</span>
+        <label className="field field--inline">
+          <span>stake ({money.symbol})</span>
           <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
         </label>
 
@@ -164,8 +159,13 @@ export function CreateRoomPanel({
           <span>entry closes at</span>
           <div className="bar">
             <div className="bar__track">
-              <i className="bar__run" style={{ width: `${runPct}%` }} />
+              {/* Fill first, hatch over it. They overlap — time that has passed
+                  is still inside the entry period — and drawing the hatch second
+                  is what lets you see both at once. The other way round, a 75%
+                  door on a half-run window painted the whole bar amber and the
+                  elapsed stretch vanished. */}
               <i className="bar__fill" style={{ width: `${(chosen ?? 0) * 100}%` }} />
+              <i className="bar__run" style={{ width: `${runPct}%` }} />
               {[0.25, 0.5, 0.75].map((f) => {
                 const ok = usable(f);
                 const left = at(f) - now;

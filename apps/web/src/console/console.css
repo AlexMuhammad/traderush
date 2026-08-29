@@ -902,6 +902,10 @@
 .linkline { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
 .linkline code {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: 'Share Tech Mono', monospace;
   font-size: 9px;
   color: #9AA0A5;
@@ -1341,14 +1345,54 @@
    inside a bordered box is the tell of a component pasted where a part should
    have gone. */
 .crt .trail { margin: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
-.crt .trail svg { height: 150px; }
-.crt .trail__axis { border-top-color: rgba(255,255,255,.07); padding: 5px 8px 6px; }
-.crt .trail--empty { min-height: 150px; }
+.crt .trail svg { height: 92px; }
+/* The axis carried a strike label the readout under the glass already prints,
+   and two clocks nobody was reading. A number said twice on one screen is a
+   number the reader has to check against itself. */
+.crt .trail__axis { display: none; }
+.crt .trail--empty { min-height: 92px; }
+
+/* Two tray facts on one line. */
+.trayrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.trayrow .calc { margin-top: 0; }
+
+/* Label beside the well rather than above it: the label is three words and the
+   line it sat on was doing nothing else. */
+.field--inline { display: flex; align-items: center; gap: 9px; }
+.field--inline > span { margin-bottom: 0; white-space: nowrap; }
+.field--inline input { flex: 1; }
 
 /* Controls on the order tray. The stake well and the segmented control are the
    same wells the game face uses; they only need spacing here. */
 .order .field + .field { margin-top: 10px; }
 .calc--bad span:last-child { color: #8A3A2A; }
+
+/* A tray row can carry a coloured value. The tray is light, so the game's own
+   neon up/down would glare off it — these are the same hues taken down to where
+   they read as ink on steel. */
+.calc .up { color: #1B7A4B; }
+.calc .dn { color: #A83421; }
+.calc .lamp { color: #8A6410; }
+.calc a { color: #2C5D9B; }
+
+/* The invite link, on the tray rather than in a dark panel. */
+.linkline { margin-top: 9px; }
+
+/* The side keys, holding two things instead of four.
+
+   On the game face this key carries an arrow, a name, a percentage and a
+   multiple, and a hundred pixels is what four lines need. Here it carries an
+   arrow and a word — the same box with half the content, so the word shrank into
+   the middle of an empty cap. The cap comes down and the word goes up. */
+.calls--pick .key { height: 78px; }
+.calls--pick .cap .sideicon { width: 30px; height: 30px; }
+.calls--pick .cap .nm {
+  font-size: 17px;
+  letter-spacing: .2em;
+  /* The tracking pushes the last letter off centre; the padding puts it back. */
+  padding-left: .2em;
+  margin-top: 3px;
+}
 
 /* The window, with the door on it.
 
@@ -1357,73 +1401,125 @@
    only reason an option is ever unavailable. The bar shows that stretch, so a
    dead 25% pin is visibly in the past instead of mysteriously unpressable. */
 .bar { margin-top: 2px; }
+
+/* A groove cut into the tray, with a rod lying in it. Same construction as every
+   other well on the machine: hard inset at the top, a lit lower lip inside, and
+   the panel's own highlight on the outside edge below it. */
 .bar__track {
   position: relative;
-  height: 10px;
-  border-radius: 5px;
-  background: linear-gradient(#101315, #191D20);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,.85), 0 1px 0 rgba(255,255,255,.55);
+  height: 13px;
+  border-radius: 7px;
+  background: linear-gradient(#0C0F11, #1B1F22);
+  box-shadow:
+    inset 0 3px 5px rgba(0,0,0,.95),
+    inset 0 -1px 0 rgba(255,255,255,.22),
+    inset 2px 0 3px rgba(0,0,0,.5),
+    inset -2px 0 3px rgba(0,0,0,.5),
+    0 1px 0 rgba(255,255,255,.7);
 }
-.bar__track > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px 0 0 5px; }
-/* Time already gone. Hatched rather than filled: it is not progress towards
-   anything, it is the part of the window that is no longer on offer. */
+.bar__track > i {
+  position: absolute;
+  top: 2px; bottom: 2px; left: 2px;
+  border-radius: 5px 3px 3px 5px;
+}
+
+/* The rod. A cap laid on its side: bright top face, a hard break at the middle
+   where the moulding turns, and a dark underside sitting in the groove. */
+.bar__fill {
+  background: linear-gradient(#FFF6DC 0%, #FFD679 42%, #EDB13A 52%, #B9821A 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -2px 3px rgba(0,0,0,.35),
+    0 0 10px rgba(255,200,87,.45);
+}
+
+/* Time already gone. Hatched and translucent, so it reads as shade thrown across
+   whatever it covers rather than as a second bar of its own. */
 .bar__run {
   background: repeating-linear-gradient(
-    -45deg, rgba(255,255,255,.13) 0 2px, rgba(255,255,255,.03) 2px 5px);
-}
-.bar__fill {
-  background: linear-gradient(#FFD679, #E0A62A);
-  box-shadow: 0 0 10px rgba(255,200,87,.5);
+    -45deg, rgba(0,0,0,.42) 0 2px, rgba(0,0,0,.12) 2px 5px);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.28);
 }
 
 .bar__pin {
   position: absolute;
-  top: -5px;
-  width: 20px;
-  height: 20px;
-  margin-left: -10px;
+  top: -6px;
+  width: 22px;
+  height: 25px;
+  margin-left: -11px;
   padding: 0;
   border: none;
   background: none;
   cursor: pointer;
 }
-/* The pin itself. The button is a 20px hit area around a 4px mark, because a
-   4px target is not a target. */
+/* A moulded stud, not a painted line: skirt underneath, highlight on the top
+   face. The button is a 22px hit area around it, because a 6px target is not a
+   target. */
 .bar__pin::after {
   content: '';
   position: absolute;
-  left: 8px; top: 4px;
-  width: 4px; height: 12px;
-  border-radius: 2px;
-  background: #C6CACE;
-  box-shadow: 0 1px 0 rgba(0,0,0,.5);
+  left: 8px; top: 5px;
+  width: 6px; height: 15px;
+  border-radius: 3px;
+  background: linear-gradient(#EDEFF1 0%, #C3C8CC 46%, #9DA3A8 54%, #7C8286 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 2px 0 #2A2E32,
+    0 3px 4px rgba(0,0,0,.6);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
 }
+/* The chosen one is the lamp, and it stands proud of the others. */
+.bar__pin.on::after {
+  left: 5px; top: 2px;
+  width: 12px; height: 21px;
+  border-radius: 4px;
+  background: linear-gradient(#FFF9E8 0%, #FFD679 46%, #F0B93C 54%, #C98D14 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -2px 3px rgba(0,0,0,.2),
+    0 3px 0 var(--lamp-lo),
+    0 5px 6px rgba(0,0,0,.55),
+    0 0 14px rgba(255,200,87,.75);
+}
+/* Pressing moves the cap down by exactly the skirt, the way every key here does:
+   the bottom edge stays put and only the top face descends. */
+.bar__pin:not(:disabled):active::after {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #2A2E32, 0 1px 2px rgba(0,0,0,.6);
+}
+.bar__pin.on:not(:disabled):active::after {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.6),
+    0 1px 0 var(--lamp-lo),
+    0 2px 3px rgba(0,0,0,.5),
+    0 0 11px rgba(255,200,87,.6);
+}
+/* Past, or too close to expiry: sunk into the groove rather than standing on it.
+   No skirt is what makes it read as unavailable. */
+.bar__pin:disabled { cursor: default; }
+.bar__pin:disabled::after {
+  background: linear-gradient(#7A8085, #5C6165);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.35);
+}
+
 .bar__pin b {
   position: absolute;
-  top: 20px; left: 50%;
+  top: 25px; left: 50%;
   transform: translateX(-50%);
   font-family: 'Share Tech Mono', monospace;
   font-size: 9px;
   font-weight: 400;
   color: #565D63;
-  text-shadow: 0 1px 0 rgba(255,255,255,.5);
-}
-.bar__pin.on::after {
-  left: 6px;
-  width: 8px; height: 16px;
-  top: 2px;
-  background: linear-gradient(#FFF3D0, #E0A62A);
-  box-shadow: 0 0 9px rgba(255,200,87,.9), 0 1px 0 rgba(0,0,0,.5);
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
 }
 .bar__pin.on b { color: #22262A; font-weight: 700; }
-.bar__pin:disabled { cursor: default; }
-.bar__pin:disabled::after { background: #6B7176; opacity: .5; }
 .bar__pin:disabled b { color: #7A8087; text-shadow: none; }
 
 .bar__ends {
   display: flex;
   justify-content: space-between;
-  margin-top: 15px;
+  margin-top: 20px;
   font-family: 'Share Tech Mono', monospace;
   font-size: 9px;
   letter-spacing: .08em;
@@ -1542,137 +1638,76 @@
   overflow-wrap: anywhere;
 }
 
-/* ------------------------------------------------ the room screens on the plate
+/* ------------------------------------------------------------- the wallet sheet
 
-   These screens are built from the game face's own parts — `.q`, `.window`,
-   `.calls`, `.order` — so what follows is only what those parts do not already
-   cover. Anything here that starts to look like a second design system is a
-   sign the part should have been reused instead.
+   Deposit and withdraw arrive on a Vaul drawer rather than as screens. They are
+   errands: you come in with one thing to do and leave. A route tears down the run
+   you were watching and makes "back" a decision; a sheet keeps the machine behind
+   it, so the detour looks like a detour.
 
-   They sit directly on the steel plate, so every colour is a dark-on-light one.
-   The dark palette that was here belonged to a recessed panel that no longer
-   exists. */
+   It is the plate's own material and the plate's own width — a full-bleed web
+   sheet over a handheld reads as a different application arriving. */
 
-/* The trail takes the CRT's place, so it drops its own frame — a bordered box
-   inside a bordered box is the tell of a component pasted where a part should
-   have gone. */
-.crt .trail { margin: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
-.crt .trail svg { height: 150px; }
-.crt .trail__axis { border-top-color: rgba(255,255,255,.07); padding: 5px 8px 6px; }
-.crt .trail--empty { min-height: 150px; }
-
-/* Controls on the order tray. The stake well and the segmented control are the
-   same wells the game face uses; they only need spacing here. */
-.order .field + .field { margin-top: 10px; }
-.calc--bad span:last-child { color: #8A3A2A; }
-
-/* The window, with the door on it.
-
-   Entry-close is a FRACTION of the window, and three keys said nothing about
-   the window — least of all the part of it that had already run, which is the
-   only reason an option is ever unavailable. The bar shows that stretch, so a
-   dead 25% pin is visibly in the past instead of mysteriously unpressable. */
-.bar { margin-top: 2px; }
-.bar__track {
-  position: relative;
-  height: 10px;
-  border-radius: 5px;
-  background: linear-gradient(#101315, #191D20);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,.85), 0 1px 0 rgba(255,255,255,.55);
-}
-.bar__track > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px 0 0 5px; }
-/* Time already gone. Hatched rather than filled: it is not progress towards
-   anything, it is the part of the window that is no longer on offer. */
-.bar__run {
-  background: repeating-linear-gradient(
-    -45deg, rgba(255,255,255,.13) 0 2px, rgba(255,255,255,.03) 2px 5px);
-}
-.bar__fill {
-  background: linear-gradient(#FFD679, #E0A62A);
-  box-shadow: 0 0 10px rgba(255,200,87,.5);
+.sheet__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0,0,0,.62);
+  backdrop-filter: blur(2px);
 }
 
-.bar__pin {
-  position: absolute;
-  top: -5px;
-  width: 20px;
-  height: 20px;
-  margin-left: -10px;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-/* The pin itself. The button is a 20px hit area around a 4px mark, because a
-   4px target is not a target. */
-.bar__pin::after {
-  content: '';
-  position: absolute;
-  left: 8px; top: 4px;
-  width: 4px; height: 12px;
-  border-radius: 2px;
-  background: #C6CACE;
-  box-shadow: 0 1px 0 rgba(0,0,0,.5);
-}
-.bar__pin b {
-  position: absolute;
-  top: 20px; left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
-  font-weight: 400;
-  color: #565D63;
-  text-shadow: 0 1px 0 rgba(255,255,255,.5);
-}
-.bar__pin.on::after {
-  left: 6px;
-  width: 8px; height: 16px;
-  top: 2px;
-  background: linear-gradient(#FFF3D0, #E0A62A);
-  box-shadow: 0 0 9px rgba(255,200,87,.9), 0 1px 0 rgba(0,0,0,.5);
-}
-.bar__pin.on b { color: #22262A; font-weight: 700; }
-.bar__pin:disabled { cursor: default; }
-.bar__pin:disabled::after { background: #6B7176; opacity: .5; }
-.bar__pin:disabled b { color: #7A8087; text-shadow: none; }
-
-.bar__ends {
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 41;
+  width: min(384px, 100%);
+  margin: 0 auto;
+  max-height: 86vh;
   display: flex;
-  justify-content: space-between;
-  margin-top: 15px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
-  letter-spacing: .08em;
+  flex-direction: column;
+  padding: 8px 12px 16px;
+  border-radius: 16px 16px 0 0;
+  outline: none;
+  /* Same brushed face as the panel, lit along the top edge where it meets the
+     scrim, so the sheet looks milled from the same billet. */
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px 3px),
+    linear-gradient(#B7BCC0, #969CA1 40%, #868C90);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(0,0,0,.35),
+    0 -12px 34px rgba(0,0,0,.6);
+}
+
+/* The pull. A machined slot rather than a pill — it is a thing you hook a thumb
+   under, and it says which edge the sheet moves along. */
+.sheet__grip {
+  flex: none;
+  width: 44px;
+  height: 5px;
+  margin: 0 auto 9px;
+  border-radius: 3px;
+  background: linear-gradient(#5E6469, #3A3F43);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.7);
+}
+
+.sheet__title {
+  order: -1;
+  margin: 0 0 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .2em;
   text-transform: uppercase;
-  color: #6B7176;
-}
-
-/* The reasoning, one tap away, on steel. */
-.fold { margin-top: 9px; }
-.fold summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
-  color: #525960;
-}
-.fold summary::-webkit-details-marker { display: none; }
-.fold summary::before { content: '▸ '; }
-.fold[open] summary::before { content: '▾ '; }
-.fold summary:hover { color: #22262A; }
-.fold p {
-  margin: 6px 0 0;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  line-height: 1.5;
-  color: #3A4045;
-}
-
-.hint {
-  margin-top: 8px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  color: #4A5157;
   text-align: center;
+  color: #4A5157;
+  text-shadow: 0 1px 0 rgba(255,255,255,.6);
 }
-.hint--warn { color: #6E4A18; text-align: left; line-height: 1.45; }
 
+/* The panels inside are built from the plate's parts, so they need nothing here
+   but somewhere to scroll when the keyboard is up on a phone. */
+.sheet__body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet__body > *:first-child { margin-top: 0; }

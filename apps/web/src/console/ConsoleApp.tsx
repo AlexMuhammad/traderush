@@ -19,6 +19,8 @@ import { ScreenPositions } from './components/ScreenPositions';
 import { ScreenHistory } from './components/ScreenHistory';
 import { ScreenRooms } from './components/ScreenRooms';
 import { CreateRoomPanel } from './room/CreateRoomPanel';
+import { WalletDrawer, type WalletSheet } from './wallet/WalletDrawer';
+import { FAUCET_UNITS, faucetAbi } from './wallet/faucetAbi';
 import { RoomPanel } from './room/RoomPanel';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
@@ -30,12 +32,6 @@ import './console.css';
 type Screen =
   | 'game' | 'menu' | 'markets' | 'create'
   | 'createRoom' | 'rooms' | 'duels' | 'positions' | 'history';
-
-/** TestUSDC's own faucet. Not part of the ERC-20 standard, hence a local ABI. */
-const faucetAbi = [
-  { type: 'function', name: 'faucet', stateMutability: 'nonpayable',
-    inputs: [{ name: 'amount', type: 'uint256' }], outputs: [] },
-] as const;
 
 /**
  * The console is the whole application.
@@ -77,7 +73,7 @@ export function ConsoleApp() {
       const hash = await conn.wallet.writeContract({
         chain: cfg.chain, account: conn.account,
         address: cfg.addresses.collateral, abi: faucetAbi,
-        functionName: 'faucet', args: [10_000n * 10n ** BigInt(cfg.decimals)],
+        functionName: 'faucet', args: [FAUCET_UNITS * 10n ** BigInt(cfg.decimals)],
       });
       await market.publicClient.waitForTransactionReceipt({ hash });
     } catch { /* the row goes back to idle; the balance says the rest */ }
@@ -124,6 +120,9 @@ export function ConsoleApp() {
   const gated = ready && !invited && (!conn || wrongChain);
 
   const view = renderView(path, navigate);
+  // Deposit and withdraw are errands, not places. They arrive on a sheet over
+  // whatever you were doing rather than replacing it.
+  const [sheet, setSheet] = useState<WalletSheet>(null);
 
   const show = (next: Screen) => { setScreen(next); setCursor(0); };
 
@@ -183,6 +182,27 @@ export function ConsoleApp() {
     { key: 'positions', label: 'Positions', sub: 'what you hold, and what is owed to you' },
     { key: 'history', label: 'History', sub: 'duels that are over' },
     // Testnet only, and only with a wallet to mint into.
+    // Money in and money out, next to each other. Someone looking for one is
+    // usually about to look for the other, and a Withdraw that is hard to find
+    // is the thing that makes an app feel like it is holding your funds.
+    ...(conn && !wrongChain
+      ? [
+          {
+            key: 'deposit',
+            label: 'Deposit',
+            right: balance === null ? '…' : `${formatUnits(balance, cfg.decimals)} ${cfg.collateralSymbol}`,
+            sub: cfg.faucet ? 'your address, or mint from the faucet' : 'your address on this chain',
+          },
+          {
+            key: 'withdraw',
+            label: 'Withdraw',
+            sub: `send ${cfg.collateralSymbol} to another address`,
+            disabled: balance === null || balance === 0n,
+          },
+        ]
+      : []),
+    // Kept as its own row as well: on testnet it is one press from the menu and
+    // the errand is usually "top me up", not "show me an address".
     ...(cfg.faucet && conn
       ? [{
           key: 'faucet',
@@ -216,6 +236,10 @@ export function ConsoleApp() {
           else if (i.key === 'duels') show('duels');
           else if (i.key === 'positions') show('positions');
           else if (i.key === 'history') show('history');
+          // A sheet, not a screen: the run stays up behind it and dismissing it
+          // is a swipe rather than a navigation. See WalletDrawer.
+          else if (i.key === 'deposit') { show('game'); setSheet('deposit'); }
+          else if (i.key === 'withdraw') { show('game'); setSheet('withdraw'); }
           else if (i.key === 'faucet') void runFaucet();
           else if (i.key === 'switch') doSwitch();
           else if (i.key === 'signout') {
@@ -311,7 +335,9 @@ export function ConsoleApp() {
 
         <Footer engine={engine} s={snap} />
       </Panel>
-      
+
+      <WalletDrawer sheet={sheet} onClose={() => setSheet(null)} />
+
       {/* Nothing until Privy has finished restoring: flashing the card at
           someone who is already signed in, then snatching it away, is worse
           than a moment of the console alone. */}
@@ -337,7 +363,7 @@ function renderView(path: string, navigate: (to: string) => void) {
   if (roomLink) {
     return {
       isGame: false as const,
-      label: 'a room',
+      label: `room #${roomLink.roomId}`,
       node: <RoomPanel roomId={roomLink.roomId} escrow={roomLink.escrow} onBack={() => navigate('/')} />,
     };
   }

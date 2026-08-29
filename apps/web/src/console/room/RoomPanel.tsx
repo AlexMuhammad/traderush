@@ -5,7 +5,7 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Fault, Readout, TxLine } from '../components/Readout';
 import { Trail } from '../components/Trail';
 import { intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
@@ -90,27 +90,48 @@ export function RoomPanel({
   const entryLeft = room.entryDeadline - now;
   const mine = seat ? seat.up + seat.down : 0n;
 
+  // The same parts the game face is built from, in the same order: the question
+  // strip, the window, then trays and keys. The create screen already reads this
+  // way; a lobby that reads any other way makes one flow look like two products.
+  const trend = state && state.spot >= state.strike ? 'up' : 'dn';
   const header = (
     <>
-      {state && <Trail state={state} />}
-      <Rows>
-        <Row label="market">
-          {state ? `${state.symbol} · ${intervalLabel(state.intervalSec)} · strike ${price(state.strike)} · spot ${price(state.spot)}` : 'reading…'}
-        </Row>
-        <Row label="pot" tone="lamp">{money.format(pot)}</Row>
-        <Row label="up" tone="up">
-          {money.plain(room.totalUp)} · pays {multiple(room.totalUp)}
-        </Row>
-        <Row label="down" tone="dn">
-          {money.plain(room.totalDown)} · pays {multiple(room.totalDown)}
-        </Row>
-        {mine > 0n && seat && (
-          <Row label="you">
-            {seat.up > 0n && <>{money.plain(seat.up)} up </>}
-            {seat.down > 0n && <>{money.plain(seat.down)} down</>}
-          </Row>
-        )}
-      </Rows>
+      {state && (
+        <div className="window">
+          <div className="crt">
+            <Trail state={state} />
+            <div className="scan" />
+          </div>
+          <div className="readout">
+            <span className={`px ${trend}`}>{price(state.spot)}</span>
+            <span className={`dl ${trend}`}>
+              {state.spot >= state.strike ? '+' : ''}{(state.spot - state.strike).toFixed(2)}
+            </span>
+            <span>strike {price(state.strike)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Two facts, one row. The per-side totals used to live here too, and they
+          are already printed on the keys below — a number said twice on one screen
+          is a number the reader has to check against itself. */}
+      <div className="order">
+        <div className="trayrow">
+          <div className="calc">
+            <span>pot</span>
+            <span className="lamp">{money.format(pot)}</span>
+          </div>
+          <div className="calc">
+            <span>you</span>
+            <span>
+              {mine === 0n ? '—' : <>
+                {seat && seat.up > 0n && <>{money.plain(seat.up)} up </>}
+                {seat && seat.down > 0n && <>{money.plain(seat.down)} down</>}
+              </>}
+            </span>
+          </div>
+        </div>
+      </div>
     </>
   );
 
@@ -120,77 +141,92 @@ export function RoomPanel({
     const url = `${window.location.origin}${rooms.link(roomId)}`;
 
     return (
-      <Readout title={`Room #${roomId}`} right={`entry closes in ${Math.max(0, entryLeft)}s`}>
+      <>
         {header}
 
-        <div className="calls" style={{ marginTop: 11 }}>
+        {/* Here the multiple IS your payout — it comes from the split in this
+            room, not from a book that decides nothing. So unlike the create
+            screen, it belongs on the key you are about to press. */}
+        <div className="calls calls--pick">
           {(['up', 'down'] as const).map((sd) => (
             <Key key={sd} lit={side === sd} onPress={() => setSide(sd)}>
               <SideIcon side={sd} />
               <span className="nm">{sd.toUpperCase()}</span>
-              <span className="mul">{multiple(sd === 'up' ? room.totalUp : room.totalDown)}</span>
+              <span className="mul">pays {multiple(sd === 'up' ? room.totalUp : room.totalDown)}</span>
             </Key>
           ))}
         </div>
 
-        <label className="field">
-          <span>stake ({money.symbol})</span>
-          <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
-        </label>
+        <div className="order">
+          <label className="field field--inline">
+            <span>stake ({money.symbol})</span>
+            <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
+          </label>
+          <div className="calc">
+            <span>entry closes in</span>
+            <span>{Math.max(0, entryLeft)}s</span>
+          </div>
+        </div>
 
-        {!conn ? (
-          <Key className="action" disabled={connecting} onPress={doConnect}>
-            {connecting ? 'connecting…' : 'Sign in to join'}
-          </Key>
-        ) : (
-          <Key className="action" disabled={!canJoin}
-               onPress={() => run(async () => {
-                 // The approval rides along with the join rather than standing
-                 // in front of it. See useRoomAllowance.ensure.
-                 await allow.ensure(conn.wallet, conn.account, stake);
-                 return rooms.join(conn.wallet, conn.account, roomId, side, stake);
-               })}>
-            {allow.approving ? 'approving…'
-              : pending ? 'pending…'
-              : `Back ${side.toUpperCase()} with ${money.format(stake)}`}
-          </Key>
-        )}
+        <div className="calls calls--act">
+          <Key onPress={onBack}><span className="nm">back</span></Key>
+          {!conn ? (
+            <Key lit disabled={connecting} onPress={doConnect}>
+              <span className="nm">{connecting ? 'connecting…' : 'sign in'}</span>
+            </Key>
+          ) : (
+            <Key lit={canJoin} disabled={!canJoin}
+                 onPress={() => run(async () => {
+                   // The approval rides along with the join rather than standing
+                   // in front of it. See useRoomAllowance.ensure.
+                   await allow.ensure(conn.wallet, conn.account, stake);
+                   return rooms.join(conn.wallet, conn.account, roomId, side, stake);
+                 })}>
+              <span className="nm">
+                {allow.approving ? 'approving…' : pending ? 'pending…' : `back ${side}`}
+              </span>
+            </Key>
+          )}
+        </div>
 
-        <p className="note">
-          Join as many times as you like, either side, until entry closes. The odds above
-          move as people pile in.
-          {allow.enough === false && ' Your first join on this wallet signs twice: permission, then the join.'}
+        <p className="hint">
+          Any side, any size, until entry closes. The odds move as people pile in.
+          {allow.enough === false && ' First join signs twice.'}
         </p>
         <div className="linkline">
-          <code>{url}</code>
+          {/* The middle of a room link is an escrow address nobody reads. */}
+          <code title={url}>{url.replace(/\/0x[0-9a-fA-F]{8}[0-9a-fA-F]+\//, '/0x…/')}</code>
           <button onClick={() => void navigator.clipboard.writeText(url)}>copy</button>
         </div>
 
         {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="joined" />}
-        <Key className="action" onPress={onBack}>Back</Key>
-      </Readout>
+      </>
     );
   }
 
   // --------------------------------------------------- nobody took the other side
   if (room.oneSided) {
     return (
-      <Readout title={`Room #${roomId}`} right="uncontested">
+      <>
         {header}
-        <p className="note warn">
-          Everyone backed the same side, so there is nothing to win from. The stakes are
-          merged back and everyone takes out exactly what they put in.
+        <p className="hint hint--warn">
+          Everyone backed the same side, so there is nothing to win from. The stakes
+          are merged back and everyone takes out exactly what they put in.
         </p>
-        <Key className="action"
-             disabled={!conn || pending || mine === 0n || Boolean(seat?.settled)}
-             onPress={() => conn && run(() => rooms.refund(conn.wallet, conn.account, roomId))}>
-          {pending ? 'pending…' : seat?.settled ? 'refunded' : `Refund ${money.format(mine)}`}
-        </Key>
+        <div className="calls calls--act">
+          <Key onPress={onBack}><span className="nm">back</span></Key>
+          <Key lit={Boolean(conn) && mine > 0n && !seat?.settled}
+               disabled={!conn || pending || mine === 0n || Boolean(seat?.settled)}
+               onPress={() => conn && run(() => rooms.refund(conn.wallet, conn.account, roomId))}>
+            <span className="nm">
+              {pending ? 'pending…' : seat?.settled ? 'refunded' : `refund ${money.format(mine)}`}
+            </span>
+          </Key>
+        </div>
         {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="refunded" />}
-        <Key className="action" onPress={onBack}>Back</Key>
-      </Readout>
+      </>
     );
   }
 
@@ -266,53 +302,62 @@ export function RoomPanel({
   };
 
   return (
-    <Readout title={`Room #${roomId}`} right={settledMarket ? (voided ? 'called off' : 'settled') : 'running'}>
+    <>
       {header}
 
       {settledMarket && (
-        <Rows>
-          {voided
-            ? <Row label="result" tone="lamp">called off — both sides redeem half</Row>
-            : <Row label="result" tone={upWon ? 'up' : 'dn'}>{upWon ? 'UP' : 'DOWN'} took it</Row>}
-          <Row label="oracle">
-            {state.oracleQuestionId
-              ? <a href={oracleUrl(cfg, state.oracleQuestionId)} target="_blank" rel="noreferrer">oracle question</a>
-              : 'none'}
-          </Row>
-        </Rows>
+        <div className="order">
+          <div className="calc">
+            <span>result</span>
+            <span className={voided ? 'lamp' : upWon ? 'up' : 'dn'}>
+              {voided ? 'called off — both sides redeem half' : `${upWon ? 'UP' : 'DOWN'} took it`}
+            </span>
+          </div>
+          <div className="calc">
+            <span>oracle</span>
+            <span>
+              {state.oracleQuestionId
+                ? <a href={oracleUrl(cfg, state.oracleQuestionId)} target="_blank" rel="noreferrer">oracle question</a>
+                : 'none'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {owed > 0n && (
+        <p className="hint hint--warn">
+          {settledMarket
+            ? 'Winnings are not paid out automatically — a settled market pays only when asked.'
+            : 'Your share of the pot is waiting in the escrow. Take it out now; it pays when the window settles.'}
+        </p>
       )}
 
       {/* One key for the whole payout. What it has left to do decides its
           wording, not which of two screens you happen to be on. */}
-      {owed > 0n && (
-        <>
-          <p className="note warn">
-            {settledMarket
-              ? 'Winnings are not paid out automatically — a settled market pays only when asked.'
-              : 'Your share of the pot is waiting in the escrow. Take it out now; it pays when the window settles.'}
-          </p>
-          <Key className="action" disabled={!conn || pending} onPress={() => void collect()}>
+      <div className="calls calls--act">
+        <Key onPress={onBack}><span className="nm">back</span></Key>
+        <Key lit={owed > 0n && Boolean(conn)} disabled={!conn || pending || owed === 0n}
+             onPress={() => void collect()}>
+          <span className="nm">
             {pending ? 'pending…'
-              : voided ? 'Collect refund'
-              : settledMarket ? `Collect ${money.format(owed)}`
-              : `Claim ${money.format(owed)}`}
-          </Key>
-        </>
-      )}
+              : owed === 0n ? 'nothing owed'
+              : voided ? 'collect refund'
+              : settledMarket ? `collect ${money.format(owed)}`
+              : `claim ${money.format(owed)}`}
+          </span>
+        </Key>
+      </div>
 
       {seat?.settled && !settledMarket && (
-        <p className="note">
-          Claimed. The window is still running — come back when it settles.
-        </p>
+        <p className="hint">Claimed. The window is still running — come back when it settles.</p>
       )}
       {seat?.settled && settledMarket && held && held.up === 0n && held.down === 0n && (
-        <p className="note">Nothing left on this leg.</p>
+        <p className="hint">Nothing left on this leg.</p>
       )}
-      {mine === 0n && <p className="note">You are not in this room.</p>}
+      {mine === 0n && <p className="hint">You are not in this room.</p>}
 
       {error ? <Fault error={error} /> : null}
       {hash && <TxLine hash={hash} />}
-      <Key className="action" onPress={onBack}>Back</Key>
-    </Readout>
+    </>
   );
 }
