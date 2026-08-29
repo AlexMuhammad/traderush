@@ -46,14 +46,35 @@ export function drawBear(c: Ctx, x: number, y: number, s: number, frame: number,
 
 /** You. A small glowing figure; the glow is what makes it read as the player. */
 export function drawRunner(c: Ctx, x: number, y: number, rot = 0, col = '#FFD777', frame = 0): void {
+  // A four-pose stride: contact, passing, contact mirrored, passing. Two poses
+  // a pixel apart — which is what this was — is a shiver, not a run: the legs
+  // have to leave the body and the body has to rise off them. Discrete poses
+  // rather than a sine, because at eight pixels tall an interpolated limb is a
+  // smear and the eye reads a run from clear contacts.
+  //
+  // `lift` is what sells it. Every stride the whole figure leaves the ground for
+  // two frames, so it bounds instead of hovering.
+  const POSE = [
+    { fx: 3, fh: 5, bx: -6, bh: 3, af: 4, ab: -6, lift: 0 },
+    { fx: 1, fh: 6, bx: -3, bh: 5, af: 2, ab: -4, lift: -1 },
+    { fx: -5, fh: 3, bx: 2, bh: 5, af: -5, ab: 4, lift: 0 },
+    { fx: -3, fh: 5, bx: 0, bh: 6, af: -4, ab: 2, lift: -1 },
+  ][Math.floor(frame / 3) % 4]!;
+
   c.save(); c.translate(x, y); c.rotate(rot);
   c.shadowColor = 'rgba(255,215,119,.9)'; c.shadowBlur = 12;
   c.fillStyle = col;
-  c.fillRect(-2, -13, 6, 6);            // head
-  c.fillRect(-3, -7, 8, 6);             // torso
-  const stride = Math.floor(frame / 3) % 2;
-  c.fillRect(-3, -1, stride ? 3 : 2, 4);
-  c.fillRect(2, -1, stride ? 2 : 3, 4);
+  const L = POSE.lift;
+  c.fillRect(-2, -13 + L, 6, 6);                    // head
+  c.fillRect(-3, -7 + L, 8, 6);                     // torso
+  // Arms swing opposite the legs — the give-away that something is running and
+  // not being dragged sideways.
+  c.fillRect(POSE.af, -6 + L, 3, 2);
+  c.fillRect(POSE.ab, -4 + L, 3, 2);
+  // Legs are anchored so a planted foot always lands on the same ground line,
+  // whatever the body is doing above it.
+  c.fillRect(POSE.fx, -1 + L, 3, POSE.fh);
+  c.fillRect(POSE.bx, -1 + L, 3, POSE.bh);
   c.shadowBlur = 0; c.restore();
 }
 

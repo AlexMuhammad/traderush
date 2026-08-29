@@ -1,4 +1,4 @@
-import type { Attack, Particle } from './types';
+import type { Attack, Particle, Tally } from './types';
 import { burst } from './fx';
 import {
   drawBull, drawBear, drawBullPaw, drawBullCharge, drawBullStomp,
@@ -288,4 +288,343 @@ export function drawCinematic(c: CanvasRenderingContext2D, atk: Attack, env: Cin
   if (atk.type === 'stand') return drawStand(c, atk, env);
   if (atk.type === 'gore') return drawGore(c, atk, env);
   return drawClaw(c, atk, env);
+}
+
+
+/* ------------------------------------------------------------ the settlement tally
+
+   The timeline is shared with the engine, which schedules the sounds against
+   these same numbers — a pop that lands 80ms off the thing it belongs to reads
+   as a different, worse machine, and two copies of the beat drift apart the
+   first time either is tuned.
+
+   The shape of it is borrowed from Balatro, and so is the reason it works: one
+   reward is broken into several arrivals, each with its own sound a step higher
+   than the last, and the biggest one is preceded by silence. */
+
+/** The stake box flies in. */
+export const T_STAKE = 300;
+/** The odds settle into it. */
+export const T_ODDS = 560;
+/** …and then nothing happens for four hundred milliseconds. The gap is the
+ *  single most effective thing in here: anticipation is the reward. */
+export const T_MULT = 1220;
+/** The two boxes collide. */
+export const T_SLAM = 1540;
+/** How long the number takes to climb (or, on a loss, to drain away). */
+export const T_COUNT = 620;
+/** First breakdown line. */
+export const T_ITEM_0 = T_SLAM + T_COUNT + 170;
+export const T_ITEM_STEP = 230;
+
+export const tallyItemAt = (i: number): number => T_ITEM_0 + i * T_ITEM_STEP;
+export const tallyEndAt = (items: number): number => tallyItemAt(Math.max(0, items - 1)) + 260;
+
+/** Ease-out-back: overshoots, then settles. The overshoot is the whole point —
+ *  a value that arrives at its final size is placed, one that overshoots is
+ *  thrown. */
+const back = (k: number): number => {
+  const t = k - 1;
+  return 1 + t * t * (2.70158 * t + 1.70158);
+};
+
+const ease = (k: number): number => 1 - (1 - k) ** 3;
+
+/** Deterministic pseudo-random in 0..1. The celebration must look scattered and
+ *  be reproducible from `t` alone — nothing here is allowed to hold state. */
+const rnd = (i: number): number => {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+/** Light rays turning behind the plaque. The cheapest way to make a number look
+ *  like an event rather than a readout. */
+function drawRays(c: CanvasRenderingContext2D, cx: number, cy: number, k: number, w: number, h: number, t: number): void {
+  const R = Math.hypot(w, h);
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(t / 2600);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.arc(0, 0, R, a - 0.11, a + 0.11);
+    c.closePath();
+    c.fillStyle = `rgba(255,200,87,${(0.05 + 0.035 * Math.sin(t / 300 + i)) * k})`;
+    c.fill();
+  }
+  c.restore();
+}
+
+/** Falling gold. Drawn from `t`, so it is the same shower every time and costs
+ *  no particle array. */
+function drawConfetti(c: CanvasRenderingContext2D, t: number, w: number, h: number): void {
+  const COLS = ['255,200,87', '255,215,119', '91,240,166', '255,255,255'];
+  for (let i = 0; i < 46; i++) {
+    const x = rnd(i + 90) * w;
+    const y = ((t / 1000) * (42 + rnd(i) * 90) + rnd(i + 7) * h * 2) % (h + 30) - 15;
+    const sw = 2.5 + rnd(i + 3) * 2;
+    c.save();
+    c.translate(x, y);
+    c.rotate(t / 260 + i);
+    c.fillStyle = `rgba(${COLS[i % COLS.length]},.85)`;
+    c.fillRect(-sw / 2, -3, sw, 6);
+    c.restore();
+  }
+}
+
+/** A rounded plaque with a lit edge. */
+function plaque(c: CanvasRenderingContext2D, x: number, y: number, pw: number, ph: number, glow: number, win: boolean): void {
+  const edge = win ? '255,200,87' : '255,90,72';
+  c.save();
+  c.beginPath();
+  c.roundRect(x, y, pw, ph, 9);
+  const g = c.createLinearGradient(0, y, 0, y + ph);
+  g.addColorStop(0, 'rgba(20,24,27,.98)');
+  g.addColorStop(1, 'rgba(6,8,9,.98)');
+  c.fillStyle = g;
+  c.shadowColor = `rgba(${edge},${0.5 * glow})`;
+  c.shadowBlur = 26 * glow;
+  c.fill();
+  c.shadowBlur = 0;
+  c.lineWidth = 1.5;
+  c.strokeStyle = `rgba(${edge},${0.55 + 0.35 * glow})`;
+  c.stroke();
+  c.restore();
+}
+
+/** One of the two boxes that collide. Balatro's blue-and-red pair: what you
+ *  brought, and what the table does to it. */
+function box(
+  c: CanvasRenderingContext2D,
+  cx: number, cy: number, bw: number, bh: number,
+  label: string, value: string, rgb: string, k: number, big: boolean,
+): void {
+  const pop = back(Math.min(1, k));
+  c.save();
+  c.translate(cx, cy);
+  c.scale(0.5 + 0.5 * pop, 0.5 + 0.5 * pop);
+  c.beginPath();
+  c.roundRect(-bw / 2, -bh / 2, bw, bh, 5);
+  c.fillStyle = `rgba(${rgb},.16)`;
+  c.fill();
+  c.lineWidth = 1;
+  c.strokeStyle = `rgba(${rgb},.75)`;
+  c.stroke();
+
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = '400 8px Share Tech Mono, monospace';
+  c.fillStyle = `rgba(${rgb},.75)`;
+  c.fillText(label.toUpperCase(), 0, -bh / 2 + 8);
+  c.font = `700 ${big ? 20 : 16}px Barlow Condensed, sans-serif`;
+  c.shadowColor = `rgba(${rgb},.9)`;
+  c.shadowBlur = big ? 14 : 8;
+  c.fillStyle = `rgb(${rgb})`;
+  c.fillText(value, 0, bh / 2 - 12);
+  c.shadowBlur = 0;
+  c.restore();
+}
+
+/**
+ * Draw the result card: the verdict, the two boxes, the collision, the number
+ * and its breakdown.
+ *
+ * The card owns its whole layout — title included. Splitting the title across
+ * two drawing sites is what put "HELD THE LINE" through the middle of the STAKE
+ * row: two owners, one column of glass, and neither of them measuring.
+ *
+ * `t` is ms since the card appeared. Every beat is derived from it rather than
+ * held as state, so the card can be drawn at any point in its life — a frame
+ * dropped, a tab restored — and looks exactly as far along as the clock says.
+ *
+ * Returns the shake it wants this frame.
+ */
+export function drawTally(
+  c: CanvasRenderingContext2D,
+  T: Tally,
+  title: string,
+  t: number,
+  env: CinemaEnv,
+): number {
+  const { w, h } = env;
+  const win = T.win;
+  const cx = w / 2;
+  const cy = h / 2;
+  let shake = 0;
+
+  if (win && t > T_SLAM) drawRays(c, cx, cy, Math.min(1, (t - T_SLAM) / 500), w, h, t);
+
+  // ---- the plaque ---------------------------------------------------------
+  const lines = win ? T.items.length : (T.missedBy ? 1 : 0);
+  const TITLE_H = 22, ZONE_H = 48, LINE_H = 14;
+  const pw = Math.min(w - 26, 286);
+  const ph = 10 + TITLE_H + 6 + ZONE_H + 8 + lines * LINE_H + 20;
+  const px = cx - pw / 2;
+  const py = cy - ph / 2;
+
+  // The gap before the multiplier is silent, but not still: the plaque strains.
+  const strain = t > T_ODDS + 120 && t < T_MULT ? (t - T_ODDS - 120) / (T_MULT - T_ODDS - 120) : 0;
+  if (strain > 0) shake = strain * 3;
+  const glow = t < T_SLAM ? 0.25 + strain * 0.5 : 0.6 + 0.4 * Math.sin((t - T_SLAM) / 220);
+  plaque(c, px, py, pw, ph, glow, win);
+
+  // ---- the verdict --------------------------------------------------------
+  const tk = Math.min(1, t / 260);
+  c.save();
+  c.translate(cx, py + 10 + TITLE_H / 2);
+  c.scale(0.7 + 0.3 * back(tk), 0.7 + 0.3 * back(tk));
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = '700 20px Barlow Condensed, sans-serif';
+  c.shadowColor = win ? 'rgba(255,200,87,.9)' : 'rgba(255,90,72,.9)';
+  c.shadowBlur = 16;
+  c.fillStyle = win ? '#FFD777' : '#FF7566';
+  c.fillText(title, 0, 0);
+  c.shadowBlur = 0;
+  c.restore();
+
+  // ---- the two boxes, and their collision ---------------------------------
+  const zoneY = py + 10 + TITLE_H + 6 + ZONE_H / 2;
+  const BW = 96, BH = 40;
+  const MULT_RGB = win ? '255,200,87' : '255,90,72';
+
+  if (t < T_SLAM) {
+    // Sliding in from opposite edges, so the collision has somewhere to come
+    // from. The stake is what you own; the multiple arrives from outside.
+    const sk = Math.min(1, (t - T_STAKE) / 260);
+    if (sk > 0) {
+      const x = cx - BW / 2 - 5 - (1 - ease(sk)) * 70;
+      box(c, x, zoneY, BW, BH, 'stake', T.stake, '198,202,206', sk, false);
+      if (t >= T_ODDS) {
+        const ok = Math.min(1, (t - T_ODDS) / 200);
+        c.save();
+        c.globalAlpha = ok;
+        c.textAlign = 'center';
+        c.font = '400 8px Share Tech Mono, monospace';
+        c.fillStyle = 'rgba(198,202,206,.6)';
+        c.fillText(`${T.oddsPct}% BOOK`, x, zoneY + BH / 2 + 9);
+        c.restore();
+      }
+    }
+    if (t >= T_MULT) {
+      const mk = Math.min(1, (t - T_MULT) / 240);
+      const x = cx + BW / 2 + 5 + (1 - ease(mk)) * 70;
+      box(c, x, zoneY, BW, BH, win ? 'pays' : 'wrong side', `×${win ? T.mult.toFixed(2) : '0'}`, MULT_RGB, mk, true);
+      if (mk < 0.4) shake = Math.max(shake, win ? 6 : 4);
+      c.save();
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = '700 15px Barlow Condensed, sans-serif';
+      c.fillStyle = `rgba(${MULT_RGB},${mk})`;
+      c.fillText('×', cx, zoneY);
+      c.restore();
+    }
+  } else {
+    // ---- the number -------------------------------------------------------
+    const k = Math.min(1, (t - T_SLAM) / T_COUNT);
+    // A win climbs from nothing. A loss DRAINS from what you had: watching the
+    // stake you already owned run down to zero is a different feeling from a
+    // zero that was simply always there, and it is the one that stings.
+    const from = win ? 0 : T.total + Math.abs(T.net);
+    const shown = Math.round(from + (T.total - from) * ease(k));
+    const punch = back(Math.min(1, (t - T_SLAM) / 260));
+    if (t - T_SLAM < 90) shake = Math.max(shake, win ? 13 : 8);
+
+    c.save();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.translate(cx, zoneY);
+    c.scale(0.3 + 0.7 * punch, 0.3 + 0.7 * punch);
+    c.font = '700 36px Barlow Condensed, sans-serif';
+    c.shadowColor = `rgba(${MULT_RGB},.95)`;
+    c.shadowBlur = 18 + (1 - k) * 32;
+    c.fillStyle = win ? '#FFD777' : '#FF7566';
+    c.fillText(shown.toLocaleString('en-US'), 0, 0);
+    c.restore();
+
+    // ---- the breakdown ----------------------------------------------------
+    const listY = py + 10 + TITLE_H + 6 + ZONE_H + 8;
+    c.textBaseline = 'middle';
+    T.items.forEach((it, i) => {
+      const at = tallyItemAt(i);
+      if (t < at) return;
+      const ik = Math.min(1, (t - at) / 200);
+      const y = listY + i * LINE_H + LINE_H / 2;
+      c.save();
+      c.globalAlpha = ik;
+      c.textAlign = 'left';
+      c.font = '400 9px Share Tech Mono, monospace';
+      c.fillStyle = 'rgba(198,202,206,.6)';
+      c.fillText(it.label.toUpperCase(), px + 16, y);
+      c.textAlign = 'right';
+      c.font = '700 12px Barlow Condensed, sans-serif';
+      c.fillStyle = it.tone === 'gold' ? '#FFC857' : it.tone === 'up' ? '#5BF0A6' : '#FF7566';
+      c.fillText(it.value, px + pw - 16 + (1 - ik) * 12, y);
+      c.restore();
+    });
+
+    // A loss gets the one line that matters instead: how close it was. The
+    // brain treats a near miss like a win, which is exactly why it is here and
+    // exactly why it is worth being deliberate about.
+    if (!win && T.missedBy && t > T_ITEM_0) {
+      const ik = Math.min(1, (t - T_ITEM_0) / 220);
+      c.save();
+      c.globalAlpha = ik;
+      c.textAlign = 'center';
+      c.font = `700 ${T.nearMiss ? 13 : 10}px Barlow Condensed, sans-serif`;
+      c.fillStyle = T.nearMiss ? '#FFC857' : 'rgba(198,202,206,.65)';
+      c.fillText(T.nearMiss ? `SO CLOSE · MISSED BY ${T.missedBy}` : `MISSED BY ${T.missedBy}`,
+                 cx, listY + LINE_H / 2);
+      c.restore();
+    }
+
+    // ---- the net, once everything has landed ------------------------------
+    const netAt = tallyEndAt(lines);
+    if (t > netAt) {
+      const nk = Math.min(1, (t - netAt) / 200);
+      c.save();
+      c.globalAlpha = nk;
+      c.textAlign = 'center';
+      c.font = '400 11px Share Tech Mono, monospace';
+      c.fillStyle = T.net >= 0 ? 'rgba(91,240,166,.95)' : 'rgba(255,117,102,.95)';
+      c.fillText(`${T.net >= 0 ? '+' : ''}${T.net.toLocaleString('en-US')} PTS`,
+                 cx, py + ph - 11);
+      c.restore();
+    }
+  }
+
+  // ---- the streak, top right of the plaque --------------------------------
+  // Something you can LOSE holds harder than something you can win. It appears
+  // with the breakdown, once the number is already yours.
+  if (T.streak >= 2 && t > T_ITEM_0) {
+    const sk = Math.min(1, (t - T_ITEM_0) / 260);
+    const bw = 62, bh = 17;
+    const bx = px + pw - bw / 2 - 8;
+    const by = py - 2;
+    c.save();
+    c.translate(bx, by);
+    c.scale(0.4 + 0.6 * back(sk), 0.4 + 0.6 * back(sk));
+    c.beginPath();
+    c.roundRect(-bw / 2, -bh / 2, bw, bh, 8);
+    c.fillStyle = `rgba(255,200,87,${0.14 + 0.06 * Math.sin(t / 180)})`;
+    c.fill();
+    c.strokeStyle = 'rgba(255,200,87,.85)';
+    c.lineWidth = 1;
+    c.stroke();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = '700 10px Barlow Condensed, sans-serif';
+    c.shadowColor = 'rgba(255,200,87,.9)';
+    c.shadowBlur = 10;
+    c.fillStyle = '#FFD777';
+    c.fillText(`${T.streak} IN A ROW`, 0, 0);
+    c.restore();
+  }
+
+  if (win && t > T_SLAM + 60) drawConfetti(c, t - T_SLAM, w, h);
+
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+  return shake;
 }

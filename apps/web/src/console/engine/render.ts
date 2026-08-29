@@ -1,7 +1,7 @@
 import type { Audio } from './audio';
 import type { BeastState } from './beasts';
 import { drawBeast } from './beasts';
-import { drawCinematic } from './cinematics';
+import { drawCinematic, drawTally } from './cinematics';
 import { burst, stepParticles, stepRings, stepSlashes } from './fx';
 import { drawRunner } from './sprites';
 import type { Attack, Outcome, Particle, Race, Ring, Slash } from './types';
@@ -27,6 +27,8 @@ export interface Scene {
   slashes: Slash[];
   attack: Attack | null;
   outcome: Outcome | null;
+  /** ms since the result card appeared. Owned by the engine, advanced here. */
+  outcomeT: number;
 
   /** Screen shake, decays each frame. */
   shake: number;
@@ -129,18 +131,26 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     const mn = lo - pad, mx = hi + pad;
     const Y = (p: number) => h - 12 - ((p - mn) / (mx - mn)) * (h - 26);
 
-    // The trail fills the glass, edge to edge: the x axis is the DATA, not the
-    // clock. Mapping x to progress through the window left the right-hand side
-    // empty for most of a window and the left empty at the start of one, which
-    // read as a broken chart. How far through the window we are is already on
-    // the travel bar and the countdown underneath.
-    //
-    // This is only honest because the window is backfilled — the tick tape for
-    // short dials, candles for long ones — so the samples really do span it.
     const startX = 8;
-    const nowX = w - 14;
+    // The finish. The runner is only here when the window is over.
+    const finishX = w - 14;
+
+    // x is the CLOCK, not the data.
+    //
+    // Filling the glass edge to edge was honest about the samples and dead as a
+    // picture: the head was welded to the right frame, so nothing on screen moved
+    // as the window ran down, and every window looked the same shape. Placing a
+    // sample where in the window it HAPPENED costs nothing in honesty — the tape
+    // is timestamped — and buys the whole thing: a runner who starts at the gate
+    // and crosses the glass, with the empty stretch ahead of him reading as the
+    // time still to run rather than as missing data.
+    const X = (t: number) => startX + Math.max(0, Math.min(1, t / R.win)) * (finishX - startX);
+    // A fresh dial's tape may not reach back to the open. It starts where it
+    // starts rather than being stretched across time it never observed.
+    const trailX0 = X(Math.min(R.histStartT, R.t));
+    const nowX = Math.max(trailX0 + 1, X(R.t));
     const N = R.hist.length;
-    const step = Math.max(0.5, (nowX - startX) / Math.max(1, N - 1));
+    const step = Math.max(0.5, (nowX - trailX0) / Math.max(1, N - 1));
     const ly = Math.round(Y(R.strike)) + 0.5;   // the border between territories
 
     // ---- territories -------------------------------------------------------
@@ -218,8 +228,8 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
     // ---- the trail ---------------------------------------------------------
     c.beginPath();
-    c.moveTo(startX, h);
-    for (let i = 0; i < N; i++) c.lineTo(startX + i * step, Y(R.hist[i]!));
+    c.moveTo(trailX0, h);
+    for (let i = 0; i < N; i++) c.lineTo(trailX0 + i * step, Y(R.hist[i]!));
     c.lineTo(nowX, h);
     c.closePath();
     const grad = c.createLinearGradient(0, 0, 0, h);
@@ -236,11 +246,11 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
       // A lone sample has no line to draw. A short mark at the price says
       // "watching from here" without inventing a shape.
       const y = Y(R.hist[0]!);
-      c.moveTo(startX, y);
-      c.lineTo(Math.max(startX + 2, nowX), y);
+      c.moveTo(trailX0, y);
+      c.lineTo(Math.max(trailX0 + 2, nowX), y);
     } else {
       for (let i = 0; i < N; i++) {
-        const x = startX + i * step;
+        const x = trailX0 + i * step;
         i ? c.lineTo(x, Y(R.hist[i]!)) : c.moveTo(x, Y(R.hist[i]!));
       }
     }
@@ -270,7 +280,23 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
       if (S.lungeT > 1400) { S.lungeT = 0; S.lunge = 1; S.audio.snort(); }
     }
     S.lunge *= 0.93;
-    const gapPx = 9 + (1 - threat) * 32 - S.lunge * 7;
+    const gapPx = 9 + (1 - threat) * 56 - S.lunge * 7;
+
+    // How far behind the runner an animal that is NOT hunting you sits. It is
+    // the whole drama of the window: they start most of the track back, grazing,
+    // and are on your heels by the final furlong. A fixed hover — which is what
+    // this was — reads as two stickers parked at the edge, because nothing about
+    // the picture changes as the clock runs down.
+    const track = Math.max(90, finishX - startX);
+    const chase = Math.min(track * 0.62, 46 + (1 - progress) ** 1.6 * (track * 0.55));
+    // And they do not stand in one column. Staggering them means two pursuers
+    // rather than one blob, whichever way the price is going.
+    const bullLead = bullish ? -13 : 15;
+    const bearLead = bullish ? 15 : -13;
+    // Calm animals hold well off the line; the closer the window gets to over,
+    // the tighter they crowd it. The up/down separation is the invariant, so it
+    // has to be readable, not a 16px nudge under a flat strike.
+    const standoff = 14 + (1 - progress) * 26;
 
     let bullTargetX: number, bullTargetY: number, bullScale = 0.85;
     if (bullHot) {
@@ -280,8 +306,8 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     } else if (!wantBull) {
       bullTargetX = -70; bullTargetY = S.bullY; bullScale = 0.78;
     } else {
-      bullTargetX = nowX - 52 + Math.sin(S.frame * 0.03) * 10;
-      bullTargetY = ly - 16; bullScale = 0.78;
+      bullTargetX = Math.max(startX - 26, nowX - chase + bullLead + Math.sin(S.frame * 0.03) * 10);
+      bullTargetY = ly - standoff; bullScale = 0.78 + (1 - chase / track) * 0.14;
     }
     S.bullX += (bullTargetX - S.bullX) * (S.bullX ? 0.2 : 1);
     S.bullY += (bullTargetY - S.bullY) * (S.bullY ? 0.16 : 1);
@@ -295,8 +321,8 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     } else if (!wantBear) {
       bearTargetX = -70; bearTargetY = S.bearY; bearScale = 0.78;
     } else {
-      bearTargetX = nowX - 52 + Math.sin(S.frame * 0.028 + 2) * 10;
-      bearTargetY = ly + 22; bearScale = 0.78;
+      bearTargetX = Math.max(startX - 26, nowX - chase + bearLead + Math.sin(S.frame * 0.028 + 2) * 10);
+      bearTargetY = ly + standoff + 6; bearScale = 0.78 + (1 - chase / track) * 0.14;
     }
     S.bearX += (bearTargetX - S.bearX) * (S.bearX ? 0.2 : 1);
     S.bearY += (bearTargetY - S.bearY) * (S.bearY ? 0.16 : 1);
@@ -340,11 +366,13 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
         });
       }
 
-      const bob = (R.phase === 'trade' && Math.floor(S.frame / 4) % 2) ? -2 : 0;
+      // No separate bob: the stride owns the figure's rise now, and a second
+      // one on a different period made the two fight and read as jitter.
+      const bob = 0;
       const lean = Math.max(-0.4, Math.min(0.4, slope * 0.05)) + (inDanger ? threat * 0.3 : 0);
       drawRunner(c, nowX, runnerY + bob, lean, '#FFD777', S.frame);
       if (R.phase === 'trade' && S.frame % 3 === 0) {
-        S.particles.push({ x: nowX - 4, y: runnerY + 2, vx: -1.5 - Math.random(), vy: -Math.random() * 0.6, life: 1, col: '255,190,110', sz: 2 });
+        S.particles.push({ x: nowX - 4, y: runnerY + 3, vx: -1.5 - Math.random(), vy: -Math.random() * 0.6, life: 1, col: '255,190,110', sz: 2 });
       }
 
       // Sight lines from the hunter to you, once it has locked on.
@@ -394,25 +422,37 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
   // ---- result card ---------------------------------------------------------
   if (S.outcome) {
-    c.fillStyle = 'rgba(0,0,0,.5)';
+    S.outcomeT += dt;
+    const tally = S.outcome.tally;
+    // The tally needs the glass darker than a bare verdict does: it is a plaque
+    // of small numbers over a moving scene, and the scene wins otherwise.
+    c.fillStyle = tally ? 'rgba(0,0,0,.8)' : 'rgba(0,0,0,.5)';
     c.fillRect(0, 0, w, h);
-    c.textAlign = 'center';
-    // Coloured by WHICH ANIMAL took it, not by whether you won. Green is the
-    // bull and red is the bear everywhere else on this machine — the arrows on
-    // the keys, the territories, the price tag — and GORED is the bull's word
-    // even when it is your loss. Colouring it by your result would make green
-    // mean two different things on the same screen.
-    const bull = S.outcome.winner === 'up';
-    c.shadowColor = bull ? 'rgba(63,217,139,.9)' : 'rgba(255,90,72,.9)';
-    c.shadowBlur = 22;
-    c.fillStyle = bull ? '#5BF0A6' : '#FF7566';
-    c.font = '700 36px Barlow Condensed, sans-serif';
-    c.fillText(S.outcome.txt, w / 2, h / 2 + 2);
-    c.shadowBlur = 0;
-    c.font = '400 14px Share Tech Mono, monospace';
-    c.fillStyle = bull ? 'rgba(91,240,166,.9)' : 'rgba(255,117,102,.9)';
-    c.fillText(S.outcome.sub, w / 2, h / 2 + 24);
-    c.textAlign = 'left';
+
+    if (tally) {
+      // The card owns its whole layout, title included — see drawTally.
+      const want = drawTally(c, tally, S.outcome.txt, S.outcomeT,
+                             { frame: S.frame, particles: S.particles, w, h });
+      if (want > S.shake) S.shake = want;
+    } else {
+      // Coloured by WHICH ANIMAL took it, not by whether you won. Green is the
+      // bull and red is the bear everywhere else on this machine — the arrows on
+      // the keys, the territories, the price tag — and GORED is the bull's word
+      // even when it is your loss. Colouring it by your result would make green
+      // mean two different things on the same screen.
+      const bull = S.outcome.winner === 'up';
+      c.textAlign = 'center';
+      c.shadowColor = bull ? 'rgba(63,217,139,.9)' : 'rgba(255,90,72,.9)';
+      c.shadowBlur = 22;
+      c.fillStyle = bull ? '#5BF0A6' : '#FF7566';
+      c.font = '700 36px Barlow Condensed, sans-serif';
+      c.fillText(S.outcome.txt, w / 2, h / 2 + 2);
+      c.shadowBlur = 0;
+      c.font = '400 14px Share Tech Mono, monospace';
+      c.fillStyle = bull ? 'rgba(91,240,166,.9)' : 'rgba(255,117,102,.9)';
+      c.fillText(S.outcome.sub, w / 2, h / 2 + 24);
+      c.textAlign = 'left';
+    }
   }
 
   // ---- how the pack is split, along the bottom edge ------------------------
