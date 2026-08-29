@@ -902,6 +902,10 @@
 .linkline { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
 .linkline code {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: 'Share Tech Mono', monospace;
   font-size: 9px;
   color: #9AA0A5;
@@ -1326,205 +1330,384 @@
   overflow-wrap: anywhere;
 }
 
-/* ------------------------------------------------- the compact instrument panel
+/* ------------------------------------------------ the room screens on the plate
 
-   `tight` is the dense variant of a readout: the same construction, but the
-   settings read across instead of down, and the prose that explains them is
-   folded away. A screen someone opens once can afford paragraphs; one they open
-   before every room cannot — it has to fit on the plate without scrolling. */
+   These screens are built from the game face's own parts — `.q`, `.window`,
+   `.calls`, `.order` — so what follows is only what those parts do not already
+   cover. Anything here that starts to look like a second design system is a
+   sign the part should have been reused instead.
 
-.readout-panel.tight { padding: 9px 10px 10px; }
-.readout-panel.tight .trail { margin: 8px 0 0; }
-.readout-panel.tight .trail svg { height: 64px; }
+   They sit directly on the steel plate, so every colour is a dark-on-light one.
+   The dark palette that was here belonged to a recessed panel that no longer
+   exists. */
 
-/* Three numbers read across, each in its own well, like a gauge cluster. */
-.strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  margin-top: 8px;
-  border-radius: 5px;
-  overflow: hidden;
-  background: #14181B;
+/* The trail takes the CRT's place, so it drops its own frame — a bordered box
+   inside a bordered box is the tell of a component pasted where a part should
+   have gone. */
+.crt .trail { margin: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
+.crt .trail svg { height: 92px; }
+/* The axis carried a strike label the readout under the glass already prints,
+   and two clocks nobody was reading. A number said twice on one screen is a
+   number the reader has to check against itself. */
+.crt .trail__axis { display: none; }
+.crt .trail--empty { min-height: 92px; }
+
+/* Two tray facts on one line. */
+.trayrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.trayrow .calc { margin-top: 0; }
+
+/* Label beside the well rather than above it: the label is three words and the
+   line it sat on was doing nothing else. */
+.field--inline { display: flex; align-items: center; gap: 9px; }
+.field--inline > span { margin-bottom: 0; white-space: nowrap; }
+.field--inline input { flex: 1; }
+
+/* Controls on the order tray. The stake well and the segmented control are the
+   same wells the game face uses; they only need spacing here. */
+.order .field + .field { margin-top: 10px; }
+.calc--bad span:last-child { color: #8A3A2A; }
+
+/* A tray row can carry a coloured value. The tray is light, so the game's own
+   neon up/down would glare off it — these are the same hues taken down to where
+   they read as ink on steel. */
+.calc .up { color: #1B7A4B; }
+.calc .dn { color: #A83421; }
+.calc .lamp { color: #8A6410; }
+.calc a { color: #2C5D9B; }
+
+/* The invite link, on the tray rather than in a dark panel. */
+.linkline { margin-top: 9px; }
+
+/* The side keys, holding two things instead of four.
+
+   On the game face this key carries an arrow, a name, a percentage and a
+   multiple, and a hundred pixels is what four lines need. Here it carries an
+   arrow and a word — the same box with half the content, so the word shrank into
+   the middle of an empty cap. The cap comes down and the word goes up. */
+.calls--pick .key { height: 78px; }
+.calls--pick .cap .sideicon { width: 30px; height: 30px; }
+.calls--pick .cap .nm {
+  font-size: 17px;
+  letter-spacing: .2em;
+  /* The tracking pushes the last letter off centre; the padding puts it back. */
+  padding-left: .2em;
+  margin-top: 3px;
 }
-.strip > div {
-  padding: 5px 7px 6px;
-  background: linear-gradient(#101315, #191D20);
-  box-shadow: inset 0 2px 5px rgba(0,0,0,.8);
-}
-.strip span {
-  display: block;
-  font-size: 8px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
-  color: #565D63; margin-bottom: 2px;
-}
-.strip b {
-  display: block;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px; font-weight: 400; color: #D6DADD;
-}
-.strip b.up { color: var(--up); }
-.strip b.dn { color: var(--down); }
-.strip em { font-style: normal; }
-.strip em.up { color: var(--up); }
-.strip em.dn { color: var(--down); }
 
-/* Side keys keep their shape, at the height a two-choice toggle needs. */
-.calls--slim { gap: 9px; margin-top: 9px; }
-.calls--slim .key { height: 62px; }
-.calls--slim .housing { border-radius: 13px; }
-.calls--slim .cap { border-radius: 11px; }
+/* The window, with the door on it.
 
-/* Stake and entry-close, one band. */
-.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: end; }
-.duo .field { margin-top: 9px; }
-/* Same height as the segmented control beside it, so the band reads level. */
-.duo .field input { height: 27px; padding: 0 8px; font-size: 13px; border-radius: 5px; }
-/* A flat segmented readout, not three moulded keys. The choice here is a
-   setting, not an action — moulding it like the UP/DOWN caps gave a minor
-   control the same weight as the ones that actually commit money. So: one
-   shallow trough, hairline divisions, and the selected span simply lit. */
-.seg--slim {
-  height: 27px;
-  gap: 0;
+   Entry-close is a FRACTION of the window, and three keys said nothing about
+   the window — least of all the part of it that had already run, which is the
+   only reason an option is ever unavailable. The bar shows that stretch, so a
+   dead 25% pin is visibly in the past instead of mysteriously unpressable. */
+.bar { margin-top: 2px; }
+
+/* A groove cut into the tray, with a rod lying in it. Same construction as every
+   other well on the machine: hard inset at the top, a lit lower lip inside, and
+   the panel's own highlight on the outside edge below it. */
+.bar__track {
+  position: relative;
+  height: 13px;
+  border-radius: 7px;
+  background: linear-gradient(#0C0F11, #1B1F22);
+  box-shadow:
+    inset 0 3px 5px rgba(0,0,0,.95),
+    inset 0 -1px 0 rgba(255,255,255,.22),
+    inset 2px 0 3px rgba(0,0,0,.5),
+    inset -2px 0 3px rgba(0,0,0,.5),
+    0 1px 0 rgba(255,255,255,.7);
+}
+.bar__track > i {
+  position: absolute;
+  top: 2px; bottom: 2px; left: 2px;
+  border-radius: 5px 3px 3px 5px;
+}
+
+/* The rod. A cap laid on its side: bright top face, a hard break at the middle
+   where the moulding turns, and a dark underside sitting in the groove. */
+.bar__fill {
+  background: linear-gradient(#FFF6DC 0%, #FFD679 42%, #EDB13A 52%, #B9821A 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -2px 3px rgba(0,0,0,.35),
+    0 0 10px rgba(255,200,87,.45);
+}
+
+/* Time already gone. Hatched and translucent, so it reads as shade thrown across
+   whatever it covers rather than as a second bar of its own. */
+.bar__run {
+  background: repeating-linear-gradient(
+    -45deg, rgba(0,0,0,.42) 0 2px, rgba(0,0,0,.12) 2px 5px);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.28);
+}
+
+.bar__pin {
+  position: absolute;
+  top: -6px;
+  width: 22px;
+  height: 25px;
+  margin-left: -11px;
   padding: 0;
-  border-radius: 5px;
-  background: linear-gradient(#101315, #191D20);
-  box-shadow: inset 0 2px 5px rgba(0,0,0,.8), 0 1px 0 rgba(255,255,255,.06);
-}
-.seg--slim button {
-  height: 100%;
-  border-radius: 0;
+  border: none;
   background: none;
-  box-shadow: inset 1px 0 0 rgba(255,255,255,.05);
+  cursor: pointer;
+}
+/* A moulded stud, not a painted line: skirt underneath, highlight on the top
+   face. The button is a 22px hit area around it, because a 6px target is not a
+   target. */
+.bar__pin::after {
+  content: '';
+  position: absolute;
+  left: 8px; top: 5px;
+  width: 6px; height: 15px;
+  border-radius: 3px;
+  background: linear-gradient(#EDEFF1 0%, #C3C8CC 46%, #9DA3A8 54%, #7C8286 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 2px 0 #2A2E32,
+    0 3px 4px rgba(0,0,0,.6);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+/* The chosen one is the lamp, and it stands proud of the others. */
+.bar__pin.on::after {
+  left: 5px; top: 2px;
+  width: 12px; height: 21px;
+  border-radius: 4px;
+  background: linear-gradient(#FFF9E8 0%, #FFD679 46%, #F0B93C 54%, #C98D14 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -2px 3px rgba(0,0,0,.2),
+    0 3px 0 var(--lamp-lo),
+    0 5px 6px rgba(0,0,0,.55),
+    0 0 14px rgba(255,200,87,.75);
+}
+/* Pressing moves the cap down by exactly the skirt, the way every key here does:
+   the bottom edge stays put and only the top face descends. */
+.bar__pin:not(:disabled):active::after {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #2A2E32, 0 1px 2px rgba(0,0,0,.6);
+}
+.bar__pin.on:not(:disabled):active::after {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.6),
+    0 1px 0 var(--lamp-lo),
+    0 2px 3px rgba(0,0,0,.5),
+    0 0 11px rgba(255,200,87,.6);
+}
+/* Past, or too close to expiry: sunk into the groove rather than standing on it.
+   No skirt is what makes it read as unavailable. */
+.bar__pin:disabled { cursor: default; }
+.bar__pin:disabled::after {
+  background: linear-gradient(#7A8085, #5C6165);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.35);
+}
+
+.bar__pin b {
+  position: absolute;
+  top: 25px; left: 50%;
+  transform: translateX(-50%);
   font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 400;
-  letter-spacing: .08em;
-  color: #6E757A;
-  text-shadow: none;
-  transition: color 90ms linear, background 90ms linear;
+  color: #565D63;
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
 }
-.seg--slim button:first-child { box-shadow: none; border-radius: 5px 0 0 5px; }
-.seg--slim button:last-child { border-radius: 0 5px 5px 0; }
-/* No moulded gloss: nothing here is a cap. */
-.seg--slim button::before { display: none; }
-.seg--slim button.on {
-  color: var(--lamp);
-  text-shadow: 0 0 8px rgba(255,200,87,.45);
-  background: rgba(255,200,87,.10);
-  box-shadow: inset 0 -2px 0 var(--lamp);
-}
-.seg--slim button:active,
-.seg--slim button.on:active {
-  transform: none;
-  background: rgba(255,255,255,.05);
-  box-shadow: inset 0 -2px 0 var(--lamp);
-}
-.seg--slim button:active { box-shadow: inset 1px 0 0 rgba(255,255,255,.05); }
-.seg--slim button:disabled {
-  color: #3F4449;
-  background: none;
-  box-shadow: inset 1px 0 0 rgba(255,255,255,.05);
-}
-.seg--slim button:disabled:first-child { box-shadow: none; }
+.bar__pin.on b { color: #22262A; font-weight: 700; }
+.bar__pin:disabled b { color: #7A8087; text-shadow: none; }
 
-/* A status line, not a paragraph: labels dim, values lit, a rule between. */
-.hint {
+.bar__ends {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 8px;
+  justify-content: space-between;
+  margin-top: 20px;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  color: #6E757A;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6B7176;
 }
-.hint b { font-weight: 400; color: #C6CACE; }
-.hint b.warn { color: #C9922F; }
-.hint i { flex: 1; height: 1px; background: #23282C; }
 
-/* The reasoning, kept one tap away. */
-.fold { margin-top: 7px; }
+/* The reasoning, one tap away, on steel. */
+.fold { margin-top: 9px; }
 .fold summary {
   cursor: pointer;
   list-style: none;
   font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
-  color: #6E4A40;
+  color: #525960;
 }
 .fold summary::-webkit-details-marker { display: none; }
 .fold summary::before { content: '▸ '; }
 .fold[open] summary::before { content: '▾ '; }
-.fold summary:hover { color: #9A6656; }
+.fold summary:hover { color: #22262A; }
 .fold p {
   margin: 6px 0 0;
   font-family: 'Share Tech Mono', monospace;
   font-size: 10px;
   line-height: 1.5;
-  color: #6E757A;
+  color: #3A4045;
 }
 
-/* ------------------------------------------------------- the A/B commit pad
-
-   Round caps on a diagonal, named by the strip beneath them. The full-width bar
-   this replaced was the least console-like thing on the plate: a banner the
-   width of the screen, competing with the readout above it. A round key has a
-   fixed size, so the panel stays the thing you look at.
-
-   Only the cap face and its skirt colour are set here — travel, press and gloss
-   all come from the shared `.cap` construction, so these press like every other
-   key on the machine. */
-
-.pad {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 12px;
-}
-/* A sits high and to the right of B, the way a handheld stacks them. */
-.pad__slot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.pad__slot--a { margin-bottom: 15px; }
-
-.pad__lab {
+.hint {
+  margin-top: 8px;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
+  font-size: 10px;
+  color: #4A5157;
+  text-align: center;
+}
+.hint--warn { color: #6E4A18; text-align: left; line-height: 1.45; }
+
+/* --------------------------------------------------------- the commit keys
+
+   The same row as `.calls`, at the height a line of text needs. Two options of
+   equal weight, side by side: whatever the screen's last question is, it is
+   asked in the shape the machine asks every other question in. */
+
+.calls--act { margin-top: 11px; }
+.calls--act .key { height: 46px; }
+.calls--act .housing { border-radius: 11px; }
+.calls--act .cap {
+  bottom: 5px;
+  border-radius: 9px;
+  --skirt-h: 3px;
+  --travel: 2px;
+}
+.calls--act .cap .nm {
+  font-size: 12px;
   letter-spacing: .16em;
   text-transform: uppercase;
-  color: #6E757A;
+  margin-top: 0;
 }
-.pad__lab.on { color: #C6CACE; }
 
-.key.round { width: 56px; height: 59px; flex: none; }
-.key.round .housing { border-radius: 50%; }
-.key.round .cap {
-  bottom: 5px;
-  border-radius: 50%;
-  font-size: 19px;
+/* --- failures, said in a sentence ----------------------------------------- */
+.fault {
+  margin-top: 9px;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,90,72,.32);
+  border-left: 3px solid var(--down);
+  border-radius: 4px;
+  background: rgba(255,90,72,.07);
+}
+/* A wallet rejection is a choice the person made, not a fault. Alarming them
+   about their own decision trains them to ignore the colour. */
+.fault--benign {
+  border-color: rgba(154,160,165,.28);
+  border-left-color: #9AA0A5;
+  background: rgba(255,255,255,.035);
+}
+.fault__title {
+  margin: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #FF8A7B;
+}
+.fault--benign .fault__title { color: #C6CACE; }
+.fault__detail {
+  margin: 4px 0 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #9AA0A5;
+}
+.fault__more { margin-top: 6px; }
+.fault__more summary {
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6B7075;
+  list-style: none;
+}
+.fault__more summary::-webkit-details-marker { display: none; }
+.fault__more summary::before { content: '▸ '; }
+.fault__more[open] summary::before { content: '▾ '; }
+.fault__more summary:hover { color: #9AA0A5; }
+.fault__more pre {
+  margin: 6px 0 0;
+  max-height: 132px;
+  overflow: auto;
+  padding: 7px;
+  border-radius: 3px;
+  background: rgba(0,0,0,.42);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #7E848A;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------- the wallet sheet
+
+   Deposit and withdraw arrive on a Vaul drawer rather than as screens. They are
+   errands: you come in with one thing to do and leave. A route tears down the run
+   you were watching and makes "back" a decision; a sheet keeps the machine behind
+   it, so the detour looks like a detour.
+
+   It is the plate's own material and the plate's own width — a full-bleed web
+   sheet over a handheld reads as a different application arriving. */
+
+.sheet__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0,0,0,.62);
+  backdrop-filter: blur(2px);
+}
+
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 41;
+  width: min(384px, 100%);
+  margin: 0 auto;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 16px;
+  border-radius: 16px 16px 0 0;
+  outline: none;
+  /* Same brushed face as the panel, lit along the top edge where it meets the
+     scrim, so the sheet looks milled from the same billet. */
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px 3px),
+    linear-gradient(#B7BCC0, #969CA1 40%, #868C90);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(0,0,0,.35),
+    0 -12px 34px rgba(0,0,0,.6);
+}
+
+/* The pull. A machined slot rather than a pill — it is a thing you hook a thumb
+   under, and it says which edge the sheet moves along. */
+.sheet__grip {
+  flex: none;
+  width: 44px;
+  height: 5px;
+  margin: 0 auto 9px;
+  border-radius: 3px;
+  background: linear-gradient(#5E6469, #3A3F43);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.7);
+}
+
+.sheet__title {
+  order: -1;
+  margin: 0 0 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: .04em;
-  color: #FFE3EE;
-  text-shadow: 0 1px 1px rgba(0,0,0,.45);
-  --skirt: #4A0F27;
-  background:
-    repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px),
-    linear-gradient(#D8558C 0%, #B93A6E 46%, #9D2A57 54%, #7A1C42 100%);
-}
-.key.round .cap::before { left: 16%; right: 16%; top: 9%; height: 32%; }
-
-/* B is the same cap, unlit — the way out is never the brighter of the two. */
-.key.round--b .cap {
-  color: #EBD6DF;
-  --skirt: #35131F;
-  background:
-    repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 3px),
-    linear-gradient(#9C7080 0%, #7E5566 46%, #6A4354 54%, #4E2E3C 100%);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #4A5157;
+  text-shadow: 0 1px 0 rgba(255,255,255,.6);
 }
 
-/* Nothing to commit yet: the cap goes to dead plastic rather than staying lit
-   and simply refusing. */
-.key.round:disabled .cap {
-  color: #767C81;
-  text-shadow: none;
-  --skirt: #26292C;
-  background: linear-gradient(#6E7478 0%, #55595D 46%, #494D51 54%, #3A3E42 100%);
+/* The panels inside are built from the plate's parts, so they need nothing here
+   but somewhere to scroll when the keyboard is up on a phone. */
+.sheet__body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
-.key.round:disabled .cap::before { opacity: .3; }
+.sheet__body > *:first-child { margin-top: 0; }

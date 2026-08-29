@@ -59,13 +59,20 @@ export function CreateRoomPanel({
   const ready = Boolean(conn) && !wrongChain && stake > 0n && roomFits
     && state.status === 'Trading' && !pending;
 
-  const submit = () => {
+  // One press, two transactions when the wallet has never approved before. The
+  // approval is not a decision anybody makes, so it does not get its own key —
+  // it happens on the way to the thing that was actually asked for, and the
+  // label says which half is running.
+  const submit = async () => {
     if (!conn) return;
     setPending(true); setError(null);
-    rooms.open(conn.wallet, conn.account, marketId, side, stake, entryDeadline, state.expiryTime)
-      .then(setOpened)
-      .catch((e) => setError(e))
-      .finally(() => setPending(false));
+    try {
+      await allow.ensure(conn.wallet, conn.account, stake);
+      setOpened(await rooms.open(
+        conn.wallet, conn.account, marketId, side, stake, entryDeadline, state.expiryTime,
+      ));
+    } catch (e) { setError(e); }
+    finally { setPending(false); }
   };
 
   if (opened) {
@@ -85,139 +92,161 @@ export function CreateRoomPanel({
     );
   }
 
-  return (
-    <Readout title="Open a room" className="tight"
-             right={`${state.symbol} · ${intervalLabel(state.intervalSec)}`}>
-      {/* Picking a side off two numbers is picking blind — this is the shape
-          those two numbers came out of. */}
-      <Trail state={state} />
+  const upPct = Math.round(state.upPrice * 100);
+  const sides = [
+    { side: 'up' as const, name: 'UP' },
+    { side: 'down' as const, name: 'DOWN' },
+  ];
+  // A window with no resting orders still reports a price: the mid falls back to
+  // the last trade, and then to a flat 0.5. On screen that is indistinguishable
+  // from a market that genuinely thinks it is a coin flip, and someone will pick
+  // a side off it. Say which one it is.
+  const unpriced = !state.upLiquid && !state.downLiquid;
+  const trend = state.spot >= state.strike ? 'up' : 'dn';
+  // How much of the window is already gone. It is the reason an option is not
+  // available, so it belongs on screen rather than behind a disabled attribute.
+  const runPct = Math.max(0, Math.min(100,
+    ((now - state.openTime) / Math.max(1, state.intervalSec)) * 100));
 
-      {/* One instrument strip instead of three stacked rows: the same three
-          numbers, read across in a glance rather than down a list. */}
-      <div className="strip">
-        <div>
-          <span>strike</span>
-          <b>{state.strike ? price(state.strike) : '—'}</b>
+  // Built from the game face's own parts rather than from a readout panel: the
+  // question strip, the dark window, the call keys, the steel order tray. A duel
+  // screen that invents its own furniture reads as a second front end bolted to
+  // the same shell — which is exactly what this is not.
+  return (
+    <>
+      <div className="window">
+        <div className="crt">
+          <Trail state={state} />
+          <div className="scan" />
         </div>
-        <div>
-          <span>spot</span>
-          <b className={state.spot >= state.strike ? 'up' : 'dn'}>
-            {state.spot ? price(state.spot) : '—'}
-          </b>
-        </div>
-        {/* Named as the BOOK's view, because a bare percentage on the side keys
-            read like "52% of players picked UP" — and the room is empty. */}
-        <div>
-          <span>book</span>
-          <b>
-            <em className="up">{Math.round(state.upPrice * 100)}</em>
-            {'/'}
-            <em className="dn">{Math.round((1 - state.upPrice) * 100)}</em>
-          </b>
+        <div className="readout">
+          <span className={`px ${trend}`}>{state.spot ? price(state.spot) : '—'}</span>
+          <span className={`dl ${trend}`}>
+            {state.spot >= state.strike ? '+' : ''}{(state.spot - state.strike).toFixed(2)}
+          </span>
+          <span>strike {state.strike ? price(state.strike) : '—'}</span>
         </div>
       </div>
 
-      <div className="calls calls--slim">
-        {(['up', 'down'] as const).map((sd) => (
-          <Key key={sd} lit={side === sd} onPress={() => setSide(sd)}>
-            <SideIcon side={sd} />
-            <span className="nm">{sd.toUpperCase()}</span>
+      {/* Just the two words. On the game face these keys carry the book's price
+          because there the book IS the counterparty — that number is what you
+          would pay. In a room it decides nothing: your payout comes from who
+          joins. A percentage printed on the key you press reads as your odds,
+          and it is not. It moves to the tray below, where the screen's other
+          small facts live and it can be labelled for what it is. */}
+      <div className="calls calls--pick">
+        {sides.map((k) => (
+          <Key key={k.side} lit={side === k.side} onPress={() => setSide(k.side)}>
+            <SideIcon side={k.side} />
+            <span className="nm">{k.name}</span>
           </Key>
         ))}
       </div>
 
-      {/* Stake and entry-close sit side by side: two settings, one band, so the
-          form does not run the height of the screen. */}
-      <div className="duo">
-        <label className="field">
+      <div className="order">
+        <label className="field field--inline">
           <span>stake ({money.symbol})</span>
           <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
         </label>
+
+        {/* The window itself, with the door on it.
+            Three keys made a fraction of a window look like three unrelated
+            options, and hid the one fact that decides which are even available:
+            how much of the window has already run. Here that is the dim stretch
+            behind the pins — a 25% pin sitting inside it is visibly in the past,
+            rather than mysteriously refusing to be pressed. */}
         <label className="field">
-          <span>entry closes</span>
-          <div className="seg seg--slim">
-            {[0.25, 0.5, 0.75].map((f) => {
-              const ok = usable(f);
-              const left = at(f) - now;
-              return (
-                <button
-                  key={f}
-                  className={chosen === f ? 'on' : undefined}
-                  disabled={!ok}
-                  onClick={() => setFraction(f)}
-                  title={ok ? `${left}s from now` : 'already past, or too close to expiry'}
-                >
-                  {Math.round(f * 100)}%
-                </button>
-              );
-            })}
+          <span>entry closes at</span>
+          <div className="bar">
+            <div className="bar__track">
+              {/* Fill first, hatch over it. They overlap — time that has passed
+                  is still inside the entry period — and drawing the hatch second
+                  is what lets you see both at once. The other way round, a 75%
+                  door on a half-run window painted the whole bar amber and the
+                  elapsed stretch vanished. */}
+              <i className="bar__fill" style={{ width: `${(chosen ?? 0) * 100}%` }} />
+              <i className="bar__run" style={{ width: `${runPct}%` }} />
+              {[0.25, 0.5, 0.75].map((f) => {
+                const ok = usable(f);
+                const left = at(f) - now;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    className={`bar__pin${chosen === f ? ' on' : ''}`}
+                    style={{ left: `${f * 100}%` }}
+                    disabled={!ok}
+                    onClick={() => setFraction(f)}
+                    title={ok ? `${left}s from now` : 'already past, or too close to expiry'}
+                  >
+                    <b>{Math.round(f * 100)}%</b>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bar__ends">
+              <span>open</span>
+              <span>expiry</span>
+            </div>
           </div>
         </label>
+
+        <div className="calc">
+          <span>book thinks</span>
+          {/* A window with no resting orders still reports a price: the mid
+              falls back to the last trade, then to a flat 0.5. On screen that is
+              indistinguishable from a market that genuinely thinks it is a coin
+              flip, and it decides nothing here either way. Say which one it is. */}
+          <span>{unpriced ? 'no orders yet' : `${upPct} up / ${100 - upPct} down`}</span>
+        </div>
+
+        {roomFits ? (
+          <div className="calc">
+            <span>entry shuts in</span>
+            <span>{human(Math.max(0, entryDeadline - now))}</span>
+          </div>
+        ) : (
+          <div className="calc calc--bad">
+            <span>too short</span>
+            <span>needs {MIN_DEADLINE_MARGIN_SEC}s clear of expiry</span>
+          </div>
+        )}
       </div>
 
-      {/* The two things that actually change what happens, on one line each.
-          The reasoning behind them is a fold — it is worth reading once, not
-          on every visit. */}
-      {roomFits ? (
-        <>
-          <p className="hint">
-            <span>entry shuts in</span> <b>{human(Math.max(0, entryDeadline - now))}</b>
-            <i />
-            <span>payout</span> <b className="warn">floats with the split</b>
-          </p>
-          <details className="fold">
-            <summary>why these two matter</summary>
-            <p>
-              Closing entry early stops a late joiner watching most of the window play
-              out and then taking the short side with almost nothing at risk.
-            </p>
-            <p>
-              Nobody has joined yet, so there is no split and no multiple — those appear
-              once people back a side. The winning side splits the whole pot by stake,
-              so the more that piles onto your side, the less each takes.
-            </p>
-          </details>
-        </>
-      ) : (
-        <p className="note err">
-          This window closes in {human(remaining)} — too short for a room. People need time
-          to join, and the escrow refuses an entry deadline inside the last
-          {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
+      <details className="fold">
+        <summary>how a room pays</summary>
+        <p>
+          Closing entry early stops a late joiner watching most of the window play out
+          and then taking the short side with almost nothing at risk.
         </p>
-      )}
+        <p>
+          Payouts float: the winning side splits the whole pot by stake, so the more
+          that piles onto your side, the less each takes. Nobody has joined yet, so
+          there is no split and no multiple until they do.
+        </p>
+      </details>
 
-      {/* The commit pair, laid out the way a handheld lays them out: two round
-          caps set on a diagonal, each named by the strip underneath rather than
-          by text crammed into the cap. A round key cannot grow into a banner,
-          which is the whole point — the panel above it stays the screen. */}
-      <div className="pad">
-        <div className="pad__slot">
-          <Key className="round round--b" onPress={onBack}>B</Key>
-          <span className="pad__lab">back</span>
-        </div>
-        <div className="pad__slot pad__slot--a">
-          {allow.enough === false ? (
-            <>
-              <Key className="round round--a" disabled={allow.approving}
-                   onPress={() => conn && void allow.approve(conn.wallet, conn.account)}>A</Key>
-              <span className="pad__lab on">
-                {allow.approving ? 'approving…' : `approve ${money.symbol}`}
-              </span>
-            </>
-          ) : (
-            <>
-              <Key className="round round--a" disabled={!ready} onPress={submit}>A</Key>
-              <span className="pad__lab on">{pending ? 'opening…' : 'open the room'}</span>
-            </>
-          )}
-        </div>
+      {/* The same shape as the call keys above, because it is the same kind of
+          choice: two options, equal weight, side by side. The round pad set them
+          on a diagonal at two different sizes, which said one of them was an
+          afterthought — and it ended the screen on a shape that appears nowhere
+          else on the machine. Lit is the commit; the way out is plain steel, the
+          way it is everywhere else here. */}
+      <div className="calls calls--act">
+        <Key onPress={onBack}>
+          <span className="nm">back</span>
+        </Key>
+        <Key lit={ready} disabled={!ready} onPress={() => void submit()}>
+          <span className="nm">
+            {allow.approving ? 'approving…' : pending ? 'opening…' : 'open the room'}
+          </span>
+        </Key>
       </div>
 
       {allow.enough === false ? (
-        <p className="hint">The escrow needs permission to move your stake. Asked once.</p>
+        <p className="hint">First room on this wallet signs twice: permission, then the room.</p>
       ) : null}
       {error ? <Fault error={error} /> : null}
-      {allow.error ? <Fault error={allow.error} /> : null}
-    </Readout>
+    </>
   );
 }
