@@ -1348,9 +1348,88 @@
 /* Controls on the order tray. The stake well and the segmented control are the
    same wells the game face uses; they only need spacing here. */
 .order .field + .field { margin-top: 10px; }
-.order .seg { height: 38px; }
-.order .seg button { height: 31px; }
 .calc--bad span:last-child { color: #8A3A2A; }
+
+/* The window, with the door on it.
+
+   Entry-close is a FRACTION of the window, and three keys said nothing about
+   the window — least of all the part of it that had already run, which is the
+   only reason an option is ever unavailable. The bar shows that stretch, so a
+   dead 25% pin is visibly in the past instead of mysteriously unpressable. */
+.bar { margin-top: 2px; }
+.bar__track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(#101315, #191D20);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.85), 0 1px 0 rgba(255,255,255,.55);
+}
+.bar__track > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px 0 0 5px; }
+/* Time already gone. Hatched rather than filled: it is not progress towards
+   anything, it is the part of the window that is no longer on offer. */
+.bar__run {
+  background: repeating-linear-gradient(
+    -45deg, rgba(255,255,255,.13) 0 2px, rgba(255,255,255,.03) 2px 5px);
+}
+.bar__fill {
+  background: linear-gradient(#FFD679, #E0A62A);
+  box-shadow: 0 0 10px rgba(255,200,87,.5);
+}
+
+.bar__pin {
+  position: absolute;
+  top: -5px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+/* The pin itself. The button is a 20px hit area around a 4px mark, because a
+   4px target is not a target. */
+.bar__pin::after {
+  content: '';
+  position: absolute;
+  left: 8px; top: 4px;
+  width: 4px; height: 12px;
+  border-radius: 2px;
+  background: #C6CACE;
+  box-shadow: 0 1px 0 rgba(0,0,0,.5);
+}
+.bar__pin b {
+  position: absolute;
+  top: 20px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  color: #565D63;
+  text-shadow: 0 1px 0 rgba(255,255,255,.5);
+}
+.bar__pin.on::after {
+  left: 6px;
+  width: 8px; height: 16px;
+  top: 2px;
+  background: linear-gradient(#FFF3D0, #E0A62A);
+  box-shadow: 0 0 9px rgba(255,200,87,.9), 0 1px 0 rgba(0,0,0,.5);
+}
+.bar__pin.on b { color: #22262A; font-weight: 700; }
+.bar__pin:disabled { cursor: default; }
+.bar__pin:disabled::after { background: #6B7176; opacity: .5; }
+.bar__pin:disabled b { color: #7A8087; text-shadow: none; }
+
+.bar__ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6B7176;
+}
 
 /* The reasoning, one tap away, on steel. */
 .fold { margin-top: 9px; }
@@ -1379,6 +1458,7 @@
   color: #4A5157;
   text-align: center;
 }
+.hint--warn { color: #6E4A18; text-align: left; line-height: 1.45; }
 
 /* --------------------------------------------------------- the commit keys
 
@@ -1484,9 +1564,88 @@
 /* Controls on the order tray. The stake well and the segmented control are the
    same wells the game face uses; they only need spacing here. */
 .order .field + .field { margin-top: 10px; }
-.order .seg { height: 38px; }
-.order .seg button { height: 31px; }
 .calc--bad span:last-child { color: #8A3A2A; }
+
+/* The window, with the door on it.
+
+   Entry-close is a FRACTION of the window, and three keys said nothing about
+   the window — least of all the part of it that had already run, which is the
+   only reason an option is ever unavailable. The bar shows that stretch, so a
+   dead 25% pin is visibly in the past instead of mysteriously unpressable. */
+.bar { margin-top: 2px; }
+.bar__track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(#101315, #191D20);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.85), 0 1px 0 rgba(255,255,255,.55);
+}
+.bar__track > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px 0 0 5px; }
+/* Time already gone. Hatched rather than filled: it is not progress towards
+   anything, it is the part of the window that is no longer on offer. */
+.bar__run {
+  background: repeating-linear-gradient(
+    -45deg, rgba(255,255,255,.13) 0 2px, rgba(255,255,255,.03) 2px 5px);
+}
+.bar__fill {
+  background: linear-gradient(#FFD679, #E0A62A);
+  box-shadow: 0 0 10px rgba(255,200,87,.5);
+}
+
+.bar__pin {
+  position: absolute;
+  top: -5px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+/* The pin itself. The button is a 20px hit area around a 4px mark, because a
+   4px target is not a target. */
+.bar__pin::after {
+  content: '';
+  position: absolute;
+  left: 8px; top: 4px;
+  width: 4px; height: 12px;
+  border-radius: 2px;
+  background: #C6CACE;
+  box-shadow: 0 1px 0 rgba(0,0,0,.5);
+}
+.bar__pin b {
+  position: absolute;
+  top: 20px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  color: #565D63;
+  text-shadow: 0 1px 0 rgba(255,255,255,.5);
+}
+.bar__pin.on::after {
+  left: 6px;
+  width: 8px; height: 16px;
+  top: 2px;
+  background: linear-gradient(#FFF3D0, #E0A62A);
+  box-shadow: 0 0 9px rgba(255,200,87,.9), 0 1px 0 rgba(0,0,0,.5);
+}
+.bar__pin.on b { color: #22262A; font-weight: 700; }
+.bar__pin:disabled { cursor: default; }
+.bar__pin:disabled::after { background: #6B7176; opacity: .5; }
+.bar__pin:disabled b { color: #7A8087; text-shadow: none; }
+
+.bar__ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6B7176;
+}
 
 /* The reasoning, one tap away, on steel. */
 .fold { margin-top: 9px; }
@@ -1515,4 +1674,5 @@
   color: #4A5157;
   text-align: center;
 }
+.hint--warn { color: #6E4A18; text-align: left; line-height: 1.45; }
 

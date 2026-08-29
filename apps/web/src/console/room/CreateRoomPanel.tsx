@@ -94,10 +94,19 @@ export function CreateRoomPanel({
 
   const upPct = Math.round(state.upPrice * 100);
   const sides = [
-    { side: 'up' as const, name: 'UP', pct: upPct, mult: 1 / state.upPrice },
-    { side: 'down' as const, name: 'DOWN', pct: 100 - upPct, mult: 1 / (1 - state.upPrice) },
+    { side: 'up' as const, name: 'UP' },
+    { side: 'down' as const, name: 'DOWN' },
   ];
+  // A window with no resting orders still reports a price: the mid falls back to
+  // the last trade, and then to a flat 0.5. On screen that is indistinguishable
+  // from a market that genuinely thinks it is a coin flip, and someone will pick
+  // a side off it. Say which one it is.
+  const unpriced = !state.upLiquid && !state.downLiquid;
   const trend = state.spot >= state.strike ? 'up' : 'dn';
+  // How much of the window is already gone. It is the reason an option is not
+  // available, so it belongs on screen rather than behind a disabled attribute.
+  const runPct = Math.max(0, Math.min(100,
+    ((now - state.openTime) / Math.max(1, state.intervalSec)) * 100));
 
   // Built from the game face's own parts rather than from a readout panel: the
   // question strip, the dark window, the call keys, the steel order tray. A duel
@@ -124,14 +133,17 @@ export function CreateRoomPanel({
         </div>
       </div>
 
-      {/* The same two keys as the game face, saying the same two things. */}
+      {/* Just the two words. On the game face these keys carry the book's price
+          because there the book IS the counterparty — that number is what you
+          would pay. In a room it decides nothing: your payout comes from who
+          joins. A percentage printed on the key you press reads as your odds,
+          and it is not. It moves to the tray below, where the screen's other
+          small facts live and it can be labelled for what it is. */}
       <div className="calls">
         {sides.map((k) => (
           <Key key={k.side} lit={side === k.side} onPress={() => setSide(k.side)}>
             <SideIcon side={k.side} />
             <span className="nm">{k.name}</span>
-            <span className="pct">{k.pct}%</span>
-            <span className="mul">×{k.mult.toFixed(1)} book</span>
           </Key>
         ))}
       </div>
@@ -142,26 +154,51 @@ export function CreateRoomPanel({
           <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
         </label>
 
+        {/* The window itself, with the door on it.
+            Three keys made a fraction of a window look like three unrelated
+            options, and hid the one fact that decides which are even available:
+            how much of the window has already run. Here that is the dim stretch
+            behind the pins — a 25% pin sitting inside it is visibly in the past,
+            rather than mysteriously refusing to be pressed. */}
         <label className="field">
           <span>entry closes at</span>
-          <div className="seg">
-            {[0.25, 0.5, 0.75].map((f) => {
-              const ok = usable(f);
-              const left = at(f) - now;
-              return (
-                <button
-                  key={f}
-                  className={chosen === f ? 'on' : undefined}
-                  disabled={!ok}
-                  onClick={() => setFraction(f)}
-                  title={ok ? `${left}s from now` : 'already past, or too close to expiry'}
-                >
-                  {Math.round(f * 100)}%
-                </button>
-              );
-            })}
+          <div className="bar">
+            <div className="bar__track">
+              <i className="bar__run" style={{ width: `${runPct}%` }} />
+              <i className="bar__fill" style={{ width: `${(chosen ?? 0) * 100}%` }} />
+              {[0.25, 0.5, 0.75].map((f) => {
+                const ok = usable(f);
+                const left = at(f) - now;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    className={`bar__pin${chosen === f ? ' on' : ''}`}
+                    style={{ left: `${f * 100}%` }}
+                    disabled={!ok}
+                    onClick={() => setFraction(f)}
+                    title={ok ? `${left}s from now` : 'already past, or too close to expiry'}
+                  >
+                    <b>{Math.round(f * 100)}%</b>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bar__ends">
+              <span>open</span>
+              <span>expiry</span>
+            </div>
           </div>
         </label>
+
+        <div className="calc">
+          <span>book thinks</span>
+          {/* A window with no resting orders still reports a price: the mid
+              falls back to the last trade, then to a flat 0.5. On screen that is
+              indistinguishable from a market that genuinely thinks it is a coin
+              flip, and it decides nothing here either way. Say which one it is. */}
+          <span>{unpriced ? 'no orders yet' : `${upPct} up / ${100 - upPct} down`}</span>
+        </div>
 
         {roomFits ? (
           <div className="calc">
