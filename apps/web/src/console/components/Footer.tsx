@@ -1,19 +1,29 @@
 import type { Engine } from '../engine/engine';
 import { money } from '../engine/market';
 import type { ConsoleSnapshot } from '../engine/types';
+import { useSdk } from '../../sdk';
 
-/** Demo speed on the left, balance on the right. Tapping the speed cycles
- *  20x -> 5x -> real time, so a 15-minute window can be watched end to end. */
+/** What you are looking at, and what you have.
+ *
+ *  The speed control is DEMO ONLY. Live, `t` is wall-clock against the market's
+ *  own window — the chain does not care how fast we are watching — so offering
+ *  "×20" beside "live prices" would be a straight contradiction.
+ *
+ *  The points are paper either way: the console's keys place no real orders.
+ */
 export function Footer({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
+  const { cfg } = useSdk();
+
   return (
     <div className="foot eng">
-      <span style={{ cursor: 'pointer' }} onPointerDown={() => { engine.wake(); engine.cycleSpeed(); }}>
-        Demo ×{s.speed} · {s.speed === 1 ? 'real time' : 'tap to slow'}
-      </span>
-      {/* Paper money either way: the console's keys do not place real orders.
-          But the PRICES are real unless this says demo, and conflating the two
-          is exactly the confusion worth avoiding. */}
-      <span>{s.live ? 'LIVE PRICES' : 'DEMO PRICES'} · {money(s.balance)} pts</span>
+      {s.live ? (
+        <span>Live · {cfg.network} · chain {cfg.chainId}</span>
+      ) : (
+        <span style={{ cursor: 'pointer' }} onPointerDown={() => { engine.wake(); engine.cycleSpeed(); }}>
+          Demo ×{s.speed} · {s.speed === 1 ? 'real time' : 'tap to slow'}
+        </span>
+      )}
+      <span>{money(s.balance)} pts</span>
     </div>
   );
 }

@@ -138,6 +138,33 @@ export class DuelAdapter {
     };
   }
 
+  /** How many duels exist. Ids are 1..count. */
+  async count(): Promise<number> {
+    const next = await this.publicClient.readContract({
+      address: this.escrow, abi: duelEscrowAbi, functionName: 'nextId',
+    });
+    return Number(next) - 1;
+  }
+
+  /**
+   * Every duel this address is a party to, newest first.
+   *
+   * A linear scan: the escrow keeps no per-player index, and adding one would
+   * cost every opener gas to serve a screen. Reads are free, so the client
+   * pays instead — bounded by `limit` so a busy escrow cannot stall a menu.
+   */
+  async listFor(who: `0x${string}`, limit = 40): Promise<DuelView[]> {
+    const count = await this.count();
+    if (count <= 0) return [];
+    const ids: bigint[] = [];
+    for (let id = count; id >= 1 && ids.length < limit; id--) ids.push(BigInt(id));
+
+    const rows = await Promise.all(ids.map((id) => this.read(id).catch(() => null)));
+    const mine = who.toLowerCase();
+    return rows.filter((d): d is DuelView =>
+      d !== null && (d.challenger.toLowerCase() === mine || d.opponent.toLowerCase() === mine));
+  }
+
   /** §5.2 — polls duels(id) every 3s AND subscribes to Matched.
    *  Polling is the source of truth; the event is the fast path. Relying on the event
    *  alone strands a user in the lobby forever if the socket drops at the wrong moment. */

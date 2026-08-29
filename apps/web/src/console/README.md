@@ -42,9 +42,18 @@ phosphor rather than as a web page pasted over the glass.
 The canvas stays mounted underneath. Coming back to the game is instant, and
 the engine already skips painting a detached canvas.
 
-The menu switches what is on the screen rather than navigating away, so the
-plate, the dials and the keys never leave. Markets is the first of these; the
-duel flows are still panels below the face.
+The menu key puts a MENU on the glass rather than opening a drawer, and every
+screen is the same object: a cursor moving down a list of rows. `ScreenList` is
+that object; Menu, Markets and My duels are three sets of rows fed into it.
+
+The direction pad (▲ ▼ SELECT BACK) appears only while a list is up — on the
+game face the call keys are the controls and a second cluster would crowd the
+plate. Arrow keys, Enter and Escape do the same thing. SELECT fires whatever a
+click on the cursor row would, via `bindSelect`, so there is one action per row
+rather than two that can drift apart.
+
+`My duels` scans the escrow client-side: it keeps no per-player index, and
+adding one would charge every opener gas to serve a screen. Reads are free.
 
 ## Things worth knowing before editing
 

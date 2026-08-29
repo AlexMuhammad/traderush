@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDuelLink } from '@bullrun/sdk';
 import { useWallet } from '../walletContext';
 import { useSdk } from '../sdk';
@@ -9,9 +9,11 @@ import type { ConsoleSnapshot } from './engine/types';
 import { Panel } from './components/Panel';
 import { Marquee } from './components/Marquee';
 import { Footer } from './components/Footer';
-import { NavMenu } from './components/NavMenu';
 import { GameFace } from './GameFace';
+import { NavPad } from './components/NavPad';
+import { ScreenList, type ScreenItem } from './components/ScreenList';
 import { ScreenMarkets } from './components/ScreenMarkets';
+import { ScreenDuels } from './components/ScreenDuels';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
 import { AcceptPanel } from './duel/AcceptPanel';
@@ -20,6 +22,8 @@ import { ConnectScreen } from './screens/ConnectScreen';
 import './console.css';
 
 type Stage = 'start' | 'connect' | 'playing';
+/** What the CRT shows. `create` is the market list in pick-for-duel mode. */
+type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels';
 
 /**
  * The console is the whole application.
@@ -35,10 +39,9 @@ type Stage = 'start' | 'connect' | 'playing';
 export function ConsoleApp() {
   const [path, navigate] = usePath();
   const [stage, setStage] = useState<Stage>('start');
-  const [menuOpen, setMenuOpen] = useState(false);
-  /** What the CRT is showing. The menu switches it; the game is the default. */
-  const [screen, setScreen] = useState<'game' | 'markets'>('game');
-  const [mount, setMount] = useState<HTMLDivElement | null>(null);
+  /** What the CRT is showing. The menu key opens `menu`; the game is default. */
+  const [screen, setScreen] = useState<Screen>('game');
+  const [cursor, setCursor] = useState(0);
   const { conn, wrongChain } = useWallet();
   const { market } = useSdk();
 
@@ -46,6 +49,11 @@ export function ConsoleApp() {
   // event contracts, so the dials, the strike and the countdown are the ones
   // a duel would actually settle against.
   const [demo, setDemo] = useState(false);
+  /** Set by whichever list is up, so the pad's SELECT can fire the same action
+   *  a click would. A ref rather than state: it changes every render and nobody
+   *  needs to re-render because of it. */
+  const selectRef = useRef<() => void>(() => {});
+  const select = () => selectRef.current();
   const engine = useMemo(
     () => new Engine(demo ? undefined : new LiveFeed(market)),
     [demo, market],
@@ -64,6 +72,20 @@ export function ConsoleApp() {
     if (stage === 'connect' && conn && !wrongChain) setStage('playing');
   }, [stage, conn, wrongChain]);
 
+  // The pad has keys, so the keyboard should work too. Only while a list is up:
+  // on the game face the arrows mean nothing and swallowing them is rude.
+  useEffect(() => {
+    if (screen === 'game') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => c + 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); select(); }
+      else if (e.key === 'Escape') { setScreen(screen === 'menu' ? 'game' : 'menu'); setCursor(0); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen]);
+
   // An incoming duel link should not sit behind the title card — the person
   // clicking it was invited, not browsing.
   useEffect(() => {
@@ -74,42 +96,78 @@ export function ConsoleApp() {
 
   const view = renderView(path, navigate);
 
-  const crt = screen === 'markets' ? (
-    <ScreenMarkets
-      currentMarketId={engine.currentMarketId}
-      onPick={(id) => {
-        // If it is one of the dials, just tune to it — that is what a console
-        // does. Anything else can still be duelled on.
-        if (engine.tuneToMarket(id)) setScreen('game');
-        else navigate(`/market/${id}/duel`);
-      }}
-    />
-  ) : undefined;
+  const show = (next: Screen) => { setScreen(next); setCursor(0); };
+
+  const menuItems: ScreenItem[] = [
+    { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
+    { key: 'create', label: 'Create duel', sub: 'pick a market and challenge someone' },
+    { key: 'duels', label: 'My duels', sub: 'open, live and settled' },
+    { key: 'play', label: 'Play', sub: 'back to the run' },
+  ];
+
+  const crt = screen === 'game' ? undefined
+    : screen === 'menu' ? (
+      <ScreenList
+        title="Menu" right="the run"
+        items={menuItems} cursor={cursor} onCursor={setCursor}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+        onSelect={(i) => {
+          if (i.key === 'play') show('game');
+          else if (i.key === 'markets') show('markets');
+          else if (i.key === 'create') show('create');
+          else show('duels');
+        }}
+      />
+    )
+    : screen === 'duels' ? (
+      <ScreenDuels
+        cursor={cursor} onCursor={setCursor}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+        onOpen={(id) => { show('game'); navigate(`/duel/${id}`); }}
+      />
+    )
+    : (
+      <ScreenMarkets
+        title={screen === 'create' ? 'Pick a market' : 'Markets'}
+        currentMarketId={engine.currentMarketId}
+        cursor={cursor} onCursor={setCursor}
+        onPick={(id) => {
+          if (screen === 'create') { show('game'); navigate(`/market/${id}/duel`); return; }
+          // Markets: if it is one of the dials, tune to it — that is what a
+          // console does. Anything else still leads to a duel.
+          if (engine.tuneToMarket(id)) show('game');
+          else { show('game'); navigate(`/market/${id}/duel`); }
+        }}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+      />
+    );
 
   return (
     <div className="console-stage">
-      <Panel hot={snap.hot && view.isGame} mountRef={setMount}>
+      <Panel hot={snap.hot && view.isGame && screen === 'game'}>
         <Marquee
           asset={snap.asset}
           interval={snap.interval}
           riders={view.isGame ? snap.riders : view.label}
           expiryLabel={snap.expiryLabel}
           strike={snap.strike}
-          onOpenMenu={() => { engine.wake(); setMenuOpen(true); }}
+          onOpenMenu={() => { engine.wake(); show(screen === 'game' ? 'menu' : 'game'); }}
         />
 
         {view.isGame ? <GameFace engine={engine} s={snap} screen={crt} /> : view.node}
 
-        <Footer engine={engine} s={snap} />
+        {/* The pad only exists while a list is up; on the game face the call
+            keys are the controls and a second cluster would crowd the plate. */}
+        {view.isGame && screen !== 'game' && (
+          <NavPad
+            onUp={() => { engine.wake(); setCursor((c) => Math.max(0, c - 1)); }}
+            onDown={() => { engine.wake(); setCursor((c) => c + 1); }}
+            onSelect={() => { engine.wake(); select(); }}
+            onBack={() => { engine.wake(); show(screen === 'menu' ? 'game' : 'menu'); }}
+          />
+        )}
 
-        <NavMenu
-          open={menuOpen}
-          onOpenChange={setMenuOpen}
-          container={mount}
-          onNavigate={navigate}
-          onScreen={(next) => { setScreen(next); navigate('/'); }}
-          screen={screen}
-        />
+        <Footer engine={engine} s={snap} />
       </Panel>
 
       <p className="console-hint">

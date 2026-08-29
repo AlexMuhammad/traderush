@@ -91,8 +91,7 @@
     transparent 40%, transparent 68%, rgba(255,255,255,.09) 86%, transparent 100%);
 }
 
-/* The drawer's mount layer is excluded: `position: relative` would defeat it. */
-.panel > *:not(.drawer-mount) { position: relative; z-index: 1; }
+.panel > * { position: relative; z-index: 1; }
 
 /* Near expiry, or while being hunted. */
 .panel.hot {
@@ -578,166 +577,6 @@
 
 .maker__right { display: flex; align-items: center; gap: 8px; }
 
-/* ---------------------------------------------------------------- the drawer */
-
-/* The drawer is portalled into this layer rather than into the plate directly.
-   It clips permanently, so the drawer can animate past the bottom edge without
-   ever being seen — no state, no timing against vaul's animation. Empty while
-   closed, hence pointer-events: none. */
-.drawer-mount {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  overflow: hidden;
-  border-radius: 14px;
-  pointer-events: none;
-}
-.drawer-mount > * { pointer-events: auto; }
-
-/* vaul sets no inline `position`, which is what lets these anchor to the mount
-   instead of the viewport. */
-.drawer-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  /* Fallback for browsers without backdrop-filter: a heavier tint has to do the
-     separating on its own. */
-  background: rgba(6,7,8,.62);
-}
-
-/* The blur is confined to the console because the overlay lives inside the
-   plate's mount layer — it samples only what the panel painted beneath it, and
-   the page around the console is left alone. With the blur doing the work of
-   pushing the instruments back, the tint can be much lighter, so the CRT and
-   the lit keys still read through it. */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .drawer-overlay {
-    background: rgba(8,9,11,.34);
-    -webkit-backdrop-filter: blur(7px) saturate(.72);
-    backdrop-filter: blur(7px) saturate(.72);
-  }
-}
-
-.drawer {
-  position: absolute;
-  left: 6px; right: 6px; bottom: 6px;
-  z-index: 2;
-  /* vaul's slideFrom/ToBottom keyframes travel by var(--initial-transform,100%),
-     i.e. exactly the drawer's own height. That leaves the 6px bottom inset
-     uncovered, so a sliver of the drawer's top edge stays visible against the
-     plate. Overshoot past the inset so it clears the clip completely. */
-  --initial-transform: calc(100% + 10px);
-  display: flex;
-  flex-direction: column;
-  padding: 7px 9px 10px;
-  border-radius: 12px;
-  outline: none;
-  background: linear-gradient(#2E3337 0%, #191C1F 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.18),
-    inset 0 -2px 6px rgba(0,0,0,.5),
-    0 -8px 22px rgba(0,0,0,.65);
-}
-
-.drawer__handle {
-  width: 42px;
-  height: 4px;
-  margin: 1px auto 8px;
-  border-radius: 2px;
-  background: rgba(255,255,255,.20);
-  box-shadow: inset 0 1px 0 rgba(0,0,0,.5);
-  flex: 0 0 auto;
-}
-
-.drawer__title {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: #7E868C;
-  text-shadow: 0 1px 0 rgba(0,0,0,.6);
-  margin: 0 2px 7px;
-}
-
-.drawer__list { display: flex; flex-direction: column; gap: 5px; }
-
-/* Each row is a steel plaque set into the drawer face — same construction as
-   the panel's own recessed readouts. */
-.drawer__item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 7px;
-  font-family: 'Barlow Condensed', sans-serif;
-  background: linear-gradient(#A2A7AB, #7C8286 55%, #8E9498);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.5),
-    inset 0 -2px 4px rgba(0,0,0,.28),
-    0 2px 0 #16181A,
-    0 3px 5px rgba(0,0,0,.45);
-  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
-}
-.drawer__item > span {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .10em;
-  text-transform: uppercase;
-  color: #20252A;
-  text-shadow: 0 1px 0 rgba(255,255,255,.55);
-}
-.drawer__item > em {
-  font-family: 'Share Tech Mono', monospace;
-  font-style: normal;
-  font-size: 9px;
-  color: #464D52;
-  text-align: right;
-}
-.drawer__item:active:not(:disabled) {
-  transform: translateY(2px);
-  transition-duration: 38ms;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.4),
-    inset 0 3px 6px rgba(0,0,0,.3),
-    0 0 0 #16181A;
-}
-/* Nothing to go to yet. The lamp is out and the row says why. */
-.drawer__item:disabled {
-  cursor: default;
-  background: linear-gradient(#6E7478, #565C60 55%, #62686C);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,.45), inset 0 -1px 0 rgba(255,255,255,.16);
-}
-.drawer__item:disabled > span { color: #3E4448; text-shadow: none; }
-.drawer__item:disabled > em { color: #8A5B4E; }
-
-.drawer__close {
-  margin-top: 9px;
-  padding: 7px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: #9AA0A5;
-  background: linear-gradient(#3A4045, #24282B);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.14),
-    0 2px 0 #131517,
-    0 3px 5px rgba(0,0,0,.45);
-}
-.drawer__close:active {
-  transform: translateY(2px);
-  box-shadow: inset 0 2px 5px rgba(0,0,0,.4), 0 0 0 #131517;
-}
-
 /* ----------------------------------------------------------------- the gate */
 
 /* Title card and wallet step. The console is already mounted and running
@@ -1131,3 +970,71 @@
   color: #5E7A66;
   text-align: center;
 }
+
+/* ------------------------------------------------------------- the nav pad */
+
+/* Shown only while the screen is listing something. On the game face the call
+   keys are the controls, and a second cluster would crowd the plate. */
+.navpad {
+  display: grid;
+  grid-template-columns: 44px 44px 1fr auto;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 3px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #454B4F 0%, #22262A 45%, #171A1D 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0,0,0,.8),
+    inset 0 -1px 0 rgba(255,255,255,.2),
+    0 1px 0 rgba(255,255,255,.75),
+    0 5px 10px rgba(0,0,0,.38);
+}
+
+.navpad__key {
+  border: none;
+  cursor: pointer;
+  height: 32px;
+  border-radius: 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #20252A;
+  text-shadow: 0 1px 0 rgba(255,255,255,.6);
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.055) 0 1px, transparent 1px 3px),
+    linear-gradient(#EDEFF1 0%, #C3C8CC 46%, #9DA3A8 54%, #8A9094 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -2px 4px rgba(0,0,0,.26),
+    0 3px 0 var(--skirt),
+    0 5px 7px rgba(0,0,0,.5);
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+.navpad__key:active {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 4px 7px rgba(0,0,0,.3), 0 1px 0 var(--skirt);
+}
+.navpad__key--dir { font-size: 14px; letter-spacing: 0; }
+/* The one lit key in the cluster — the same lamp as a live call key. */
+.navpad__key--go {
+  color: #4A3206;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 1px, transparent 1px 3px),
+    linear-gradient(#FFF9E8 0%, #FFD679 46%, #F0B93C 54%, #C98D14 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    0 3px 0 var(--lamp-lo),
+    0 5px 7px rgba(0,0,0,.5),
+    0 0 18px rgba(255,200,87,.45);
+}
+.navpad__key--go:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 4px 7px rgba(0,0,0,.22), 0 1px 0 var(--lamp-lo); }
+
+/* The cursor row, and rows that cannot be chosen. */
+.scanrow .caret { font-style: normal; display: inline-block; width: 10px; color: #FFC857; }
+.scanrow.at { background: rgba(255,200,87,.16); color: #FFE9A8; }
+.scanrow.at .sub { color: #8A7A4E; }
+.scanrow.off { opacity: .45; cursor: default; }
+.scanrow.off:hover { background: none; color: #9BE8BF; }

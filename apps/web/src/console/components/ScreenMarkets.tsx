@@ -1,14 +1,21 @@
 import { useMarkets, useNow } from '../../sdk';
 import { intervalLabel } from '../engine/market';
+import { ScreenList, type ScreenItem } from './ScreenList';
 
-/** The market list, drawn ON the CRT.
- *
- *  Rows rather than cards: this is an instrument listing what it can tune to,
- *  and the scanline overlay falls across it so it reads as phosphor. */
+const clock = (s: number) =>
+  s >= 3600 ? `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m`
+            : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+/** Every live market, on the glass. Sorted shortest window first — those are
+ *  the ones you can actually watch resolve. */
 export function ScreenMarkets({
-  currentMarketId, onPick,
+  title, currentMarketId, cursor, onCursor, onPick, bindSelect,
 }: {
+  title: string;
   currentMarketId: string;
+  cursor: number;
+  onCursor: (i: number) => void;
+  bindSelect?: (fire: () => void) => void;
   onPick: (marketId: string) => void;
 }) {
   const { markets, error, loading } = useMarkets();
@@ -18,46 +25,30 @@ export function ScreenMarkets({
     .filter((m) => m.status === 'Trading')
     .sort((a, b) => a.intervalSec - b.intervalSec || a.symbol.localeCompare(b.symbol));
 
+  const items: ScreenItem[] = live.map((m) => {
+    const left = Math.max(0, m.expiryTime - now);
+    const up = Math.round(m.upPrice * 100);
+    const above = m.spot >= m.strike;
+    return {
+      key: m.marketId,
+      label: `${m.symbol} ${intervalLabel(m.intervalSec)}`,
+      right: <><span className="up">{up}</span>/<span className="dn">{100 - up}</span></>,
+      meta: clock(left),
+      sub: <>strike {m.strike || '—'} · spot {m.spot || '—'} · <span className={above ? 'up' : 'dn'}>{above ? 'UP ahead' : 'DOWN ahead'}</span></>,
+      current: m.marketId === currentMarketId,
+    };
+  });
+
   return (
-    <div className="screen">
-      <div className="screen__bar">
-        <span>Markets</span>
-        <em>{loading ? 'scanning…' : `${live.length} live`}</em>
-      </div>
-
-      <div className="screen__body">
-        {error && <div className="screen__empty">{error}</div>}
-        {!error && !loading && !live.length && (
-          <div className="screen__empty">No market is trading.<br />The venue rolls windows on a schedule.</div>
-        )}
-
-        {live.map((m) => {
-          const left = Math.max(0, m.expiryTime - now);
-          const up = Math.round(m.upPrice * 100);
-          const above = m.spot >= m.strike;
-          return (
-            <button
-              key={m.marketId}
-              className={`scanrow${m.marketId === currentMarketId ? ' tuned' : ''}`}
-              onClick={() => onPick(m.marketId)}
-            >
-              <span className="name">{m.symbol} {intervalLabel(m.intervalSec)}</span>
-              <span className="odds">
-                <span className="up">{up}</span>/<span className="dn">{100 - up}</span>
-              </span>
-              <span className="left">
-                {left >= 3600 ? `${Math.floor(left / 3600)}h${Math.floor((left % 3600) / 60)}m`
-                              : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
-              </span>
-              <span className="sub">
-                strike {m.strike || '—'} · spot {m.spot || '—'}
-                {' · '}
-                <span className={above ? 'up' : 'dn'}>{above ? 'UP ahead' : 'DOWN ahead'}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <ScreenList
+      title={title}
+      right={error ? 'error' : loading ? 'scanning…' : `${live.length} live`}
+      items={items}
+      cursor={cursor}
+      onCursor={onCursor}
+      bindSelect={bindSelect}
+      onSelect={(i) => onPick(i.key)}
+      empty={error ?? 'No market is trading. The venue rolls windows on a schedule.'}
+    />
   );
 }
