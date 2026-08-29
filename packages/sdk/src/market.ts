@@ -1,5 +1,5 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
-import type { BullrunConfig } from './config.js';
+import type { TradeRushConfig } from './config.js';
 import { MarketDiscovery, type BinaryMarketSummary } from './discovery.js';
 import { binaryModuleReadAbi, erc20Abi, MARKET } from './abi.js';
 import { snapPrice, snapSize, expireTimestampNs, DEFAULT_TIME_IN_FORCE } from './ticks.js';
@@ -54,7 +54,7 @@ export class MarketAdapter {
   /** Gotcha §8.6 — the cache is keyed by marketId. Never by pool address. */
   private readonly cache = new Map<string, MarketState>();
 
-  constructor(private readonly cfg: BullrunConfig, opts: MarketAdapterOptions = {}) {
+  constructor(private readonly cfg: TradeRushConfig, opts: MarketAdapterOptions = {}) {
     this.discovery = new MarketDiscovery(cfg);
     this.publicClient = opts.publicClient ?? (createPublicClient({
       chain: cfg.chain,

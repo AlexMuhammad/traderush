@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { parseDuelLink, parseRoomLink } from '@bullrun/sdk';
+import { parseDuelLink, parseRoomLink } from '@traderush/sdk';
 import { formatUnits } from 'viem';
 import { useWallet } from '../walletContext';
 import { useBalance, useSdk } from '../sdk';
@@ -222,13 +222,13 @@ export function ConsoleApp() {
         }]
       : []),
     ...walletRows,
-    { key: 'play', label: 'Play', sub: 'back to the run' },
+    { key: 'play', label: 'Play', sub: 'back to the game' },
   ];
 
   const crt = screen === 'game' ? undefined
     : screen === 'menu' ? (
       <ScreenList
-        title="Menu" right="the run"
+        title="Menu" right="trade rush"
         items={menuItems} cursor={cursor} onCursor={setCursor} dense
         bindSelect={(fire) => { selectRef.current = fire; }}
         onSelect={(i) => {

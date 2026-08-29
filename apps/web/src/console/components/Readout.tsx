@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { explainError, txUrl } from '@bullrun/sdk';
+import { explainError, txUrl } from '@traderush/sdk';
 import { useSdk } from '../../sdk';
 
 /** A panel cut into the plate — the console's only way of showing text.

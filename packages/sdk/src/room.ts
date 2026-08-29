@@ -2,7 +2,7 @@ import {
   createPublicClient, http, decodeEventLog,
   type PublicClient, type WalletClient, type Account,
 } from 'viem';
-import type { BullrunConfig } from './config.js';
+import type { TradeRushConfig } from './config.js';
 import { roomEscrowAbi } from './roomAbi.js';
 import { erc20Abi } from './abi.js';
 import { assertDeadlineSafe } from './ticks.js';
@@ -54,7 +54,7 @@ export class RoomAdapter {
   private readonly pollMs: number;
 
   constructor(
-    private readonly cfg: BullrunConfig,
+    private readonly cfg: TradeRushConfig,
     escrowAddress?: `0x${string}`,
     opts: RoomAdapterOptions = {},
   ) {

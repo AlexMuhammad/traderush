@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DuelView } from '@bullrun/sdk';
+import type { DuelView } from '@traderush/sdk';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { MarketState } from '@bullrun/sdk';
+import type { MarketState } from '@traderush/sdk';
 import { useMarketTrail } from '../../sdk';
 import { price } from '../engine/market';
 

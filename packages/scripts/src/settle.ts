@@ -12,7 +12,7 @@ import { createPublicClient, createWalletClient, http, formatUnits, type PublicC
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   DuelAdapter, MarketAdapter, binarySettlementAbi, erc6909Abi, txUrl,
-} from '@bullrun/sdk';
+} from '@traderush/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));

@@ -1,5 +1,5 @@
 {
-  "name": "@bullrun/web",
+  "name": "@traderush/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "smoke": "tsx test/console-smoke.mts"
   },
   "dependencies": {
-    "@bullrun/sdk": "workspace:*",
+    "@traderush/sdk": "workspace:*",
     "@privy-io/react-auth": "^3.38.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

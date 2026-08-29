@@ -2,7 +2,7 @@ import {
   SomniaMarkets, SOMNIA_TESTNET_PRICE_FEED, resolveIntervalSec,
   type BinaryMarket, type SomniaMarketsClient, type PriceWatchHandle,
 } from '@somnia-chain/markets-sdk';
-import type { BullrunConfig } from './config.js';
+import type { TradeRushConfig } from './config.js';
 import type { MarketState, MarketStatus, MarketSummary } from './types.js';
 
 /**
@@ -66,7 +66,7 @@ export class MarketDiscovery {
   /** Candle backfills, keyed by asset and window open. */
   private readonly candles = new Map<string, { t: number; price: number }[]>();
 
-  constructor(private readonly cfg: BullrunConfig) {}
+  constructor(private readonly cfg: TradeRushConfig) {}
 
   private get ex(): SomniaMarkets {
     this.exchange ??= new SomniaMarkets({

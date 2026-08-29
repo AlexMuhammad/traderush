@@ -1,5 +1,5 @@
 {
-  "name": "bullrun",
+  "name": "traderush",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.33.1",
@@ -7,19 +7,19 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm --filter @bullrun/sdk build",
+    "build": "pnpm --filter @traderush/sdk build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "dev": "pnpm --filter @bullrun/web dev",
-    "doctor": "pnpm --filter @bullrun/scripts doctor",
-    "faucet": "pnpm --filter @bullrun/scripts faucet",
-    "probe": "pnpm --filter @bullrun/scripts probe",
-    "e2e": "pnpm --filter @bullrun/scripts e2e",
-    "e2e:room": "pnpm --filter @bullrun/scripts e2e:room",
-    "settle": "pnpm --filter @bullrun/scripts settle",
-    "deploy:escrow": "pnpm --filter @bullrun/contracts deploy",
-    "smoke": "pnpm --filter @bullrun/web smoke",
-    "test:contracts": "pnpm --filter @bullrun/contracts test",
-    "test:errors": "pnpm --filter @bullrun/sdk test"
+    "dev": "pnpm --filter @traderush/web dev",
+    "doctor": "pnpm --filter @traderush/scripts doctor",
+    "faucet": "pnpm --filter @traderush/scripts faucet",
+    "probe": "pnpm --filter @traderush/scripts probe",
+    "e2e": "pnpm --filter @traderush/scripts e2e",
+    "e2e:room": "pnpm --filter @traderush/scripts e2e:room",
+    "settle": "pnpm --filter @traderush/scripts settle",
+    "deploy:escrow": "pnpm --filter @traderush/contracts deploy",
+    "smoke": "pnpm --filter @traderush/web smoke",
+    "test:contracts": "pnpm --filter @traderush/contracts test",
+    "test:errors": "pnpm --filter @traderush/sdk test"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

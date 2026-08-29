@@ -1,4 +1,4 @@
-import type { MarketAdapter } from '@bullrun/sdk';
+import type { MarketAdapter } from '@traderush/sdk';
 import type { FeedSlot, MarketFeed } from './types';
 import { MARKETS } from './market';
 

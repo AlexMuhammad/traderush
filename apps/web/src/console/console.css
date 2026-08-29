@@ -45,6 +45,50 @@
   overflow-x: hidden;
   background: radial-gradient(ellipse at 50% 0%, #2A2E31, #0E1012 70%);
   font-family: 'Barlow Condensed', system-ui, sans-serif;
+  /* A stacking context, so the wallpaper below can sit at z-index -1: above the
+     stage's own gradient, behind everything mounted on it. */
+  position: relative;
+  z-index: 0;
+}
+
+/* --------------------------------------------------------------- the wallpaper
+
+   The wordmark, tiled and crawling. It is scenery — the console is the subject,
+   and anything behind it that competes for the eye is a mistake. So it runs at
+   four percent, in the plate's own greys rather than its own colours, and moves
+   slowly enough that you notice it only when you look for it.
+
+   `position: fixed` keeps it out of the grid the stage lays its children on —
+   a ::before here would otherwise become a grid item and shove the console off
+   centre. */
+.console-stage::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url('/wordmark.png');
+  background-repeat: repeat;
+  /* Half the source, so the pixels still land on whole device pixels. */
+  background-size: 240px auto;
+  /* Pixel art must not be resampled; and the mark is drained to a grey so it
+     reads as texture rather than as a second logo shouting behind the first. */
+  image-rendering: pixelated;
+  filter: grayscale(1) contrast(1.4);
+  opacity: .045;
+  /* One full tile per cycle, so the loop is seamless — any other distance and
+     the pattern visibly jumps at the end. */
+  animation: wallcrawl 34s linear infinite;
+}
+
+@keyframes wallcrawl {
+  to { background-position: -240px 80px; }
+}
+
+/* It is decoration and nothing depends on it. Anyone who has asked for less
+   motion gets the texture and none of the crawl. */
+@media (prefers-reduced-motion: reduce) {
+  .console-stage::before { animation: none; }
 }
 
 .console-stage *,
@@ -1740,4 +1784,15 @@
   margin: 0 auto 14px;
   image-rendering: pixelated;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.7));
+}
+
+/* The lockup on the gate. Pixel art at exactly half the source width, so the
+   pixels stay square, and no bigger than the plate it stands in front of. */
+.gate__wordmark {
+  display: block;
+  width: min(272px, 82%);
+  height: auto;
+  margin: 0 auto 16px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,.75));
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { erc20Abi } from '@bullrun/sdk';
+import { erc20Abi } from '@traderush/sdk';
 import { formatUnits, isAddress } from 'viem';
 import { useBalance, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';

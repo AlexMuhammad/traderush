@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Room, Seat } from '@bullrun/sdk';
+import type { Room, Seat } from '@traderush/sdk';
 import { useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';

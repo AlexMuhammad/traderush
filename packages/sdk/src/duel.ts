@@ -2,7 +2,7 @@ import {
   createPublicClient, http, decodeEventLog,
   type PublicClient, type WalletClient, type Account,
 } from 'viem';
-import type { BullrunConfig } from './config.js';
+import type { TradeRushConfig } from './config.js';
 import { duelLink } from './config.js';
 import { duelEscrowAbi, erc20Abi } from './abi.js';
 import { assertDeadlineSafe } from './ticks.js';
@@ -23,7 +23,7 @@ export class DuelAdapter {
   private readonly pollMs: number;
 
   constructor(
-    private readonly cfg: BullrunConfig,
+    private readonly cfg: TradeRushConfig,
     escrowAddress?: `0x${string}`,
     opts: DuelAdapterOptions = {},
   ) {

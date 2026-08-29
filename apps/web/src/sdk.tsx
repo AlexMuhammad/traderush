@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Account, WalletClient } from 'viem';
 import { useWallet as useWalletSafe } from './walletContext';
 import {
-  MarketAdapter, DuelAdapter, RoomAdapter, loadConfig, type BullrunConfig,
+  MarketAdapter, DuelAdapter, RoomAdapter, loadConfig, type TradeRushConfig,
   type MarketState, type MarketSummary, type DuelView, type Room, type Seat,
-} from '@bullrun/sdk';
+} from '@traderush/sdk';
 
 /** A price at `t` seconds after the window opened. */
 export interface TrailPoint { t: number; price: number }
@@ -17,7 +17,7 @@ const AXIS_COLUMNS = 380;
  *  This is non-negotiable: the game console is swapped in later against the same surface. */
 
 interface Ctx {
-  cfg: BullrunConfig;
+  cfg: TradeRushConfig;
   market: MarketAdapter;
   duels: DuelAdapter | null;
   duelsError: string | null;
