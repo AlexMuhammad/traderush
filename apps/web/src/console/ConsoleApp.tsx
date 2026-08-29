@@ -83,6 +83,14 @@ export function ConsoleApp() {
   // the smoke test's feed — nothing a person can reach runs on invented prices.
   const engine = useMemo(() => new Engine(new LiveFeed(market)), [market]);
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
+  // Deposit and withdraw are errands, not places: they arrive on a sheet over
+  // whatever you were doing rather than replacing it.
+  //
+  // Declared up here with the other hooks, ABOVE the `if (!snap) return null`
+  // below. Sitting under that early return, it did not run on the first frame
+  // and did on the second — React counts hooks per render, so the count grew,
+  // the tree threw, and the whole console went blank.
+  const [sheet, setSheet] = useState<WalletSheet>(null);
 
   useEffect(() => {
     const unsubscribe = engine.subscribe(setSnap);
@@ -120,9 +128,6 @@ export function ConsoleApp() {
   const gated = ready && !invited && (!conn || wrongChain);
 
   const view = renderView(path, navigate);
-  // Deposit and withdraw are errands, not places. They arrive on a sheet over
-  // whatever you were doing rather than replacing it.
-  const [sheet, setSheet] = useState<WalletSheet>(null);
 
   const show = (next: Screen) => { setScreen(next); setCursor(0); };
 
