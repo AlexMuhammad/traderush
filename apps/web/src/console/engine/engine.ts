@@ -221,9 +221,11 @@ export class Engine implements Scene {
       pos: R.pos,
       pnl: R.pos ? value - R.pos.cost : 0,
       bailValue: value,
-      ticketSide: R.pos
-        ? `${R.pos.side === 'up' ? '▲ UP' : '▼ DOWN'} · ${R.pos.n.toFixed(0)} sh @ ${Math.round((R.pos.side === 'up' ? upP : 1 - upP) * 100)}%`
-        : '—',
+      // Just the side. The numbers get their own line rather than being
+      // crammed in behind a bullet — "1424 sh @ 50%" made a reader parse
+      // jargon to learn something the next line already says plainly.
+      ticketSide: R.pos ? (R.pos.side === 'up' ? 'UP' : 'DOWN') : '—',
+      ticketOdds: R.pos ? Math.round((R.pos.side === 'up' ? upP : 1 - upP) * 100) : 0,
       ticketNote: this.ticketNote(),
       bailLabel: this.bailLabel(value),
       canBail: R.phase === 'trade' && Boolean(R.pos),
@@ -240,15 +242,19 @@ export class Engine implements Scene {
     };
   }
 
-  /** Before settlement this is the terms; after it, what actually happened. */
+  /** Before settlement this is the terms; after it, what actually happened.
+   *
+   *  Points, not USDso. The console's keys stake paper — saying USDso was wrong
+   *  twice over: it is not the collateral on testnet, and it implied the keys
+   *  spend money they do not. */
   private ticketNote(): string {
     const R = this.race;
     if (!R.pos) return '—';
     if (R.phase !== 'done') {
-      return `Paid ${money(R.pos.cost)} · pays ${R.pos.n.toFixed(0)} if it holds`;
+      return `${money(R.pos.cost)} to win ${money(R.pos.n)}`;
     }
     const won = R.pos.side === (R.spot >= R.strike ? 'up' : 'down');
-    return won ? `Redeemed ${money(R.pos.n)} USDso` : 'Expired worthless';
+    return won ? `${money(R.pos.cost)} returned ${money(R.pos.n)}` : `${money(R.pos.cost)} lost`;
   }
 
   private bailLabel(value: number): string {
@@ -536,7 +542,7 @@ export class Engine implements Scene {
       // here — which the prototype did — charges a loss twice and, after two of
       // them, leaves the balance at zero with no way back.
       this.balance += payout;
-      sub = won ? `+${money(payout - R.pos.cost)} USDso` : `-${money(R.pos.cost)} USDso`;
+      sub = won ? `+${money(payout - R.pos.cost)} pts` : `-${money(R.pos.cost)} pts`;
     }
 
     if (R.pos && won === false) this.playKill(R.pos.side, sub);

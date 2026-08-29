@@ -170,7 +170,10 @@ export interface ConsoleSnapshot {
   bailValue: number;
   /** The line under the ticket. Becomes the settlement note once resolved. */
   ticketNote: string;
+  /** Just 'UP' or 'DOWN' — the numbers live on their own line. */
   ticketSide: string;
+  /** Implied probability of the side you took, when you took it. */
+  ticketOdds: number;
   /** Label on the exit key. Becomes Paid/Lost once the window has resolved. */
   bailLabel: string;
   /** The exit key only works while trading. */
