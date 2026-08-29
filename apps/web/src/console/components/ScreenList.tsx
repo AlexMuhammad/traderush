@@ -18,7 +18,7 @@ export interface ScreenItem {
  * a list of rows, driven either by the pad or by a finger.
  */
 export function ScreenList({
-  title, right, items, cursor, onCursor, onSelect, empty, bindSelect,
+  title, right, items, cursor, onCursor, onSelect, empty, bindSelect, dense,
 }: {
   title: string;
   right?: ReactNode;
@@ -29,6 +29,10 @@ export function ScreenList({
   empty?: ReactNode;
   /** Hands the pad's SELECT the same action a click would fire. */
   bindSelect?: (fire: () => void) => void;
+  /** One line per row, no second line. The menu uses it: nine rows of prose in
+   *  a 198px window means half of them are below the fold and nobody scrolls a
+   *  list they cannot tell is longer than the screen. */
+  dense?: boolean;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   // The pad can walk past the end of a list that shrank under it.
@@ -52,7 +56,7 @@ export function ScreenList({
         {right ? <em>{right}</em> : null}
       </div>
 
-      <div className="screen__body" ref={bodyRef}>
+      <div className={`screen__body${dense ? ' screen__body--dense' : ''}`} ref={bodyRef}>
         {!items.length && <div className="screen__empty">{empty ?? 'nothing here'}</div>}
         {items.map((item, i) => (
           <button
@@ -72,7 +76,7 @@ export function ScreenList({
             </span>
             <span className="odds">{item.right}</span>
             <span className="left">{item.meta}</span>
-            {item.sub ? <span className="sub">{item.sub}</span> : null}
+            {item.sub && !dense ? <span className="sub">{item.sub}</span> : null}
           </button>
         ))}
       </div>

@@ -125,19 +125,33 @@ export function ConsoleApp() {
   // A duel needs the 30s accept margin plus time for an opponent to see it.
   const duelReady = snap.live && Boolean(engine.currentMarketId) && engine.windowLeft() > 90;
 
-  const walletRow: ScreenItem = conn
-    ? wrongChain
-      ? { key: 'wallet', label: 'Wrong network', sub: `tap to switch to ${cfg.chainName}` }
-      : {
-          key: 'wallet',
-          label: 'Wallet',
-          // The footer's points are the game's paper money. This is the real
-          // balance a duel would actually stake.
-          right: balance === null ? '…' : `${formatUnits(balance, cfg.decimals)} ${cfg.collateralSymbol}`,
-          meta: `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`,
-          sub: `${label ?? 'signed in'} · tap to sign out`,
-        }
-    : { key: 'wallet', label: 'Sign in', sub: 'email, social or your own wallet' };
+  // The wallet reads as one row and signing out as another. Folded together,
+  // sign-out was something you had to guess was there.
+  const walletRows: ScreenItem[] = !conn
+    ? [{ key: 'wallet', label: 'Sign in', sub: 'email, social or your own wallet' }]
+    : wrongChain
+      ? [
+          { key: 'switch', label: 'Wrong network', sub: `switch to ${cfg.chainName}` },
+          { key: 'signout', label: 'Sign out', sub: 'end the session' },
+        ]
+      : [
+          {
+            key: 'wallet',
+            label: 'Wallet',
+            // The footer's points are the game's paper money. This is the real
+            // balance a duel would actually stake.
+            right: balance === null ? '…' : `${formatUnits(balance, cfg.decimals)} ${cfg.collateralSymbol}`,
+            meta: `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`,
+            sub: label ?? 'signed in',
+            disabled: true,
+          },
+          {
+            key: 'signout',
+            label: signingOut ? 'Signing out…' : 'Sign out',
+            sub: 'a refresh will not walk back in',
+            disabled: signingOut,
+          },
+        ];
 
   const menuItems: ScreenItem[] = [
     { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
@@ -151,8 +165,19 @@ export function ConsoleApp() {
       right: duelReady ? `${snap.asset} ${snap.interval}` : undefined,
       sub: duelReady ? 'challenge someone on this window' : 'pick a market with room for one',
     },
-    { key: 'duels', label: 'My duels', sub: 'open, live and settled' },
-    walletRow,
+    { key: 'duels', label: 'My duels', sub: 'open and running' },
+    { key: 'positions', label: 'Positions', sub: 'what you hold, and what is owed to you' },
+    { key: 'history', label: 'History', sub: 'duels that are over' },
+    // Testnet only, and only with a wallet to mint into.
+    ...(cfg.faucet && conn
+      ? [{
+          key: 'faucet',
+          label: faucetBusy ? 'Minting…' : `Get ${cfg.collateralSymbol}`,
+          sub: 'the testnet token mints to whoever asks',
+          disabled: faucetBusy,
+        }]
+      : []),
+    ...walletRows,
     { key: 'play', label: 'Play', sub: 'back to the run' },
   ];
 
@@ -160,7 +185,7 @@ export function ConsoleApp() {
     : screen === 'menu' ? (
       <ScreenList
         title="Menu" right="the run"
-        items={menuItems} cursor={cursor} onCursor={setCursor}
+        items={menuItems} cursor={cursor} onCursor={setCursor} dense
         bindSelect={(fire) => { selectRef.current = fire; }}
         onSelect={(i) => {
           if (i.key === 'play') show('game');

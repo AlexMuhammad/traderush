@@ -904,6 +904,14 @@
 .screen__bar em { font-style: normal; color: #5E7A66; }
 
 .screen__body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+/* One line per row, so a nine-item menu fits the glass without scrolling.
+   The glass is 198px: 17 of padding and 21 of title bar leave ~160 for the
+   body, and nine rows have to live inside that. Hence 2px padding and a 1.15
+   line box — about 17px a row, 155 for the lot. */
+.screen__body--dense .scanrow { padding: 2px 6px; line-height: 1.15; }
+.screen__body--dense .scanrow .name { font-size: 11px; }
+.screen__body--dense .scanrow .odds,
+.screen__body--dense .scanrow .left { font-size: 9.5px; }
 .screen__body::-webkit-scrollbar { width: 4px; }
 .screen__body::-webkit-scrollbar-thumb { background: rgba(255,200,87,.28); border-radius: 2px; }
 
