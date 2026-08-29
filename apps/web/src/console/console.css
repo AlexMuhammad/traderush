@@ -813,6 +813,10 @@
 }
 .rows dd.up { color: var(--up); }
 .rows dd.dn { color: var(--down); }
+/* A row that colours only PART of its value, e.g. "52% up / 48% down". The dd
+   sets a colour every child would otherwise inherit. */
+.rows dd .up { color: var(--up); }
+.rows dd .dn { color: var(--down); }
 .rows dd.lamp { color: var(--lamp); }
 .rows .addr { font-size: 10px; color: #9AA0A5; }
 

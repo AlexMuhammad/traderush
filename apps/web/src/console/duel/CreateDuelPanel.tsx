@@ -79,6 +79,13 @@ export function CreateDuelPanel({
       <Rows>
         <Row label="strike">{state.strike || '—'}</Row>
         <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot || '—'}</Row>
+        {/* The book's view, named as such. A duel pays a flat 2x whatever it
+            says, so a bare percentage on the key implied it set the price. */}
+        <Row label="book odds">
+          <span className="up">{Math.round(state.upPrice * 100)}% up</span>
+          {' / '}
+          <span className="dn">{Math.round((1 - state.upPrice) * 100)}% down</span>
+        </Row>
       </Rows>
 
       {/* Side is a pair of lit keys, the same control as the game's call keys. */}
@@ -87,7 +94,7 @@ export function CreateDuelPanel({
           <Key key={s} lit={side === s} onPress={() => setSide(s)}>
             <SideIcon side={s} />
             <span className="nm">{s.toUpperCase()}</span>
-            <span className="pct">{Math.round((s === 'up' ? state.upPrice : 1 - state.upPrice) * 100)}%</span>
+            <span className="mul">×2.0</span>
           </Key>
         ))}
       </div>

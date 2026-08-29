@@ -88,6 +88,13 @@ export function CreateRoomPanel({
       <Rows>
         <Row label="strike">{state.strike || '—'}</Row>
         <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot || '—'}</Row>
+        {/* Named as the BOOK's view, because a bare percentage on the side keys
+            read like "52% of players picked UP" — and the room is empty. */}
+        <Row label="book odds">
+          <span className="up">{Math.round(state.upPrice * 100)}% up</span>
+          {' / '}
+          <span className="dn">{Math.round((1 - state.upPrice) * 100)}% down</span>
+        </Row>
       </Rows>
 
       <div className="calls" style={{ marginTop: 11 }}>
@@ -95,7 +102,6 @@ export function CreateRoomPanel({
           <Key key={sd} lit={side === sd} onPress={() => setSide(sd)}>
             <SideIcon side={sd} />
             <span className="nm">{sd.toUpperCase()}</span>
-            <span className="pct">{Math.round((sd === 'up' ? state.upPrice : 1 - state.upPrice) * 100)}%</span>
           </Key>
         ))}
       </div>
@@ -144,8 +150,9 @@ export function CreateRoomPanel({
       {/* The one thing a room changes about the promise. Better said here than
           discovered when the payout is not the 2x someone expected. */}
       <p className="note warn">
-        Payouts float. The winning side splits the whole pot by stake, so the more
-        that piles onto your side, the less each of you takes.
+        Nobody has joined yet, so there is no split and no multiple — those appear
+        once people back a side. Payouts float: the winning side splits the whole
+        pot by stake, so the more that piles onto your side, the less each takes.
       </p>
 
       {allow.enough === false ? (
