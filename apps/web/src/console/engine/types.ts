@@ -116,10 +116,51 @@ export interface Attack {
   x: number; y: number;
 }
 
+/** A line of the payout breakdown, revealed one at a time after the total
+ *  lands. Three small arrivals beat one large one: each is its own moment. */
+export interface TallyItem {
+  label: string;
+  value: string;
+  tone: 'up' | 'dn' | 'gold';
+}
+
+/**
+ * The settlement count-up.
+ *
+ * A result that arrives as one finished number tells you what happened and
+ * nothing about why. This is the same arithmetic the contract did — what you
+ * staked, what the book thought of your side, what that pays — laid out so it
+ * can be revealed a beat at a time.
+ */
+export interface Tally {
+  win: boolean;
+  /** What you put in. */
+  stake: string;
+  /** The book odds actually taken, as a percentage. */
+  oddsPct: number;
+  /** What the window does to the stake. 0 on a loss — a loss is not a smaller
+   *  multiple, it is the multiple not applying. */
+  mult: number;
+  /** What the count-up lands on. On a loss it DRAINS from the stake to this. */
+  total: number;
+  /** Where that number came from. Empty on a loss. */
+  items: TallyItem[];
+  /** Signed, everything included. */
+  net: number;
+  /** Consecutive wins including this one. 0 when this broke a streak. */
+  streak: number;
+  /** Loss only: how far the close missed the strike by, already formatted. */
+  missedBy: string;
+  /** Loss only, and true only when it was close enough to hurt. */
+  nearMiss: boolean;
+}
+
 export interface Outcome {
   win: boolean;
   txt: string;
   sub: string;
+  /** Null when you sat the window out — there is no arithmetic to show. */
+  tally: Tally | null;
   /** Which animal took the window. The result text is coloured by THIS, not by
    *  whether you won: green is the bull and red is the bear everywhere else on
    *  the machine, and GORED is the bull's word even when it is your loss. */

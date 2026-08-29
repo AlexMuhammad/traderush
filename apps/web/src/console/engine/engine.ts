@@ -6,8 +6,12 @@ import {
   money, mmss, utcLabel, intervalLabel,
 } from './market';
 import { renderScene, type Scene } from './render';
+import {
+  T_STAKE, T_ODDS, T_MULT, T_SLAM, T_COUNT, tallyItemAt, tallyEndAt,
+} from './cinematics';
 import type {
-  Attack, ConsoleSnapshot, FeedSlot, MarketFeed, Outcome, Particle, Race, Ring, Side, Slash,
+  Attack, ConsoleSnapshot, FeedSlot, MarketFeed, Outcome, Particle, Position, Race, Ring,
+  Side, Slash, Tally, TallyItem,
 } from './types';
 
 /** Seconds between the window closing and the result landing. */
@@ -39,6 +43,11 @@ export class Engine implements Scene {
   slashes: Slash[] = [];
   attack: Attack | null = null;
   outcome: Outcome | null = null;
+  /** ms since the result card appeared. The renderer advances it. */
+  outcomeT = 0;
+  /** Consecutive wins this session. Survives the window rolling — it is the one
+   *  number on the machine that is only ever lost by playing. */
+  private winStreak = 0;
 
   shake = 0;
   flash = 0;
@@ -360,7 +369,7 @@ export class Engine implements Scene {
   private resetScene(): void {
     this.holdingResult = false;
     this.particles = []; this.slashes = []; this.rings = [];
-    this.outcome = null; this.attack = null;
+    this.outcome = null; this.outcomeT = 0; this.attack = null;
     this.lunge = 0; this.lastBeepAt = -1;
     this.beasts.bull = newBeastState(900);
     this.beasts.bear = newBeastState(1100);
@@ -535,6 +544,12 @@ export class Engine implements Scene {
     const won = R.pos ? R.pos.side === winner : null;
     let sub = `${winner.toUpperCase()} TAKES IT · ${R.spot.toFixed(0)}`;
 
+    // The streak moves BEFORE the tally is built, so the card can show the run
+    // this window just extended rather than the one before it.
+    if (won === true) this.winStreak += 1;
+    else if (won === false) this.winStreak = 0;
+    const tally = R.pos ? this.tallyFor(R.pos, won === true, R) : null;
+
     if (R.pos) {
       const payout = won ? R.pos.n : 0;
       // The stake left the balance when the bet was placed (see board()), so
@@ -545,8 +560,8 @@ export class Engine implements Scene {
       sub = won ? `+${money(payout - R.pos.cost)} pts` : `-${money(R.pos.cost)} pts`;
     }
 
-    if (R.pos && won === false) this.playKill(R.pos.side, sub);
-    else if (R.pos && won === true) this.playStand(R.pos.side, sub);
+    if (R.pos && won === false) this.playKill(R.pos.side, sub, tally);
+    else if (R.pos && won === true) this.playStand(R.pos.side, sub, tally);
     else this.playBystander(winner, sub);
 
     this.statusOverride = winner === 'up' ? 'BULL TAKES IT' : 'BEAR TAKES IT';
@@ -570,11 +585,137 @@ export class Engine implements Scene {
       this.statusOverride = 'NEXT PACK FORMING';
       this.publish();
       this.later(() => this.openWindow(), 1200);
-    }, 4200);
+      // The card's own beats run to ~3.5s now. Cutting away at 4.2s clipped the
+      // net line and the confetti to a glimpse — the celebration IS the product
+      // here, so the window waits for it.
+    }, tally ? 5600 : 4200);
+  }
+
+  /**
+   * The arithmetic behind the result, as the contract did it.
+   *
+   * Read off the POSITION rather than the live book: `cost / n` is the price
+   * actually paid per share, so the odds shown are the ones taken, not whatever
+   * the book drifted to while the window ran. Everything reconciles — stake
+   * times multiple is the payout — because it is one number expressed three
+   * ways, which is what makes the count-up feel earned instead of decorative.
+   */
+  private tallyFor(pos: Position, won: boolean, R: Race): Tally {
+    const mult = pos.cost > 0 ? pos.n / pos.cost : 0;
+    const total = won ? Math.round(pos.n) : 0;
+    const stake = Math.round(pos.cost);
+
+    // The breakdown. One payout said three ways is three arrivals instead of
+    // one, and the streak line is the only one that is not simply arithmetic —
+    // it is the thing you carry between windows.
+    const items: TallyItem[] = [];
+    let bonus = 0;
+    if (won) {
+      items.push({ label: 'stake back', value: `+${stake}`, tone: 'up' });
+      items.push({ label: 'winnings', value: `+${total - stake}`, tone: 'up' });
+      if (this.winStreak >= 2) {
+        // Ten percent a step, capped: enough to be worth protecting, never
+        // enough to be the reason a window was worth taking.
+        bonus = Math.round((total - stake) * Math.min(0.5, 0.1 * this.winStreak));
+        items.push({ label: `${this.winStreak} in a row`, value: `+${bonus}`, tone: 'gold' });
+      }
+    }
+    // Paid here rather than in resolve() because this is the only place that
+    // knows the streak was worth anything. Named so it cannot be mistaken for a
+    // pure builder.
+    this.balance += bonus;
+
+    const miss = Math.abs(R.spot - R.strike);
+    return {
+      win: won,
+      stake: money(pos.cost),
+      oddsPct: mult > 0 ? Math.round((1 / mult) * 100) : 0,
+      mult: won ? mult : 0,
+      total,
+      items,
+      net: Math.round(total + bonus - pos.cost),
+      streak: won ? this.winStreak : 0,
+      missedBy: won ? '' : miss.toFixed(2),
+      // Close enough that it was decided by noise rather than by the call. The
+      // brain files that under "nearly won", which is the whole reason it is
+      // worth naming — and worth being deliberate about naming.
+      nearMiss: !won && R.strike > 0 && miss / R.strike < 0.0004,
+    };
+  }
+
+  /**
+   * Put a result on the glass and start its count-up.
+   *
+   * Every outcome goes through here so the card's clock, its sounds and its
+   * drawing can never disagree: the renderer's `outcomeT` starts at zero on the
+   * frame the card appears, and the pops are scheduled against the same
+   * timeline constants the renderer reads.
+   */
+  private showOutcome(o: Outcome): void {
+    this.outcome = o;
+    this.outcomeT = 0;
+    if (!o.tally) return;
+
+    const T = o.tally;
+    const at = (ms: number, fn: () => void) => this.later(() => {
+      // The window may have rolled under this timer. Same guard the attack
+      // timers use: a beat for a card that is no longer on the glass is worse
+      // than a missing one.
+      if (this.outcome !== o) return;
+      fn();
+    }, ms);
+
+    // Two chips, a step apart, then four hundred milliseconds of nothing.
+    at(T_STAKE, () => { this.audio.tone(523, 0.09, 'triangle', 0.13); this.centreBurst('198,202,206', 5); });
+    at(T_ODDS, () => this.audio.tone(659, 0.09, 'triangle', 0.13));
+
+    // The multiple arrives. A win bends upward; a loss is a dead square drop.
+    at(T_MULT, () => {
+      if (T.win) { this.audio.tone(196, 0.24, 'sawtooth', 0.17, 784); this.shake = 6; }
+      else { this.audio.tone(200, 0.34, 'square', 0.15, 58); this.shake = 4; }
+      this.centreBurst(T.win ? '255,215,119' : '255,117,102', 14);
+    });
+
+    // The collision.
+    at(T_SLAM, () => {
+      if (T.win) {
+        this.audio.clash();
+        this.audio.chord();
+        this.flash = 0.6; this.flashCol = '255,215,119';
+        this.centreBurst('255,215,119', 46);
+      } else {
+        this.audio.tone(140, 0.7, 'sawtooth', 0.15, 44);
+        this.flash = 0.45; this.flashCol = '255,90,72';
+        this.centreBurst('255,117,102', 20);
+      }
+    });
+
+    // The drain has its own falling tone under it, so a loss is heard emptying
+    // rather than just seen at zero.
+    if (!T.win) at(T_SLAM + 120, () => this.audio.noise(T_COUNT / 1000, 0.1, 500));
+
+    // Each breakdown line a step higher than the last: the ladder is what tells
+    // the ear something is still accumulating.
+    T.items.forEach((_, i) => at(tallyItemAt(i), () => {
+      this.audio.tone(659 + i * 165, 0.1, 'triangle', 0.14);
+      this.centreBurst('255,200,87', 8);
+    }));
+
+    // The last word. A run gets an extra flourish — the streak is the reason to
+    // come back, so it is the last thing heard.
+    at(tallyEndAt(T.items.length), () => {
+      if (!T.win) return;
+      this.audio.escape();
+      this.centreBurst('255,200,87', 26);
+      this.flash = 0.3; this.flashCol = '255,215,119';
+    });
+    if (T.win && T.streak >= 2) {
+      at(tallyEndAt(T.items.length) + 420, () => { this.audio.chord(); this.centreBurst('255,255,255', 18); });
+    }
   }
 
   /** You lost. The animal whose territory you ended in collects. */
-  private playKill(side: Side, sub: string): void {
+  private playKill(side: Side, sub: string, tally: Tally | null): void {
     // You were DOWN and lost, so the bull took it — and vice versa.
     const type = side === 'down' ? 'gore' : 'claw';
     const winner: Side = type === 'gore' ? 'up' : 'down';
@@ -611,14 +752,14 @@ export class Engine implements Scene {
     this.later(() => {
       if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
-      this.outcome = { win: false, winner, txt: type === 'gore' ? 'GORED' : 'MAULED', sub };
+      this.showOutcome({ win: false, winner, txt: type === 'gore' ? 'GORED' : 'MAULED', sub, tally });
       this.flash = 0.8; this.flashCol = '255,90,72';
       this.centreBurst('255,117,102', 40);
     }, 2200);
   }
 
   /** You won. The hunter charges one last time and is thrown back. */
-  private playStand(side: Side, sub: string): void {
+  private playStand(side: Side, sub: string, tally: Tally | null): void {
     const beast = side === 'up' ? 'bear' : 'bull';
     const hx = beast === 'bull' ? this.bullX : this.bearX;
     const hy = beast === 'bull' ? this.bullY : this.bearY;
@@ -634,7 +775,7 @@ export class Engine implements Scene {
       if (this.attack !== atk) return;   // the scene moved on; leave it alone
       this.attack = null;
       // You won, so the side you were on is the side that took it.
-      this.outcome = { win: true, winner: side, txt: 'HELD THE LINE', sub };
+      this.showOutcome({ win: true, winner: side, txt: 'HELD THE LINE', sub, tally });
       this.flash = 0.7; this.flashCol = '255,215,119';
       this.centreBurst('255,215,119', 50);
     }, 1960);
@@ -642,12 +783,13 @@ export class Engine implements Scene {
 
   /** You sat this one out — or bailed. No cinematic, just the call. */
   private playBystander(winner: Side, sub: string): void {
-    this.outcome = {
+    this.showOutcome({
       win: true,
       winner,
       txt: winner === 'up' ? 'BULL TAKES IT' : 'BEAR TAKES IT',
       sub,
-    };
+      tally: null,
+    });
     this.flash = 1; this.flashCol = '255,200,87';
     this.shake = 9;
     this.centreBurst('255,200,87', 46);
