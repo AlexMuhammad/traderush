@@ -78,6 +78,7 @@ export class Engine implements Scene {
 
   // ------------------------------------------------------------------ lifecycle
 
+  /** Called every time the game face mounts — the canvas is a new node each time. */
   attachCanvas(canvas: HTMLCanvasElement): void {
     this.ctx = canvas.getContext('2d');
     this.fit();
@@ -124,7 +125,12 @@ export class Engine implements Scene {
     const now = performance.now();
     const dt = Math.min(50, now - this.lastFrameAt);
     this.lastFrameAt = now;
-    if (this.ctx) renderScene(this.ctx, this, dt, Math.min(2, devicePixelRatio || 1));
+    // The game face unmounts while a duel panel is showing. Painting into a
+    // detached canvas is pure waste, and it keeps the price feed's work alive
+    // for nothing.
+    if (this.ctx && this.ctx.canvas.isConnected) {
+      renderScene(this.ctx, this, dt, Math.min(2, devicePixelRatio || 1));
+    }
     this.raf = requestAnimationFrame(this.loop);
   };
 
@@ -305,7 +311,11 @@ export class Engine implements Scene {
 
     if (R.pos) {
       const payout = won ? R.pos.n : 0;
-      this.balance += payout - R.pos.cost;
+      // The stake left the balance when the bet was placed (see board()), so
+      // settlement adds the payout and nothing else. Subtracting the cost again
+      // here — which the prototype did — charges a loss twice and, after two of
+      // them, leaves the balance at zero with no way back.
+      this.balance += payout;
       sub = won ? `+${money(payout - R.pos.cost)} USDso` : `-${money(R.pos.cost)} USDso`;
     }
 

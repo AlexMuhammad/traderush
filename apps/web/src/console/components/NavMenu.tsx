@@ -1,7 +1,8 @@
 import { Drawer } from 'vaul';
-import { loadConfig } from '@bullrun/sdk';
+import { useSdk } from '../../sdk';
+import { useWallet } from '../../walletContext';
 
-/** The console's way out.
+/** Moving between the console's panels.
  *
  *  A vaul drawer scoped to the panel via `container`, so it rises from inside
  *  the console rather than from the bottom of the window. vaul sets no inline
@@ -17,7 +18,8 @@ export function NavMenu({
   container: HTMLElement | null;
   onNavigate: (to: string) => void;
 }) {
-  const cfg = loadConfig(import.meta.env as unknown as Record<string, string | undefined>);
+  const { cfg } = useSdk();
+  const { conn, wrongChain, connecting, doConnect, doSwitch } = useWallet();
 
   const go = (to: string) => { onOpenChange(false); onNavigate(to); };
 
@@ -38,22 +40,42 @@ export function NavMenu({
           <Drawer.Title className="drawer__title">The Run</Drawer.Title>
 
           <nav className="drawer__list">
-            <button className="drawer__item" onClick={() => go('/#markets')}>
+            <button className="drawer__item" onClick={() => go('/')}>
+              <span>Play</span>
+              <em>the console</em>
+            </button>
+
+            <button className="drawer__item" onClick={() => go('/markets')}>
               <span>Markets</span>
               <em>live event contracts</em>
             </button>
 
-            {/* Honest dead end: there is no duels index screen yet. Better a
-                disabled row that says so than a link that goes nowhere. */}
+            {/* Honest dead end: there is no duels index yet. Better a disabled
+                row that says so than a link that goes nowhere. */}
             <button className="drawer__item" disabled>
               <span>My duels</span>
-              <em>{cfg.escrowAddress ? 'no duel list screen yet' : `escrow not deployed on ${cfg.network}`}</em>
+              <em>{cfg.escrowAddress ? 'no index screen yet' : `no escrow on ${cfg.network}`}</em>
             </button>
 
-            <button className="drawer__item" onClick={() => go('/#connect')}>
-              <span>Connect wallet</span>
-              <em>{cfg.network} · chain {cfg.chainId}</em>
-            </button>
+            {conn && wrongChain ? (
+              <button className="drawer__item" onClick={() => { onOpenChange(false); doSwitch(); }}>
+                <span>Switch network</span>
+                <em>needs {cfg.chainName}</em>
+              </button>
+            ) : (
+              <button
+                className="drawer__item"
+                disabled={Boolean(conn)}
+                onClick={() => { onOpenChange(false); doConnect(); }}
+              >
+                <span>{conn ? 'Connected' : 'Connect wallet'}</span>
+                <em>
+                  {conn
+                    ? `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`
+                    : connecting ? 'connecting…' : `${cfg.network} · chain ${cfg.chainId}`}
+                </em>
+              </button>
+            )}
           </nav>
 
           <button className="drawer__close" onClick={() => onOpenChange(false)}>Close</button>

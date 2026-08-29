@@ -75,6 +75,9 @@ const internals = engine as unknown as {
   resolve(): void;
 };
 
+/** Only one cinematic may ever be in flight; two would orphan each other. */
+let outcomes = 0;
+
 const frames = (n: number) => { for (let i = 0; i < n; i++) renderScene(ctx, engine, 16, 2); };
 const advance = () => { internals.tickPrice(); internals.tickClock(); frames(3); };
 const spin = async (ms: number) => {
@@ -104,6 +107,10 @@ engine.board('up');
 check('board opens a position', engine.snapshot().pos !== null);
 const staked = engine.snapshot();
 check('stake left the balance', staked.balance < 2847, `${staked.balance}`);
+// snapshot().cost is what the NEXT bet would cost, computed off the already
+// reduced balance. The stake actually placed lives on the position.
+const placed = staked.pos!.cost;
+check('stake is half the bank at 50%', Math.abs(placed - 2847 / 2) < 0.01, `${placed}`);
 for (let i = 0; i < 40; i++) advance();
 check('ground is reported', staked.ground !== 'NO STAKE', staked.ground);
 step('trading');
@@ -118,11 +125,24 @@ for (const type of ['gore', 'claw', 'stand'] as const) {
 engine.attack = null;
 
 // 4 — a whole window resolving, with the real timers running out.
-engine.race.t = engine.race.win - 1;
-internals.tickClock();
+//     resolve() is called directly and tickClock() is NOT: crossing the expiry
+//     through the clock SCHEDULES a resolve of its own, and two of them race —
+//     the second replaces the first's attack, and the first's completion timer
+//     correctly declines to write an outcome for a cinematic that is no longer
+//     on screen. That is right in the engine and wrong in a test.
+engine.race.t = engine.race.win;
 internals.resolve();
 await spin(2600);
+// The stake is taken once, at board() — settling must not charge it again.
+const afterSettle = engine.snapshot().balance;
+const won = engine.outcome?.win === true;
+check('a loss costs the stake once, not twice',
+  won || Math.abs(afterSettle - (2847 - placed)) < 0.01,
+  `balance ${afterSettle.toFixed(2)}, expected ${(2847 - placed).toFixed(2)}`);
+
 check('resolve produces an outcome', engine.outcome !== null);
+outcomes++;
+check('exactly one outcome', outcomes === 1, String(outcomes));
 const settled = engine.snapshot();
 check('status names a winner', /TAKES IT|FORMING/.test(settled.statusText), settled.statusText);
 check('ticket becomes a receipt', settled.ticketNote !== '—', settled.ticketNote);

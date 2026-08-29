@@ -889,3 +889,160 @@
   margin: 6px 0 0;
 }
 .gate__fine strong { color: #9AA0A5; font-weight: 700; }
+
+/* ------------------------------------------------------ recessed readouts */
+
+/* The console's way of showing text. Same construction as the CRT housing: a
+   panel cut into the plate, dark inside, lit lower lip. Every duel screen is
+   built from these rather than from ordinary HTML, so the machine stays one
+   machine. */
+.readout-panel {
+  border-radius: 11px;
+  padding: 10px 12px 12px;
+  margin-top: 10px;
+  background: linear-gradient(#1A1D20, #0A0B0C);
+  box-shadow:
+    inset 0 6px 14px rgba(0,0,0,.98),
+    inset 0 -2px 1px rgba(255,255,255,.16),
+    inset 5px 0 8px rgba(0,0,0,.6),
+    inset -5px 0 8px rgba(0,0,0,.6),
+    0 2px 0 rgba(255,255,255,.8);
+}
+
+.readout-panel__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #6E4A40;
+  margin-bottom: 8px;
+}
+.readout-panel__title b { color: #C6CACE; font-weight: 700; letter-spacing: .1em; }
+
+/* Label/value pairs, monospaced so columns line up like an instrument. */
+.rows { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+.rows dt {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: #6E757A;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.rows dd {
+  margin: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #D6DADD;
+  overflow-wrap: anywhere;
+}
+.rows dd.up { color: var(--up); }
+.rows dd.dn { color: var(--down); }
+.rows dd.lamp { color: var(--lamp); }
+.rows .addr { font-size: 10px; color: #9AA0A5; }
+
+.note {
+  margin-top: 9px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #6E757A;
+}
+.note.warn { color: #C9922F; }
+.note.err { color: #C4584A; }
+.note.ok { color: #3FD98B; }
+
+/* A scrolling list of markets, styled as plaques set into the readout. */
+.picker { display: flex; flex-direction: column; gap: 4px; max-height: 232px; overflow-y: auto; }
+.picker__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  align-items: center;
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  background: linear-gradient(#A2A7AB, #7C8286 55%, #8E9498);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.5),
+    inset 0 -2px 4px rgba(0,0,0,.28),
+    0 2px 0 #16181A;
+  transition: transform 90ms cubic-bezier(.2,.9,.3,1), box-shadow 90ms cubic-bezier(.2,.9,.3,1);
+}
+.picker__row:active {
+  transform: translateY(2px);
+  transition-duration: 38ms;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 3px 6px rgba(0,0,0,.3), 0 0 0 #16181A;
+}
+.picker__row .sym {
+  font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #20252A;
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+.picker__row .meta { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #464D52; }
+.picker__row .odds {
+  font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #20252A; text-align: right;
+}
+.picker__row .ends { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #5C3A2F; text-align: right; }
+
+/* Stake entry, set into the plate like the order strip. */
+.field { display: block; margin-top: 9px; }
+.field > span {
+  display: block;
+  font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: #525960; margin-bottom: 4px;
+}
+.field input {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 15px;
+  color: #E8EAEB;
+  background: linear-gradient(#101315, #191D20);
+  box-shadow: inset 0 3px 6px rgba(0,0,0,.9), inset 0 -1px 0 rgba(255,255,255,.12), 0 1px 0 rgba(255,255,255,.6);
+}
+.field input:focus { outline: 1px solid rgba(255,200,87,.55); }
+
+/* Full-width action key, the shape used for Accept / Open / Claim. */
+.action { width: 100%; height: 44px; margin-top: 11px; }
+.action .housing { border-radius: 10px; }
+.action .cap {
+  left: 2px; right: 2px; top: 2px; bottom: 5px;
+  border-radius: 8px;
+  --skirt-h: 3px;
+  --travel: 2px;
+  font-size: 14px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: #41474C; text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+
+.linkline { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.linkline code {
+  flex: 1;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: #9AA0A5;
+  background: #0C0E10;
+  padding: 6px 7px;
+  border-radius: 5px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.8);
+  overflow-wrap: anywhere;
+}
+.linkline button {
+  border: none; cursor: pointer; border-radius: 5px; padding: 6px 10px;
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: #41474C;
+  background: linear-gradient(#EDEFF1, #9DA3A8);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 2px 0 var(--skirt);
+}
+.linkline button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 var(--skirt); }
+
+.txline { margin-top: 8px; font-family: 'Share Tech Mono', monospace; font-size: 10px; }
+.txline a { color: #7bb0ff; }
