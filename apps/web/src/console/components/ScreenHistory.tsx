@@ -68,6 +68,7 @@ export function ScreenHistory({
       onCursor={onCursor}
       bindSelect={bindSelect}
       onSelect={(i) => onOpen(BigInt(i.key))}
+      loading={Boolean(conn) && rows === null && !error}
       empty={error ?? (!conn ? 'Connect a wallet.' : 'Nothing finished yet.')}
     />
   );

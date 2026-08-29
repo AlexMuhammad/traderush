@@ -23,6 +23,17 @@ export function Readout({
   );
 }
 
+/** Reading, inside a panel. The same three chasing lamps the list screens and
+ *  the canvas use, so waiting looks the same wherever it happens. */
+export function Loading({ label = 'reading the chain' }: { label?: string }) {
+  return (
+    <div className="panel-loading">
+      <i /><i /><i />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function Rows({ children }: { children: ReactNode }) {
   return <dl className="rows">{children}</dl>;
 }

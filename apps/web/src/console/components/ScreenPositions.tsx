@@ -126,6 +126,7 @@ export function ScreenPositions({
       cursor={cursor}
       onCursor={onCursor}
       bindSelect={bindSelect}
+      loading={Boolean(conn) && rows === null && !error}
       onSelect={(i) => {
         const row = (rows ?? []).find((r) => r.marketId === i.key);
         if (row) void claim(row);

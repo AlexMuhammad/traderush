@@ -18,7 +18,7 @@ export interface ScreenItem {
  * a list of rows, driven either by the pad or by a finger.
  */
 export function ScreenList({
-  title, right, items, cursor, onCursor, onSelect, empty, bindSelect, dense,
+  title, right, items, cursor, onCursor, onSelect, empty, bindSelect, dense, loading,
 }: {
   title: string;
   right?: ReactNode;
@@ -33,6 +33,10 @@ export function ScreenList({
    *  a 198px window means half of them are below the fold and nobody scrolls a
    *  list they cannot tell is longer than the screen. */
   dense?: boolean;
+  /** Still reading. An empty list and a list that has not arrived look the same
+   *  and mean opposite things — "no markets are trading" is alarming, and it
+   *  was being said while the answer was still in flight. */
+  loading?: boolean;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   // The pad can walk past the end of a list that shrank under it.
@@ -57,7 +61,9 @@ export function ScreenList({
       </div>
 
       <div className={`screen__body${dense ? ' screen__body--dense' : ''}`} ref={bodyRef}>
-        {!items.length && <div className="screen__empty">{empty ?? 'nothing here'}</div>}
+        {!items.length && (loading
+          ? <div className="screen__loading"><i /><i /><i /><span>reading</span></div>
+          : <div className="screen__empty">{empty ?? 'nothing here'}</div>)}
         {items.map((item, i) => (
           <button
             key={item.key}

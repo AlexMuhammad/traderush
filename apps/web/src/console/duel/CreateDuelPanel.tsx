@@ -5,7 +5,7 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
 
 /** Stake a side and publish a challenge. The console's S4. */
 export function CreateDuelPanel({
@@ -32,7 +32,7 @@ export function CreateDuelPanel({
   try { stake = money.parse(stakeStr || '0'); } catch { /* surfaced below */ }
   const allow = useAllowance(conn?.account.address as `0x${string}` | undefined, stake);
 
-  if (!state) return <Readout title="Create duel"><p className="note">reading the market…</p></Readout>;
+  if (!state) return <Readout title="Create duel"><Loading label="reading the market" /></Readout>;
   if (!duels) return <Readout title="Create duel"><p className="note err">No escrow deployed on this network.</p></Readout>;
 
   const pot = stake * 2n;

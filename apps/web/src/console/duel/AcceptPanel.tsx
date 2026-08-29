@@ -4,7 +4,7 @@ import { useAllowance, useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
-import { Addr, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Addr, Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
 
 export interface DuelLink { chainId: number; escrow: `0x${string}`; duelId: bigint }
 
@@ -43,7 +43,7 @@ export function AcceptPanel({ link, onAccepted }: { link: DuelLink; onAccepted: 
       </Readout>
     );
   }
-  if (duel === undefined) return <Readout title={`Duel #${link.duelId}`}><p className="note">reading the chain…</p></Readout>;
+  if (duel === undefined) return <Readout title={`Duel #${link.duelId}`}><Loading /></Readout>;
   if (duel === null) return <Readout title={`Duel #${link.duelId}`}><p className="note err">No such duel at {link.escrow.slice(0, 10)}…</p></Readout>;
 
   const selfDuel = conn?.account.address.toLowerCase() === duel.challenger.toLowerCase();

@@ -56,6 +56,7 @@ export function ScreenDuels({
       onCursor={onCursor}
       bindSelect={bindSelect}
       onSelect={(i) => onOpen(BigInt(i.key))}
+      loading={Boolean(conn) && rows === null && !error}
       empty={
         error ?? (!conn ? 'Connect a wallet to see your duels.'
                         : !duels ? 'No escrow deployed on this network.'

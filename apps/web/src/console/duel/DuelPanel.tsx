@@ -4,7 +4,7 @@ import { useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
-import { Addr, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Addr, Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
 
 /**
  * One duel, from lobby to payout — the console's S5, S6 and S7.
@@ -53,7 +53,7 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
     return () => { alive = false; };
   }, [duel, settled, conn, adapter, cfg.addresses.binarySettlement, myUp]);
 
-  if (duel === undefined) return <Readout title={`Duel #${duelId}`}><p className="note">reading the chain…</p></Readout>;
+  if (duel === undefined) return <Readout title={`Duel #${duelId}`}><Loading /></Readout>;
   if (duel === null) return <Readout title={`Duel #${duelId}`}><p className="note err">No such duel on this escrow.</p></Readout>;
 
   const run = (fn: () => Promise<{ txHash: string }>) => {

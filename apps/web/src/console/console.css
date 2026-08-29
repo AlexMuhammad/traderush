@@ -1142,3 +1142,57 @@
   color: #3A3B3D;
   text-shadow: 0 1px 0 rgba(255,255,255,.07);
 }
+
+/* Reading, as distinct from empty. The two look the same and mean opposite
+   things — "no markets are trading" is alarming, and it was being shown while
+   the answer was still on its way. Three lamps chasing, the same idiom the
+   canvas uses while it acquires markets. */
+.screen__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #5E7A66;
+}
+.screen__loading span { margin-left: 4px; }
+.screen__loading i {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: rgba(255,200,87,.2);
+  animation: screen-chase 1.05s infinite steps(1);
+}
+.screen__loading i:nth-child(2) { animation-delay: .35s; }
+.screen__loading i:nth-child(3) { animation-delay: .7s; }
+@keyframes screen-chase {
+  0%, 33%  { background: rgba(255,200,87,.9); }
+  34%, 100% { background: rgba(255,200,87,.18); }
+}
+
+/* Reading, inside a panel — the same idiom as the list screens and the canvas,
+   so waiting looks the same wherever it happens. */
+.panel-loading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 2px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #6E757A;
+}
+.panel-loading span { margin-left: 4px; }
+.panel-loading i {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: rgba(255,200,87,.18);
+  animation: screen-chase 1.05s infinite steps(1);
+}
+.panel-loading i:nth-child(2) { animation-delay: .35s; }
+.panel-loading i:nth-child(3) { animation-delay: .7s; }

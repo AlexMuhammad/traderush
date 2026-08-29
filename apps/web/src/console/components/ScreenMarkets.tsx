@@ -48,6 +48,7 @@ export function ScreenMarkets({
       onCursor={onCursor}
       bindSelect={bindSelect}
       onSelect={(i) => onPick(i.key)}
+      loading={loading && !error}
       empty={error ?? 'No market is trading. The venue rolls windows on a schedule.'}
     />
   );

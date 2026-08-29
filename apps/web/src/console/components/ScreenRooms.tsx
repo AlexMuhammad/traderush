@@ -61,6 +61,7 @@ export function ScreenRooms({
       onCursor={onCursor}
       bindSelect={bindSelect}
       onSelect={(i) => onOpen(BigInt(i.key))}
+      loading={Boolean(conn) && list === null && !error}
       empty={
         error ?? roomsError ?? (!conn ? 'Connect a wallet to see your rooms.'
                                       : 'No rooms yet. Open one from Markets.')

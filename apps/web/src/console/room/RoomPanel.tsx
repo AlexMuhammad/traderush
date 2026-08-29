@@ -5,7 +5,7 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
 import { useRoomAllowance } from './useRoomAllowance';
 
 /**
@@ -69,7 +69,7 @@ export function RoomPanel({
   }, [room, settled, conn, adapter, cfg.addresses.binarySettlement, hash]);
 
   if (!rooms) return <Readout title={`Room #${roomId}`}><p className="note err">No room escrow on this network.</p></Readout>;
-  if (room === undefined) return <Readout title={`Room #${roomId}`}><p className="note">reading the chain…</p></Readout>;
+  if (room === undefined) return <Readout title={`Room #${roomId}`}><Loading /></Readout>;
   if (room === null) return <Readout title={`Room #${roomId}`}><p className="note err">No such room{escrow ? ` at ${escrow.slice(0, 10)}…` : ''}.</p></Readout>;
 
   const run = (fn: () => Promise<{ txHash: string }>) => {

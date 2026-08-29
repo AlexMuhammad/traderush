@@ -5,7 +5,7 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
-import { Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Loading, Readout, Row, Rows, TxLine } from '../components/Readout';
 import { useRoomAllowance } from './useRoomAllowance';
 
 /** Open a room on a market and take the first side. */
@@ -33,7 +33,7 @@ export function CreateRoomPanel({
   try { stake = money.parse(stakeStr || '0'); } catch { /* surfaced below */ }
   const allow = useRoomAllowance(stake);
 
-  if (!state) return <Readout title="Open a room"><p className="note">reading the market…</p></Readout>;
+  if (!state) return <Readout title="Open a room"><Loading label="reading the market" /></Readout>;
   if (!rooms) return <Readout title="Open a room"><p className="note err">{roomsError}</p></Readout>;
 
   // Short windows are real — the venue runs 60s markets. A fixed margin would
