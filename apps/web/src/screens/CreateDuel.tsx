@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { defaultAcceptDeadline, MIN_DEADLINE_MARGIN_SEC } from '@bullrun/sdk';
-import { useMarket, useSdk } from '../sdk';
+import { useAllowance, useMarket, useSdk } from '../sdk';
 import { StatusBadge, TxState, CopyButton, useFrozen, useMoney } from '../components/ui';
 import { useWallet } from '../walletContext';
 
@@ -19,16 +19,19 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ duelId: bigint; txHash: string; link: string } | null>(null);
 
+  let parsed = 0n;
+  try { parsed = money.parse(stakeStr || '0'); } catch { /* surfaced below */ }
+  const allow = useAllowance(conn?.account.address as `0x${string}` | undefined, parsed);
+
   if (!state) return <p className="muted">loading market…</p>;
   if (!duels) return <p className="err">DUEL_ESCROW_ADDRESS is not set — deploy DuelEscrow first (M3).</p>;
 
-  let stake = 0n;
-  try { stake = money.parse(stakeStr || '0'); } catch { /* shown below */ }
+  const stake = parsed;
   const pot = stake * 2n;
   const acceptDeadline = state.expiryTime ? state.expiryTime - marginSec : 0;
   const deadlineOk = marginSec >= MIN_DEADLINE_MARGIN_SEC;
   const canSubmit = Boolean(conn) && !wrongChain && stake > 0n && deadlineOk && !frozen
-    && state.status === 'Trading' && !pending;
+    && state.status === 'Trading' && !pending && allow.enough !== false;
 
   const submit = () => {
     if (!conn) return;
@@ -106,9 +109,25 @@ export function CreateDuel({ marketId, navigate }: { marketId: `0x${string}`; na
         </p>
       </div>
 
-      <button onClick={submit} disabled={!canSubmit}>
-        {pending ? 'pending…' : 'Open duel'}
-      </button>
+      {/* open() pulls the stake with transferFrom. Without an allowance that
+          reverts as ERC20InsufficientAllowance, which explains nothing — so the
+          approval is a step you can see. */}
+      {allow.enough === false ? (
+        <>
+          <button
+            onClick={() => conn && void allow.approve(conn.wallet, conn.account)}
+            disabled={allow.approving}
+          >
+            {allow.approving ? 'approving…' : `Approve ${money.symbol} (one time)`}
+          </button>
+          <p className="muted">The escrow needs permission to move your stake. Asked once.</p>
+        </>
+      ) : (
+        <button onClick={submit} disabled={!canSubmit}>
+          {pending ? 'pending…' : 'Open duel'}
+        </button>
+      )}
+      {allow.error && <p className="err">{allow.error}</p>}
       {frozen && <p className="warn">too close to expiry — writes are disabled</p>}
       <TxState pending={pending} error={error} hash={null} />
       <p className="muted">escrow {cfg.escrowAddress}</p>

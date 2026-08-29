@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Account, WalletClient } from 'viem';
 import {
   MarketAdapter, DuelAdapter, loadConfig, type BullrunConfig,
   type MarketState, type MarketSummary, type DuelView,
@@ -79,6 +80,49 @@ export function useDuel(duelId: bigint | null, adapter?: DuelAdapter | null): Du
     return a.watch(duelId, setDuel);
   }, [a, duelId]);
   return duel;
+}
+
+/** The escrow's allowance to spend collateral, and a one-press approve.
+ *
+ *  Both `open` and `accept` pull the stake with safeTransferFrom, so without an
+ *  allowance they revert with ERC20InsufficientAllowance — a message that tells a
+ *  first-time user nothing. This turns that into a visible step instead.
+ */
+export function useAllowance(owner: `0x${string}` | undefined, needed: bigint) {
+  const { cfg, duels } = useSdk();
+  const [allowance, setAllowance] = useState<bigint | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const read = useCallback(() => {
+    if (!duels || !owner) return;
+    duels.allowance(cfg.addresses.collateral, owner)
+      .then(setAllowance)
+      .catch(() => setAllowance(null));
+  }, [duels, owner, cfg.addresses.collateral]);
+
+  useEffect(() => { read(); }, [read]);
+
+  const approve = async (wallet: WalletClient, account: Account) => {
+    if (!duels) return;
+    setApproving(true); setError(null);
+    try {
+      // Approve far more than this stake so a player is asked once, not per duel.
+      await duels.approve(wallet, account, cfg.addresses.collateral, 2n ** 255n);
+      read();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setApproving(false); }
+  };
+
+  return {
+    /** null while unknown — do not block the UI on it. */
+    allowance,
+    enough: allowance === null ? null : allowance >= needed,
+    approving,
+    error,
+    approve,
+  };
 }
 
 /** A ticking wall clock, in seconds. One interval for every countdown on the page. */

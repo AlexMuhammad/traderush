@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DuelAdapter, UI_FREEZE_SEC } from '@bullrun/sdk';
-import { useDuel, useMarket, useSdk, useNow } from '../sdk';
+import { useAllowance, useDuel, useMarket, useSdk, useNow } from '../sdk';
 import { StatusBadge, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../walletContext';
 
@@ -23,6 +23,7 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
   const state = useMarket(duel?.marketId ?? null);
 
   const [balance, setBalance] = useState<bigint | null>(null);
+  const allow = useAllowance(conn?.account.address as `0x${string}` | undefined, duel?.stake ?? 0n);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
     insufficient && `insufficient balance: you need ${money.format(duel.stake)}`,
     notTrading && `market is ${state?.status}; only Trading accepts mints`,
     nearExpiry && 'too close to expiry — accepting now would revert for both parties (§8.11)',
+    allow.enough === false && 'the escrow needs permission to move your stake',
   ].filter(Boolean) as string[];
 
   const accept = () => {
@@ -99,9 +101,18 @@ export function AcceptDuel({ link, navigate }: { link: Link; navigate: (to: stri
       <div className="row">
         {!conn && <button onClick={doConnect} disabled={connecting}>Connect wallet</button>}
         {wrongChain && <button onClick={doSwitch}>Switch to {cfg.chainName}</button>}
-        <button onClick={accept} disabled={blockers.length > 0 || pending}>
-          {pending ? 'pending…' : `Accept — stake ${money.format(duel.stake)}`}
-        </button>
+        {allow.enough === false ? (
+          <button
+            onClick={() => conn && void allow.approve(conn.wallet, conn.account)}
+            disabled={allow.approving}
+          >
+            {allow.approving ? 'approving…' : `Approve ${money.symbol} (one time)`}
+          </button>
+        ) : (
+          <button onClick={accept} disabled={blockers.length > 0 || pending}>
+            {pending ? 'pending…' : `Accept — stake ${money.format(duel.stake)}`}
+          </button>
+        )}
         <button onClick={() => navigate(`/duel/${link.duelId}`)}>view duel</button>
       </div>
 

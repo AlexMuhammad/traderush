@@ -61,9 +61,16 @@ export function Market({ marketId, navigate }: { marketId: `0x${string}`; naviga
         </label>
         <p className="muted">Max loss: {cost || '0'} {money.symbol}. Builder fees apply to book orders.</p>
         <div className="row">
-          <button disabled={!canWrite || pending} onClick={() => trade('up')}>Buy UP</button>
-          <button disabled={!canWrite || pending} onClick={() => trade('down')}>Buy DOWN</button>
+          <button disabled onClick={() => trade('up')}>Buy UP</button>
+          <button disabled onClick={() => trade('down')}>Buy DOWN</button>
         </div>
+        {/* MarketAdapter.buy snaps price and size and pre-checks the chain, but the
+            signed-order transport is not wired — it comes from dreamdex-bot-kit's
+            ec-core rather than being rewritten here. Duels need none of it. */}
+        <p className="warn">
+          Book trading needs a signed-order client that is not wired yet.
+          Duels below work — they go straight through the escrow.
+        </p>
         {/* §6.2 — disabled a few seconds before expiry, not at zero. */}
         {frozen && <p className="warn">too close to expiry — writes are disabled (§8.11)</p>}
         {state.status !== 'Trading' && <p className="warn">market is {state.status}; only Trading accepts orders</p>}
