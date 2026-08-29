@@ -129,15 +129,17 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     const mn = lo - pad, mx = hi + pad;
     const Y = (p: number) => h - 12 - ((p - mn) / (mx - mn)) * (h - 26);
 
-    const xAt = (seconds: number) =>
-      Math.round(30 + (w - 46) * Math.min(1, Math.max(0, seconds / R.win)));
-    const nowX = xAt(R.t);
+    // The trail fills the glass, edge to edge: the x axis is the DATA, not the
+    // clock. Mapping x to progress through the window left the right-hand side
+    // empty for most of a window and the left empty at the start of one, which
+    // read as a broken chart. How far through the window we are is already on
+    // the travel bar and the countdown underneath.
+    //
+    // This is only honest because the window is backfilled — the tick tape for
+    // short dials, candles for long ones — so the samples really do span it.
+    const startX = 8;
+    const nowX = w - 14;
     const N = R.hist.length;
-    // The trail starts where we STARTED WATCHING, not at the window's open.
-    // Spreading a handful of samples across the whole width claimed hours of
-    // history the console never saw — a 4h market joined at minute ten drew a
-    // line as if it had watched all four.
-    const startX = Math.max(8, Math.min(nowX - 2, xAt(R.histStartT)));
     const step = Math.max(0.5, (nowX - startX) / Math.max(1, N - 1));
     const ly = Math.round(Y(R.strike)) + 0.5;   // the border between territories
 

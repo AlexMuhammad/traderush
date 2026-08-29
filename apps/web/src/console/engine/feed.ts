@@ -25,6 +25,11 @@ export class LiveFeed implements MarketFeed {
     private readonly pollMs = 3_000,
   ) {}
 
+  /** The whole window, from candles. Cached in the SDK per window. */
+  backfill(slot: FeedSlot): Promise<{ t: number; price: number }[]> {
+    return this.adapter.discovery.windowCandles(slot.symbol, slot.openTime, slot.expiryTime);
+  }
+
   subscribe(onSlots: (slots: FeedSlot[]) => void): () => void {
     this.listeners.add(onSlots);
     if (this.slots.length) onSlots(this.slots);
@@ -119,6 +124,11 @@ export class LiveFeed implements MarketFeed {
           openTime: m.openTime,
           expiryTime: m.expiryTime,
           status: m.status as FeedSlot['status'],
+          // What the underlying actually did inside this window. Free to ask —
+          // the tape is already in memory and the read is synchronous.
+          history: this.adapter.discovery.priceHistory(
+            asset!, m.openTime, Math.floor(Date.now() / 1000),
+          ),
         });
         return;
       }

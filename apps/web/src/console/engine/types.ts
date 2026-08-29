@@ -37,6 +37,10 @@ export interface FeedSlot {
   openTime: number;
   expiryTime: number;
   status: MarketStatus;
+  /** The underlying's ticks inside this window, oldest first, `t` in seconds
+   *  from the open. Lets a dial be drawn from the window's start rather than
+   *  from whenever the page happened to load. */
+  history?: { t: number; price: number }[];
 }
 
 /** Where the console's numbers come from. Two implementations: the simulation
@@ -47,6 +51,9 @@ export interface MarketFeed {
   subscribe(onSlots: (slots: FeedSlot[]) => void): () => void;
   /** True when these are real markets — the UI says so. */
   readonly live: boolean;
+  /** Candles covering a whole window, for dials the tick tape cannot reach.
+   *  Out of band on purpose: it must never sit between a load and a frame. */
+  backfill?(slot: FeedSlot): Promise<{ t: number; price: number }[]>;
 }
 
 export interface Race {

@@ -63,6 +63,8 @@ export class MarketDiscovery {
   /** Live price subscriptions. They hold the process open until stopped, which
    *  is why close() is not optional in a script. */
   private readonly priceWatches: PriceWatchHandle[] = [];
+  /** Candle backfills, keyed by asset and window open. */
+  private readonly candles = new Map<string, { t: number; price: number }[]>();
 
   constructor(private readonly cfg: BullrunConfig) {}
 
@@ -124,6 +126,64 @@ export class MarketDiscovery {
     for (const a of fresh) this.watchedAssets.add(a);
     try { this.priceWatches.push(await this.client.watchPrices(fresh)); }
     catch { for (const a of fresh) this.watchedAssets.delete(a); }
+  }
+
+  /**
+   * The underlying's recent tick tape, oldest first, trimmed to a window.
+   *
+   * The feed keeps roughly the last two hundred ticks — about three and a half
+   * minutes — which is enough to draw a 1m or 5m window from its open instead
+   * of from the moment someone happened to load the page. Longer windows get
+   * whatever the tape reaches back to, which is still the truth about what was
+   * observed rather than a line stretched to fill the glass.
+   *
+   * Synchronous and memoized: it costs nothing to ask on every poll.
+   */
+  priceHistory(asset: string, fromSec: number, toSec: number): { t: number; price: number }[] {
+    try {
+      const ticks = this.client.getLivePriceTicks(asset, { limit: 400 });
+      return ticks
+        .map((p) => ({ ts: Number(p.blockTimestamp), price: p.price }))
+        .filter((p) => Number.isFinite(p.ts) && p.ts >= fromSec && p.ts <= toSec && p.price > 0)
+        .sort((a, b) => a.ts - b.ts)
+        .map((p) => ({ t: p.ts - fromSec, price: p.price }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Candles covering a whole window, for the dials the tick tape cannot reach.
+   *
+   * The tape holds about three and a half minutes, which draws a 1m or 5m
+   * window whole and leaves an hour-long one starting most of the way across.
+   * Candles fill the rest. Fetched out of band and cached per window — this
+   * must never sit between a page load and the first frame.
+   */
+  async windowCandles(asset: string, fromSec: number, toSec: number): Promise<{ t: number; price: number }[]> {
+    const key = `${asset}:${fromSec}`;
+    const cached = this.candles.get(key);
+    if (cached) return cached;
+
+    const span = toSec - fromSec;
+    // Minute candles up to a few hours; beyond that an hourly one is plenty for
+    // a trail 380 pixels wide.
+    const resolution = span <= 4 * 3600 ? 'M1' : 'H1';
+    try {
+      const rows = await this.ex.client.fetchPriceCandles(asset, resolution, {
+        from: fromSec, to: toSec, limit: 400,
+      });
+      const points = rows
+        .map((r) => ({ ts: Number(r.bucketStart), price: Number(r.close || r.open) }))
+        .filter((r) => Number.isFinite(r.ts) && r.ts >= fromSec && r.ts <= toSec && r.price > 0)
+        .sort((a, b) => a.ts - b.ts)
+        .map((r) => ({ t: r.ts - fromSec, price: r.price }));
+      this.candles.set(key, points);
+      return points;
+    } catch {
+      this.candles.set(key, []);
+      return [];
+    }
   }
 
   underlying(asset: string): number {

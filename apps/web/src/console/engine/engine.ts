@@ -273,6 +273,47 @@ export class Engine implements Scene {
     this.publish();
   }
 
+  /**
+   * Ask for candles when the tick tape does not reach the window's open.
+   *
+   * The tape holds a few minutes: enough to draw a 1m or 5m window whole, and
+   * nowhere near an hour. Without this a long dial drew a stub floating in the
+   * middle of the glass, which reads as broken rather than as honest.
+   *
+   * Fired and forgotten. The answer is applied only if that dial is still on
+   * the same market, so a slow reply cannot overwrite a window that has since
+   * rolled or a dial the viewer has since left.
+   */
+  private requestBackfill(slot: FeedSlot, index: number): void {
+    if (!this.feed?.backfill) return;
+    const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - slot.openTime);
+    const covered = slot.history?.length ? elapsed - slot.history[0]!.t : 0;
+    // Good enough already: the tape reaches most of what has happened.
+    if (elapsed < 90 || covered >= elapsed * 0.8) return;
+
+    void this.feed.backfill(slot).then((points) => {
+      if (points.length < 2) return;
+      const race = this.races[index];
+      if (!race || race.marketId !== slot.marketId) return;
+      const trimmed = points.length > HIST_MAX ? points.slice(points.length - HIST_MAX) : points;
+      race.hist = trimmed.map((p) => p.price);
+      race.histStartT = trimmed[0]!.t;
+      this.publish();
+    }).catch(() => { /* the tape's partial trail stands */ });
+  }
+
+  /** A slot's trail: the underlying's real ticks inside the window when the
+   *  feed has them, otherwise the single reading we do have. Capped so a long
+   *  tape cannot make the canvas walk a huge array. */
+  private trailFor(slot: FeedSlot, elapsed: number): { hist: number[]; histStartT: number } {
+    const h = slot.history ?? [];
+    if (h.length < 2) {
+      return { hist: [slot.spot || slot.strike], histStartT: elapsed };
+    }
+    const trimmed = h.length > HIST_MAX ? h.slice(h.length - HIST_MAX) : h;
+    return { hist: trimmed.map((p) => p.price), histStartT: trimmed[0]!.t };
+  }
+
   /** Swap the current dial onto a new window and clear the last one's scene. */
   private rollTo(slot: FeedSlot): void {
     const i = this.raceIndex;
@@ -286,14 +327,14 @@ export class Engine implements Scene {
       strike: slot.strike,
       spot: slot.spot,
       upP: slot.upP,
-      hist: [slot.spot || slot.strike],
-      histStartT: Math.max(0, now - slot.openTime),
+      ...this.trailFor(slot, Math.max(0, now - slot.openTime)),
       pos: null,
       phase: 'trade',
       wasDanger: false,
       settled: this.races[i]?.settled ?? [],
     };
     this.pendingSlot = null;
+    this.requestBackfill(slot, i);
     this.resetScene();
     this.labelWindow();
     this.statusOverride = null;
@@ -365,14 +406,14 @@ export class Engine implements Scene {
           strike: slot.strike,
           spot: slot.spot,
           upP: slot.upP,
-          hist: [slot.spot || slot.strike],
-          histStartT: Math.max(0, now - slot.openTime),
+          ...this.trailFor(slot, Math.max(0, now - slot.openTime)),
           pos: null,
           phase: 'trade',
           wasDanger: false,
           // A rolled window keeps the series' form guide.
           settled: prev?.settled ?? [],
         };
+        this.requestBackfill(slot, i);
         if (i === this.raceIndex) touchedCurrent = true;
         return;
       }
@@ -383,6 +424,15 @@ export class Engine implements Scene {
       prev.upP = slot.upP || prev.upP;
       prev.openTime = slot.openTime;
       prev.t = Math.max(0, now - slot.openTime);
+
+      // The tape needs a moment to hydrate, so the first reading of a window
+      // often arrives with no history at all. Top it up once it does, rather
+      // than leaving that dial stunted for the rest of its window.
+      if (prev.hist.length <= 2 && (slot.history?.length ?? 0) > 2) {
+        const seeded = this.trailFor(slot, prev.t);
+        prev.hist = seeded.hist;
+        prev.histStartT = seeded.histStartT;
+      }
       if (slot.spot > 0 && slot.spot !== prev.spot) {
         prev.spot = slot.spot;
         prev.hist.push(slot.spot);
