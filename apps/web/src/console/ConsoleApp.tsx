@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { parseDuelLink } from '@bullrun/sdk';
 import { useWallet } from '../walletContext';
+import { useSdk } from '../sdk';
 import { usePath } from '../router';
 import { Engine } from './engine/engine';
+import { LiveFeed } from './engine/feed';
 import type { ConsoleSnapshot } from './engine/types';
 import { Panel } from './components/Panel';
 import { Marquee } from './components/Marquee';
@@ -36,8 +38,16 @@ export function ConsoleApp() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mount, setMount] = useState<HTMLDivElement | null>(null);
   const { conn, wrongChain } = useWallet();
+  const { market } = useSdk();
 
-  const engine = useMemo(() => new Engine(), []);
+  // Demo mode keeps the built-in simulation; anything else reads the real
+  // event contracts, so the dials, the strike and the countdown are the ones
+  // a duel would actually settle against.
+  const [demo, setDemo] = useState(false);
+  const engine = useMemo(
+    () => new Engine(demo ? undefined : new LiveFeed(market)),
+    [demo, market],
+  );
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
 
   useEffect(() => {
@@ -94,9 +104,15 @@ export function ConsoleApp() {
       {stage !== 'playing' && (
         <div className="gate">
           {stage === 'start' ? (
-            <StartScreen onStart={() => setStage('connect')} onDemo={() => setStage('playing')} />
+            <StartScreen
+              onStart={() => setStage('connect')}
+              onDemo={() => { setDemo(true); setStage('playing'); }}
+            />
           ) : (
-            <ConnectScreen onBack={() => setStage('start')} onDemo={() => setStage('playing')} />
+            <ConnectScreen
+              onBack={() => setStage('start')}
+              onDemo={() => { setDemo(true); setStage('playing'); }}
+            />
           )}
         </div>
       )}

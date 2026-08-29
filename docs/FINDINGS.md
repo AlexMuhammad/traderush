@@ -216,8 +216,8 @@ to two strangers.
 
 1. **The base front end's duel screens have never been driven by a human.** M3 proves the
    contract path end to end; S4–S8 have only been typechecked.
-2. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
-   that invents numbers.
-3. **Session keys (M4)** — an order that signs with no wallet popup.
+2. **Session keys (M4)** — an order that signs with no wallet popup.
+3. **Book trading** needs an `OrderSubmitter` from dreamdex-bot-kit's ec-core. Duels need
+   none of it, and the console's keys stake points rather than placing orders.
 4. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
    that invents numbers; nothing in `console/components/` reads it directly.

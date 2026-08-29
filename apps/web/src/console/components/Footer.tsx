@@ -10,7 +10,10 @@ export function Footer({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
       <span style={{ cursor: 'pointer' }} onPointerDown={() => { engine.wake(); engine.cycleSpeed(); }}>
         Demo ×{s.speed} · {s.speed === 1 ? 'real time' : 'tap to slow'}
       </span>
-      <span>{money(s.balance)} USDso</span>
+      {/* Paper money either way: the console's keys do not place real orders.
+          But the PRICES are real unless this says demo, and conflating the two
+          is exactly the confusion worth avoiding. */}
+      <span>{s.live ? 'LIVE PRICES' : 'DEMO PRICES'} · {money(s.balance)} pts</span>
     </div>
   );
 }

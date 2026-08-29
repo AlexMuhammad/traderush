@@ -77,8 +77,29 @@ It is not a substitute for looking at the thing. It proves the engine does not
 throw and that the state transitions hold; it says nothing about whether the
 animals look right.
 
-## Simulated data
+## Where the numbers come from
 
-`engine/market.ts` is the only module that invents numbers. Everything else
-consumes a `Race`. Wiring this to the real venue means replacing that module and
-feeding `Race` from the SDK's `MarketState`; no component changes.
+The engine takes a `MarketFeed`. There are two, and nothing else in the engine
+knows which one it is looking at:
+
+| | |
+|---|---|
+| none (demo mode) | `engine/market.ts` simulates four races |
+| `engine/feed.ts` | real event contracts from the indexer |
+
+`LiveFeed` picks a 2×2 that matches the tuner — each asset at its two shortest
+live intervals — and folds each reading onto the dials. The engine keeps `hist`,
+`pos` and the cinematics; the chain owns strike, spot, odds and the window.
+
+Three things follow from the markets being real:
+
+- **The tuner's labels are read, not assumed.** The venue runs 1H/4H/24H
+  windows; the prototype's fixed 15M/1H would have been a dial that lies about
+  its own interval.
+- **Demo speed does not apply.** `t` is wall-clock against the market's own
+  window, because the chain does not care how fast you are watching.
+- **The console never rolls a live window.** The venue opens the next one, which
+  may be an hour away, so the result stays up and the status says it is waiting.
+
+The keys still stake points, not money — the console places no real orders. The
+footer says LIVE PRICES or DEMO PRICES so the two are never confused.

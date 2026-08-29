@@ -2,12 +2,12 @@ import { Audio } from './audio';
 import { newBeastState, type BeastState } from './beasts';
 import { burst } from './fx';
 import {
-  MARKETS, initialRaces, newRace, tickBackground, tickPrice,
-  money, mmss, utcLabel,
+  MARKETS, HIST_MAX, initialRaces, newRace, tickBackground, tickPrice,
+  money, mmss, utcLabel, intervalLabel,
 } from './market';
 import { renderScene, type Scene } from './render';
 import type {
-  Attack, ConsoleSnapshot, Outcome, Particle, Race, Ring, Side, Slash,
+  Attack, ConsoleSnapshot, FeedSlot, MarketFeed, Outcome, Particle, Race, Ring, Side, Slash,
 } from './types';
 
 /** Seconds between the window closing and the result landing. */
@@ -66,6 +66,10 @@ export class Engine implements Scene {
   private expiryLabel = '';
   private lastBeepAt = -1;
 
+  /** Where the numbers come from. Undefined = the built-in simulation. */
+  private readonly feed?: MarketFeed;
+  private unsubscribeFeed: (() => void) | null = null;
+
   private ctx: CanvasRenderingContext2D | null = null;
   private raf = 0;
   private priceTimer = 0;
@@ -74,7 +78,10 @@ export class Engine implements Scene {
   private timeouts: ReturnType<typeof setTimeout>[] = [];
   private listeners = new Set<Listener>();
 
+  constructor(feed?: MarketFeed) { this.feed = feed; }
+
   get race(): Race { return this.races[this.raceIndex]!; }
+  private get isLive(): boolean { return this.feed !== undefined; }
 
   // ------------------------------------------------------------------ lifecycle
 
@@ -95,9 +102,14 @@ export class Engine implements Scene {
   };
 
   start(): void {
-    // Seed a form guide so the first window is not the first result ever.
-    for (let i = 0; i < 5; i++) {
-      this.race.settled.push({ p: 77000 + Math.random() * 2500, w: Math.random() < 0.5 ? 'up' : 'down' });
+    if (this.feed) {
+      this.unsubscribeFeed = this.feed.subscribe((slots) => this.applySlots(slots));
+    } else {
+      // Demo mode only: a form guide so the first window is not the first result
+      // ever seen. Live, the guide fills from real settlements.
+      for (let i = 0; i < 5; i++) {
+        this.race.settled.push({ p: 77000 + Math.random() * 2500, w: Math.random() < 0.5 ? 'up' : 'down' });
+      }
     }
     this.openWindow();
     addEventListener('resize', this.fit);
@@ -107,6 +119,8 @@ export class Engine implements Scene {
   }
 
   stop(): void {
+    this.unsubscribeFeed?.();
+    this.unsubscribeFeed = null;
     cancelAnimationFrame(this.raf);
     clearInterval(this.priceTimer);
     clearInterval(this.clockTimer);
@@ -149,7 +163,6 @@ export class Engine implements Scene {
 
   snapshot(): ConsoleSnapshot {
     const R = this.race;
-    const def = MARKETS[this.raceIndex]!;
     const bullish = R.spot >= R.strike;
     const upP = R.upP;
     const cost = this.balance * this.stakePct / 100;
@@ -165,10 +178,14 @@ export class Engine implements Scene {
     if (R.pos) ground = danger ? (myOdds < 0.2 ? 'HORNS OUT' : 'IN ITS TERRITORY') : 'HOME GROUND';
 
     return {
-      asset: def.asset,
-      interval: def.interval,
+      asset: this.isLive ? R.symbol : MARKETS[this.raceIndex]!.asset,
+      interval: this.isLive ? intervalLabel(R.win) : MARKETS[this.raceIndex]!.interval,
+      slots: this.races.map((r, i) => (this.isLive
+        ? { asset: r.symbol, interval: intervalLabel(r.win) }
+        : { asset: MARKETS[i]!.asset, interval: MARKETS[i]!.interval })),
       raceIndex: this.raceIndex,
       riders: this.riders,
+      live: this.feed?.live ?? false,
       expiryLabel: this.expiryLabel,
 
       strike: R.strike,
@@ -227,15 +244,26 @@ export class Engine implements Scene {
   // ------------------------------------------------------------------- windows
 
   private openWindow(): void {
-    const def = MARKETS[this.raceIndex]!;
-    const carried = this.race.settled;
-    this.races[this.raceIndex] = { ...newRace(this.raceIndex, 0), settled: carried };
-
+    // Live, the venue opens windows; the console only follows them. Rolling one
+    // ourselves would throw away the market we are actually watching.
+    if (!this.isLive) {
+      const carried = this.race.settled;
+      this.races[this.raceIndex] = { ...newRace(this.raceIndex, 0), settled: carried };
+    }
     this.resetScene();
-    this.riders = `${def.asset} ${def.interval} · ${14 + Math.floor(Math.random() * 30)} running`;
-    this.expiryLabel = utcLabel(def.sec);
+    this.labelWindow();
     this.statusOverride = 'OPEN';
     this.publish();
+  }
+
+  /** The header line and the expiry stamp for whatever is on the dials now. */
+  private labelWindow(): void {
+    const R = this.race;
+    const label = this.isLive
+      ? `${R.symbol} ${intervalLabel(R.win)}`
+      : `${MARKETS[this.raceIndex]!.asset} ${MARKETS[this.raceIndex]!.interval}`;
+    this.riders = `${label} · ${14 + Math.floor(Math.random() * 30)} running`;
+    this.expiryLabel = utcLabel(Math.max(0, R.win - R.t));
   }
 
   private resetScene(): void {
@@ -248,26 +276,88 @@ export class Engine implements Scene {
     this.bullA = this.bearA = 1;
   }
 
+  /**
+   * Fold a reading of the live markets onto the four dials.
+   *
+   * The engine owns `hist`, `pos` and the cinematics; the chain owns everything
+   * else. A CHANGED marketId in a slot means that window rolled and a new one
+   * opened underneath us — which is a real event, not a glitch, so it resets the
+   * scene the same way a simulated roll does.
+   */
+  private applySlots(slots: FeedSlot[]): void {
+    const now = Math.floor(Date.now() / 1000);
+    let touchedCurrent = false;
+
+    slots.forEach((slot, i) => {
+      const prev = this.races[i];
+      const rolled = !prev || prev.marketId !== slot.marketId;
+
+      if (rolled) {
+        this.races[i] = {
+          marketId: slot.marketId,
+          symbol: slot.symbol,
+          win: slot.intervalSec || 900,
+          t: Math.max(0, now - slot.openTime),
+          strike: slot.strike,
+          spot: slot.spot,
+          upP: slot.upP,
+          hist: [slot.spot || slot.strike],
+          pos: null,
+          phase: 'trade',
+          wasDanger: false,
+          // A rolled window keeps the series' form guide.
+          settled: prev?.settled ?? [],
+        };
+        if (i === this.raceIndex) touchedCurrent = true;
+        return;
+      }
+
+      prev.symbol = slot.symbol;
+      prev.win = slot.intervalSec || prev.win;
+      prev.strike = slot.strike || prev.strike;
+      prev.upP = slot.upP || prev.upP;
+      prev.t = Math.max(0, now - slot.openTime);
+      if (slot.spot > 0 && slot.spot !== prev.spot) {
+        prev.spot = slot.spot;
+        prev.hist.push(slot.spot);
+        if (prev.hist.length > HIST_MAX) prev.hist.shift();
+      }
+    });
+
+    if (touchedCurrent) {
+      this.resetScene();
+      this.labelWindow();
+    }
+    this.publish();
+  }
+
   // --------------------------------------------------------------------- ticks
 
   private tickPrice = (): void => {
     if (this.race.phase !== 'trade') return;
-    tickPrice(this.race, this.speed);
+    // Live, the price arrives from the feed; there is nothing to invent.
+    if (!this.isLive) tickPrice(this.race, this.speed);
     this.publish();
   };
 
   private tickClock = (): void => {
-    this.races.forEach((r, i) => { if (i !== this.raceIndex) tickBackground(r, i, this.speed); });
+    // Background races only need simulating when nothing else is driving them.
+    if (!this.isLive) {
+      this.races.forEach((r, i) => { if (i !== this.raceIndex) tickBackground(r, i, this.speed); });
+    }
 
     const R = this.race;
     if (R.phase !== 'trade') return;
-    R.t += this.speed;
+    // Live, `t` is wall-clock against the market's own window — the demo speed
+    // does not apply, because the chain does not care how fast we are watching.
+    if (!this.isLive) R.t += this.speed;
     // 'OPEN' is only the first beat; after that the aggression phase names it.
     if (this.statusOverride === 'OPEN') this.statusOverride = null;
 
-    // Countdown pips over the last five seconds of real time.
+    // Countdown pips over the last five seconds.
     const left = R.win - R.t;
-    if (left <= this.speed * 5 && left > 0 && this.lastBeepAt !== R.t) {
+    const pipWindow = this.isLive ? 5 : this.speed * 5;
+    if (left <= pipWindow && left > 0 && this.lastBeepAt !== R.t) {
       this.lastBeepAt = R.t;
       this.audio.countdown();
       if (this.shake < 2.5) this.shake = 2.5;
@@ -303,6 +393,9 @@ export class Engine implements Scene {
     const R = this.race;
     R.phase = 'done';
 
+    // The console calls it from the last price it saw. The chain settles against
+    // the oracle's closing answer, which can differ by a tick right on the line —
+    // the duel screens read the real result, this is the scoreboard.
     const winner: Side = R.spot >= R.strike ? 'up' : 'down';
     R.settled.push({ p: R.spot, w: winner });
 
@@ -327,6 +420,14 @@ export class Engine implements Scene {
     this.publish();
 
     this.later(() => {
+      // Demo rolls its own window. Live, the VENUE opens the next one — which
+      // may be an hour away — so the result stays up and the console says it is
+      // waiting rather than resetting to a dead race.
+      if (this.isLive) {
+        this.statusOverride = 'WAITING FOR NEXT WINDOW';
+        this.publish();
+        return;
+      }
       this.statusOverride = 'NEXT PACK FORMING';
       this.publish();
       this.later(() => this.openWindow(), 1200);
@@ -453,12 +554,10 @@ export class Engine implements Scene {
   setStakePct(pct: number): void { this.stakePct = pct; this.publish(); }
 
   tune(index: number): void {
-    if (index === this.raceIndex) return;
+    if (index === this.raceIndex || !this.races[index]) return;
     this.raceIndex = index;
     this.resetScene();
-    const def = MARKETS[index]!;
-    this.riders = `${def.asset} ${def.interval} · ${14 + Math.floor(Math.random() * 30)} running`;
-    this.expiryLabel = utcLabel(Math.max(0, this.race.win - this.race.t));
+    this.labelWindow();
     this.statusOverride = null;
     this.audio.tuneClick();
     this.publish();

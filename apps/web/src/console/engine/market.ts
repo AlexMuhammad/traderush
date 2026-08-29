@@ -19,6 +19,7 @@ export function newRace(marketIndex: number, elapsed = 0): Race {
   const strike = m.base * (1 + (Math.random() - 0.5) * 0.004);
   const spot = strike + (Math.random() - 0.5) * m.base * 0.0006;
   return {
+    marketId: '', symbol: m.asset,
     win: m.sec, t: elapsed, strike, spot, upP: 0.5,
     hist: [strike], pos: null, phase: 'trade', wasDanger: false, settled: [],
   };
@@ -62,6 +63,15 @@ export function tickPrice(race: Race, speed: number): void {
 
   const room = Math.max(0.02, (race.win - race.t) / race.win);
   race.upP = impliedUp(race.spot, race.strike, room, (Math.random() - 0.5) * 0.05 * room);
+}
+
+/** 900 -> "15M", 3600 -> "1H", 86400 -> "24H". The venue runs intervals the
+ *  prototype's fixed 15M/1H tuner never anticipated. */
+export function intervalLabel(sec: number): string {
+  if (!sec) return '—';
+  if (sec < 60) return `${sec}S`;
+  if (sec < 3600) return `${Math.round(sec / 60)}M`;
+  return `${Math.round(sec / 3600)}H`;
 }
 
 export const money = (n: number): string =>

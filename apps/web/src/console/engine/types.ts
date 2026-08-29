@@ -1,4 +1,7 @@
+import type { MarketStatus } from '@bullrun/sdk';
+
 export type Side = 'up' | 'down';
+export type { MarketStatus };
 
 /** A window runs `trade` -> `lock` (bets closed, price still moving) -> `done`. */
 export type Phase = 'trade' | 'lock' | 'done';
@@ -21,7 +24,35 @@ export interface SettledWindow {
 /** One of the four races. Only the tuned-in race is fully simulated and drawn;
  *  the other three tick in the background so switching to one lands mid-window
  *  rather than on a suspiciously fresh start. */
+/** One reading of a live market, as the console needs it. The engine keeps its
+ *  own `hist`, `pos` and cinematic state; everything here comes from the chain. */
+export interface FeedSlot {
+  /** bytes32. A CHANGE here means the window rolled and a new one opened. */
+  marketId: string;
+  symbol: string;
+  intervalSec: number;
+  strike: number;
+  spot: number;
+  upP: number;
+  openTime: number;
+  expiryTime: number;
+  status: MarketStatus;
+}
+
+/** Where the console's numbers come from. Two implementations: the simulation
+ *  that ships with demo mode, and the indexer. Nothing else in the engine knows
+ *  which one it is looking at. */
+export interface MarketFeed {
+  /** Fires whenever the slots change. Returns an unsubscribe. */
+  subscribe(onSlots: (slots: FeedSlot[]) => void): () => void;
+  /** True when these are real markets — the UI says so. */
+  readonly live: boolean;
+}
+
 export interface Race {
+  /** bytes32 of the live market, or '' in demo mode. */
+  marketId: string;
+  symbol: string;
   /** Window length in seconds. */
   win: number;
   /** Seconds elapsed in this window. */
@@ -75,11 +106,17 @@ export interface Outcome { win: boolean; txt: string; sub: string }
 /** What the React chrome renders. A fresh object is published on every change;
  *  the canvas is never re-rendered by React, only this. */
 export interface ConsoleSnapshot {
-  asset: 'BTC' | 'ETH';
-  interval: '15M' | '1H';
+  asset: string;
+  /** Human interval for the CURRENT dial: 15M, 1H, 24H… The venue runs
+   *  intervals the prototype's fixed pair never anticipated. */
+  interval: string;
+  /** The four dials, in tuner order, labelled from whatever is actually live. */
+  slots: { asset: string; interval: string }[];
   /** Index into the four races, for the tuner segments. */
   raceIndex: number;
   riders: string;
+  /** False in demo mode — the readouts are simulated and must say so. */
+  live: boolean;
   expiryLabel: string;
 
   strike: number;
