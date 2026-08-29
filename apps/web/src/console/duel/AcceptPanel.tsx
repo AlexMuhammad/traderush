@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DuelAdapter, UI_FREEZE_SEC } from '@bullrun/sdk';
+import { DuelAdapter, UI_FREEZE_SEC } from '@traderush/sdk';
 import { useAllowance, useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';

@@ -10,7 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import {
   RoomAdapter, MarketAdapter, parseRoomLink, txUrl,
   binarySettlementAbi, erc6909Abi, MIN_DEADLINE_MARGIN_SEC,
-} from '@bullrun/sdk';
+} from '@traderush/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -27,7 +27,7 @@ async function main() {
   const A = privateKeyToAccount(requireEnv('PRIVATE_KEY_A') as `0x${string}`);
   const B = privateKeyToAccount(requireEnv('PRIVATE_KEY_B') as `0x${string}`);
 
-  console.log(fmt.head(`BULLRUN rooms · ${cfg.network} · chain ${cfg.chainId}`));
+  console.log(fmt.head(`TRADE RUSH rooms · ${cfg.network} · chain ${cfg.chainId}`));
   if (!check('room escrow is configured', Boolean(cfg.roomEscrowAddress), cfg.roomEscrowAddress ?? 'unset')) {
     process.exit(1);
   }

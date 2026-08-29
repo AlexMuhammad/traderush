@@ -13,13 +13,22 @@ export type WalletSheet = 'deposit' | 'withdraw' | null;
  * the console behind it, so the errand is visibly a detour and dismissing it is a
  * swipe rather than a navigation.
  *
- * It is width-matched to the plate so it reads as part of the machine and not as
- * a web page arriving over one.
+ * It is portalled into the plate itself and clipped to it, so it belongs to the
+ * machine rather than arriving over the browser window.
  */
-export function WalletDrawer({ sheet, onClose }: { sheet: WalletSheet; onClose: () => void }) {
+export function WalletDrawer({
+  sheet, onClose, host,
+}: {
+  sheet: WalletSheet;
+  onClose: () => void;
+  /** The plate. The sheet is portalled into it, so it slides up inside the
+   *  machine instead of over the browser window. */
+  host: HTMLElement | null;
+}) {
+  if (!host) return null;
   return (
     <Drawer.Root open={sheet !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Drawer.Portal>
+      <Drawer.Portal container={host}>
         <Drawer.Overlay className="sheet__scrim" />
         <Drawer.Content className="sheet" aria-describedby={undefined}>
           <Drawer.Title className="sheet__title">

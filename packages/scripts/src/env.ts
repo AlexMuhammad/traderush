@@ -1,4 +1,4 @@
-import { loadConfig } from '@bullrun/sdk';
+import { loadConfig } from '@traderush/sdk';
 
 export const cfg = loadConfig(process.env as Record<string, string | undefined>);
 

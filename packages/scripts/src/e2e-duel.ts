@@ -18,7 +18,7 @@ import {
   DuelAdapter, MarketAdapter, parseDuelLink, txUrl,
   binarySettlementAbi, erc6909Abi,
   MIN_DEADLINE_MARGIN_SEC, defaultAcceptDeadline,
-} from '@bullrun/sdk';
+} from '@traderush/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -38,7 +38,7 @@ async function main() {
   const A = privateKeyToAccount(requireEnv('PRIVATE_KEY_A') as `0x${string}`);
   const B = privateKeyToAccount(requireEnv('PRIVATE_KEY_B') as `0x${string}`);
 
-  console.log(fmt.head(`BULLRUN e2e · ${cfg.network} · chain ${cfg.chainId}`));
+  console.log(fmt.head(`TRADE RUSH e2e · ${cfg.network} · chain ${cfg.chainId}`));
 
   // --- 1. what a fresh page load resolves ----------------------------------
   check('escrow is configured', Boolean(cfg.escrowAddress), cfg.escrowAddress ?? 'unset');

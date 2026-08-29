@@ -1,5 +1,5 @@
 {
-  "name": "@bullrun/scripts",
+  "name": "@traderush/scripts",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bullrun/sdk": "workspace:*",
+    "@traderush/sdk": "workspace:*",
     "viem": "^2.31.0",
     "ws": "^8.18.0"
   },

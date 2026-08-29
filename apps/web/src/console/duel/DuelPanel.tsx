@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { binarySettlementAbi, erc6909Abi, oracleUrl, type BinaryRef } from '@bullrun/sdk';
+import { binarySettlementAbi, erc6909Abi, oracleUrl, type BinaryRef } from '@traderush/sdk';
 import { useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';

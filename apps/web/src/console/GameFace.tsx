@@ -8,7 +8,7 @@ import { Ticket } from './components/Ticket';
 import { CallKeys } from './components/CallKeys';
 
 /**
- * THE RUN — the instrument face.
+ * TRADE RUSH — the instrument face.
  *
  * The dials and keys only. The plate, the header, the footer and the menu are
  * the console SHELL and live in ConsoleApp, because the duel screens hang off

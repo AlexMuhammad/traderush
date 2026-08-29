@@ -7,13 +7,13 @@
  *  Nothing here is simulated (§11). Failures are printed, not papered over.
  */
 import { createPublicClient, http, formatUnits } from 'viem';
-import { MarketAdapter, erc20Abi, binarySettlementAbi } from '@bullrun/sdk';
+import { MarketAdapter, erc20Abi, binarySettlementAbi } from '@traderush/sdk';
 import { cfg, fmt } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function main() {
-  console.log(fmt.head(`BULLRUN doctor — network: ${cfg.network.toUpperCase()}`));
+  console.log(fmt.head(`TRADE RUSH doctor — network: ${cfg.network.toUpperCase()}`));
   if (cfg.network === 'mainnet') {
     console.log(fmt.warn('MAINNET. Collateral is real USDso. This code is unaudited.'));
   }
@@ -118,7 +118,7 @@ async function main() {
     console.log(`  RPC_URL=${cfg.rpcUrl} pnpm deploy:escrow`);
   } else {
     try {
-      const { DuelAdapter } = await import('@bullrun/sdk');
+      const { DuelAdapter } = await import('@traderush/sdk');
       const duels = new DuelAdapter(cfg, undefined, { publicClient: pub as never });
       const v = await duels.venue();
       const okCollateral = v.collateral.toLowerCase() === cfg.addresses.collateral.toLowerCase();

@@ -1,4 +1,4 @@
-import type { MarketStatus } from '@bullrun/sdk';
+import type { MarketStatus } from '@traderush/sdk';
 
 export type Side = 'up' | 'down';
 export type { MarketStatus };

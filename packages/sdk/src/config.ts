@@ -15,7 +15,7 @@ export { DEPLOYMENTS, chainFor, parseNetwork } from './networks.js';
  *  Chain id, RPC, indexer, collateral, decimals, tick/lot and venue all follow.
  *  Any single value can still be overridden from env for the case where a redeploy
  *  lands before this map is updated. */
-export interface BullrunConfig extends Deployment {
+export interface TradeRushConfig extends Deployment {
   /** Per-network escrows. A mainnet deploy is a DIFFERENT address than testnet,
    *  so these are read per network and never shared. */
   escrowAddress: Address | null;
@@ -47,7 +47,7 @@ export interface BullrunConfig extends Deployment {
 
 type EnvBag = Record<string, string | undefined>;
 
-export function loadConfig(env: EnvBag = {}): BullrunConfig {
+export function loadConfig(env: EnvBag = {}): TradeRushConfig {
   // Accept both plain and VITE_-prefixed names so scripts and the web app read
   // the same .env without two sets of keys.
   const get = (k: string) => env[`VITE_${k}`] ?? env[k];
@@ -107,9 +107,9 @@ export function loadConfig(env: EnvBag = {}): BullrunConfig {
   };
 }
 
-export const txUrl = (cfg: BullrunConfig, hash: string) => `${cfg.explorerUrl}/tx/${hash}`;
-export const addressUrl = (cfg: BullrunConfig, a: string) => `${cfg.explorerUrl}/address/${a}`;
-export const oracleUrl = (cfg: BullrunConfig, questionId: string) =>
+export const txUrl = (cfg: TradeRushConfig, hash: string) => `${cfg.explorerUrl}/tx/${hash}`;
+export const addressUrl = (cfg: TradeRushConfig, a: string) => `${cfg.explorerUrl}/address/${a}`;
+export const oracleUrl = (cfg: TradeRushConfig, questionId: string) =>
   `${cfg.oracleUrl}/${questionId}?view=graph`;
 
 /** §5.3 — link format. State lives on-chain, so the link carries no secrets and no

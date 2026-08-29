@@ -9,7 +9,7 @@
  */
 import { createPublicClient, createWalletClient, http, formatUnits, parseUnits, type PublicClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { erc20Abi } from '@bullrun/sdk';
+import { erc20Abi } from '@traderush/sdk';
 import { cfg, fmt } from './env.js';
 
 /** TestUSDC's own faucet. Not part of the ERC-20 standard, hence a local ABI. */

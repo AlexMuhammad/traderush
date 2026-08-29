@@ -1,8 +1,8 @@
-# BULLRUN
+# TRADE RUSH
 
 A peer-to-peer duel layer on top of DreamDEX Event Contracts.
 
-Normally you trade an Up/Down event contract against the order book. BULLRUN adds a second
+Normally you trade an Up/Down event contract against the order book. TRADE RUSH adds a second
 path: **two specific people put up equal stakes, a contract mints the pair for them, and the
 winner takes the pot.** No order book, no market maker, no liquidity requirement.
 

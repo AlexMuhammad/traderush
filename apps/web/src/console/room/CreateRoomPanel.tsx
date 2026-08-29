@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MIN_DEADLINE_MARGIN_SEC } from '@bullrun/sdk';
+import { MIN_DEADLINE_MARGIN_SEC } from '@traderush/sdk';
 import { useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { parseDuelLink, parseRoomLink } from '@bullrun/sdk';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseDuelLink, parseRoomLink } from '@traderush/sdk';
 import { formatUnits } from 'viem';
 import { useWallet } from '../walletContext';
 import { useBalance, useSdk } from '../sdk';
@@ -91,6 +91,11 @@ export function ConsoleApp() {
   // and did on the second — React counts hooks per render, so the count grew,
   // the tree threw, and the whole console went blank.
   const [sheet, setSheet] = useState<WalletSheet>(null);
+  // The plate, for the sheet to be portalled into. Held in state rather than
+  // read off the ref during render: a ref is null on the first pass, and a
+  // portal target that arrives without a re-render never mounts.
+  const [plate, setPlate] = useState<HTMLDivElement | null>(null);
+  const plateRef = useCallback((el: HTMLDivElement | null) => setPlate(el), []);
 
   useEffect(() => {
     const unsubscribe = engine.subscribe(setSnap);
@@ -217,13 +222,13 @@ export function ConsoleApp() {
         }]
       : []),
     ...walletRows,
-    { key: 'play', label: 'Play', sub: 'back to the run' },
+    { key: 'play', label: 'Play', sub: 'back to the game' },
   ];
 
   const crt = screen === 'game' ? undefined
     : screen === 'menu' ? (
       <ScreenList
-        title="Menu" right="the run"
+        title="Menu" right="trade rush"
         items={menuItems} cursor={cursor} onCursor={setCursor} dense
         bindSelect={(fire) => { selectRef.current = fire; }}
         onSelect={(i) => {
@@ -301,7 +306,7 @@ export function ConsoleApp() {
 
   return (
     <div className="console-stage">
-      <Panel hot={snap.hot && view.isGame && screen === 'game'}>
+      <Panel hot={snap.hot && view.isGame && screen === 'game'} panelRef={plateRef}>
         <Marquee
           asset={snap.asset}
           interval={snap.interval}
@@ -341,7 +346,7 @@ export function ConsoleApp() {
         <Footer engine={engine} s={snap} />
       </Panel>
 
-      <WalletDrawer sheet={sheet} onClose={() => setSheet(null)} />
+      <WalletDrawer sheet={sheet} onClose={() => setSheet(null)} host={plate} />
 
       {/* Nothing until Privy has finished restoring: flashing the card at
           someone who is already signed in, then snatching it away, is worse

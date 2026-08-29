@@ -15,7 +15,9 @@ export function StartScreen() {
 
   return (
     <div className="gate__body">
-      {/* <div className="wordmark">BULLRUN</div> */}
+      {/* The lockup, not the badge: this is the one place with room for the
+          name, and the badge alone leaves the product unnamed at the door. */}
+      <img className="gate__wordmark" src="/wordmark.png" alt="TRADE RUSH" width={272} height={91} />
 
       <h1 className="gate__headline">
         {wrongChain ? 'Wrong network.' : 'Stay on the right side.'}

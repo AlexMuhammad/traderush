@@ -18,7 +18,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import {
   MarketAdapter, binaryModuleWriteAbi, binaryModuleReadAbi, binarySettlementAbi,
   erc6909Abi, erc20Abi, MARKET,
-} from '@bullrun/sdk';
+} from '@traderush/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));

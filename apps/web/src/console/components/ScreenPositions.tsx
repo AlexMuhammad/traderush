@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { binarySettlementAbi } from '@bullrun/sdk';
+import { binarySettlementAbi } from '@traderush/sdk';
 import { formatUnits } from 'viem';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
