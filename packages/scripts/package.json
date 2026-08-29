@@ -8,6 +8,7 @@
     "faucet": "tsx --env-file-if-exists=../../.env src/faucet.ts",
     "probe": "tsx --env-file-if-exists=../../.env src/probe-unknowns.ts",
     "e2e": "tsx --env-file-if-exists=../../.env src/e2e-duel.ts",
+    "settle": "tsx --env-file-if-exists=../../.env src/settle.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

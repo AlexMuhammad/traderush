@@ -1,27 +1,55 @@
 # §9 — Blocking unknowns
 
-**Status: #3 ANSWERED. #1 and #2 still open.** Run `pnpm probe` and fill the rest
-in. Nothing downstream is trustworthy until each has a written answer here.
+**Status: ALL THREE ANSWERED. The duel design holds.** Verified end to end on
+Shannon on 2026-08-29 — two wallets, one duel, a real payout.
 
 ---
 
-## #1 Can a contract call `mintCompleteSet` while holding user funds, or is it caller-funded only?
+## #1 Can a contract call `mintCompleteSet` while holding user funds? — ANSWERED: YES
 
-- **Answer:** _(unanswered)_
-- **Evidence:** _(tx hash / eth_call result / revert data)_
-- **Tested on:** _(date, marketId)_
+- **Answer:** Yes. `DuelEscrow` — a contract, holding both parties' stakes — called
+  `mintCompleteSet(operatorId, venueId, marketId, 2S)` and received the pair. The
+  module is caller-funded, and a contract is a perfectly good caller. It needs an
+  ERC-20 allowance to the module, which the escrow sets with `forceApprove`
+  immediately before the call.
+- **Evidence:** `accept` on Shannon,
+  `0x02a08b3ac365d3cc0b5dcdbc83aaecf1b2261d2e9079770ab659bd3edacf4f92`.
+  Escrow `0xbfaaf7b082c5b39dedbb9f9224b6a435bda03a57`, market `0x…c3ff`.
+  After it: challenger held 2S of UP, opponent 2S of DOWN, escrow zero collateral.
+- **Tested on:** 2026-08-29, Shannon testnet.
 
-**If NO:** switch to the §4.4 swap fallback — the challenger mints their own set
-off-contract, the escrow holds the opponent's stake plus one leg, and on accept swaps
-leg-for-stake. More steps, same guarantees, no new unknowns. **Decide by day 2.**
+**The §4.4 swap fallback is not needed.** The §4 design stands as written.
+
+Note for anyone reproducing it: an EOA mint reverts with no reason string when the
+module has no allowance. That is not access control, it is the `transferFrom`
+inside — approve first.
 
 ---
 
-## #2 Can any ERC-6909 holder redeem a winning leg, or only the original minter?
+## #2 Can any ERC-6909 holder redeem a winning leg? — ANSWERED: YES
 
-- **Answer:** _(unanswered)_
-- **Evidence:** _(tx hash of wallet B redeeming a leg minted by wallet A)_
-- **Tested on:** _(date, marketId)_
+- **Answer:** Yes — through `BinarySettlement.redeem(outcomeId, amount, to)`. It
+  pays against the outcome id itself and does not care who minted it. That is
+  exactly the primitive the duel needs.
+
+  It matters WHICH path: `binaryModule.redeem(...)` reverts once the market is
+  finalized and its pool released. Both were simulated side by side; only the
+  settlement path works. See `docs/FINDINGS.md` finding 9.
+
+- **Evidence:** market `0x…c3ff` (BTC 1h) resolved DOWN. The escrow
+  `0xbfaaf7b0…` minted the set; neither wallet minted anything.
+
+  | | before | after | |
+  |---|---|---|---|
+  | B, held DOWN (winner) | 19,999 | **20,001** | +2 tUSDC — the whole pot, on a 1 stake |
+  | A, held UP (loser) | 19,999 | 19,999 | 0, **without reverting** (§11) |
+
+  Winner `0xd3b6cebca8252c2b8643fe1bb8a629e579dbfe26ac8de0d771aac91dc9df57e9`,
+  loser `0x8d751818ebaae82b3051faadff7ee442baaea6de16a6824ed7c23d7af309671f`.
+- **Tested on:** 2026-08-29, Shannon testnet.
+
+**The duel design holds.** A leg minted by the escrow and transferred out is
+redeemable by whoever holds it, which is the whole basis of the product.
 
 **If NO: the duel design collapses. Escalate immediately.** The whole product depends on
 a transferred leg being redeemable by whoever holds it.

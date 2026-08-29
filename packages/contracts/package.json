@@ -5,6 +5,6 @@
   "scripts": {
     "build": "forge build",
     "test": "forge test -vv",
-    "deploy": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast -vvv"
+    "deploy": "forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast --gas-estimate-multiplier 2000 -vvv"
   }
 }

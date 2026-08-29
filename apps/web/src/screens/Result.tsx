@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { binaryModuleWriteAbi, binarySettlementAbi, erc6909Abi, type BinaryRef } from '@bullrun/sdk';
+import { binarySettlementAbi, erc6909Abi, type BinaryRef } from '@bullrun/sdk';
 import { useDuel, useMarket, useSdk } from '../sdk';
 import { OracleLink, TxState, useMoney } from '../components/ui';
 import { useWallet } from '../walletContext';
@@ -77,13 +77,16 @@ export function Result({ duelId }: { duelId: bigint }) {
     if (!conn || !ref || held === null || held === 0n) return;
     setPending(true); setError(null);
     try {
-      // redeem is scoped by the market's origin venue, not by whichever venue
-      // it was read through. The loser's leg redeems 0 and must not revert
-      // (§11), so this is safe to press on either side.
+      // BinarySettlement, not the module: the module's redeem reverts once the
+      // market is finalized and its pool released. Settlement pays against the
+      // outcome id itself, so any holder can claim — verified on Shannon.
+      // The loser's leg redeems 0 without reverting (§11), so this is safe to
+      // press on either side.
+      const id = myIdx === 0 ? ref.upId : ref.downId;
       const { request } = await adapter.publicClient.simulateContract({
-        account: conn.account, address: cfg.addresses.binaryModule,
-        abi: binaryModuleWriteAbi, functionName: 'redeem',
-        args: [ref.operatorId, ref.venueId, duel.marketId, myIdx, held],
+        account: conn.account, address: cfg.addresses.binarySettlement,
+        abi: binarySettlementAbi, functionName: 'redeem',
+        args: [id, held, conn.account.address],
       });
       const tx = await conn.wallet.writeContract(request);
       await adapter.publicClient.waitForTransactionReceipt({ hash: tx });

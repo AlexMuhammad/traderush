@@ -161,10 +161,63 @@ live underlying price and rounding to the power of ten between them — measured
 
 ---
 
+## 8. Forge's gas estimate is ~17x too low on Somnia — deploys fail silently
+
+`forge script --broadcast` estimated 1,366,862 gas to deploy a 4.4 KB contract.
+The node's own `eth_estimateGas` said **23,155,244**. The transaction mines with
+`gasUsed == gasLimit` and `status 0`, which reads like a reverting constructor
+rather than what it is.
+
+`--gas-estimate-multiplier 300` was still not enough. Three transactions were
+burned before the cause was clear.
+
+Somnia meters gas on a different schedule: the block gas limit is 15,000,000,000,
+and deploying a **ten-byte** contract costs 487,794 gas. Nothing is wrong with the
+bytecode — it contains no Cancun-only opcodes, and a minimal contract from the
+same wallet deploys fine.
+
+**Deploy with an explicit limit from the node's own estimate**, not forge's. The
+package script now carries `--gas-estimate-multiplier 2000`. When in doubt:
+
+```bash
+cast rpc eth_estimateGas '{"from":"0x…","data":"0x<creation+args>"}' --rpc-url $RPC
+cast send --rpc-url $RPC --private-key $KEY --gas-limit <estimate * 1.5> --create 0x…
+```
+
+viem is unaffected — it calls `eth_estimateGas`, so `pnpm e2e` needed no tuning.
+
+---
+
+## 9. Two redeem paths, and the obvious one is wrong
+
+There are two ways to claim a settled outcome, and they are not interchangeable:
+
+| Path | Result |
+|---|---|
+| `binaryModule.redeem(operatorId, venueId, marketId, outcomeIdx, amount)` | **reverts** |
+| `binarySettlement.redeem(outcomeId, amount, to)` | works |
+
+Once a market is finalized and its pool released, the module's path no longer
+resolves it; `BinarySettlement` is what holds the backing. `isFinalized(marketKey)`
+returns **false** on a market whose `getSettlement` record plainly says
+`finalized: true`, so that read is not a reliable gate either — settle by asking
+the indexer for `winningOutcome` / `voided`.
+
+The settlement path is also what makes the whole product possible: it pays against
+the **outcome id**, with no reference to who minted it. That is §9 unknown #2
+answered, and it is the reason a duel can mint through an escrow and hand the legs
+to two strangers.
+
+`redeem` on a losing leg succeeds and pays 0 — §11 holds.
+
+---
+
 ## What is left
 
-1. **§9 unknowns #1 and #2** (`docs/UNKNOWNS.md`). #2 is the one that can still sink the
-   design, and it needs two wallets and a resolved market. This is the critical path.
-2. **Deploy + `pnpm e2e`** — M3, still the real gate. Needs two funded testnet wallets.
+1. **The base front end's duel screens have never been driven by a human.** M3 proves the
+   contract path end to end; S4–S8 have only been typechecked.
+2. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
+   that invents numbers.
+3. **Session keys (M4)** — an order that signs with no wallet popup.
 4. **Feed the game console from the SDK.** `console/engine/market.ts` is the only module
    that invents numbers; nothing in `console/components/` reads it directly.

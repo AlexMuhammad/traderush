@@ -121,9 +121,12 @@ async function main() {
   // --- settlement ------------------------------------------------------------
   console.log(fmt.head('settlement'));
   console.log(`Window expires at ${new Date(target.expiryTime * 1000).toISOString()}.`);
-  console.log('There is no claim button: settlement lands by itself (§6.2). After the oracle posts,');
-  console.log(`the winner calls redeem(${marketId}, <winning id>, ${pot}) for ${unit(pot)};`);
-  console.log("the loser's redeem returns 0 and MUST NOT revert (§11).");
+  // CORRECTION to PRD §6.2: winnings are claimed, not received. A settled market
+  // pays only when someone asks it to — see docs/FINDINGS.md.
+  console.log('Winnings are CLAIMED, not received. After the oracle posts, the winner calls');
+  console.log(`  redeem(${target.ref.operatorId}, venueId, ${marketId}, <0=up|1=down>, ${pot})`);
+  console.log(`for ${unit(pot)}. The loser's redeem returns 0 and MUST NOT revert (§11).`);
+  console.log('Run `pnpm settle` once the window has closed.');
   console.log(`Oracle: ${target.oracleQuestionId ? `${cfg.oracleUrl}/${target.oracleQuestionId}?view=graph` : '(no oracleQuestionId on this market)'}`);
 
   console.log(fmt.head('tx hashes (M3 evidence)'));
