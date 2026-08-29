@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { binarySettlementAbi } from '@traderush/sdk';
 import { formatUnits } from 'viem';
 import { useSdk } from '../../sdk';
+import { withTimeout } from '../../timeout';
 import { useWallet } from '../../walletContext';
 import { intervalLabel } from '../engine/market';
 import { Fault } from './Readout';
@@ -36,6 +37,7 @@ export function ScreenPositions({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState(0);
+  const [heldFailed, setHeldFailed] = useState(false);
 
   const money = (v: bigint) => `${formatUnits(v, cfg.decimals)} ${cfg.collateralSymbol}`;
 
@@ -45,11 +47,20 @@ export function ScreenPositions({
     void (async () => {
       try {
         const client = market.discovery.client;
-        const [claimable, portfolio] = await Promise.all([
-          client.getClaimable(conn.account.address),
-          client.getPortfolio(conn.account.address),
+        // Settled, not all: these are two independent questions, and the
+        // portfolio half of the indexer can hang indefinitely. Under Promise.all
+        // that took the answered half down with it and left the screen on its
+        // loading lamps forever — the report this was written to fix.
+        const [claim, port] = await Promise.allSettled([
+          withTimeout(client.getClaimable(conn.account.address), 9000, 'the indexer'),
+          withTimeout(client.getPortfolio(conn.account.address), 9000, 'the indexer'),
         ]);
         if (!alive) return;
+
+        // What is owed is the half that matters; if it failed there is nothing
+        // worth showing and the error says so.
+        if (claim.status === 'rejected') throw claim.reason;
+        const claimable = claim.value;
 
         const named = await Promise.all(claimable.map(async (c) => {
           const m = await market.discovery.get(c.marketId).catch(() => null);
@@ -64,9 +75,15 @@ export function ScreenPositions({
         if (!alive) return;
         setRows(named);
 
+        // The open positions are the nice-to-have. Losing them costs a list of
+        // things you already know you hold; losing the screen costs the claim
+        // button, which is the only way money comes back.
+        if (port.status === 'rejected') { setHeldFailed(true); return; }
+        setHeldFailed(false);
+
         // Everything still open, so a position is visible before it settles.
         const openIds = new Set(named.map((c) => c.marketId.toLowerCase()));
-        setHeld(portfolio.positions
+        setHeld(port.value.positions
           .filter((p) => BigInt(p.balance) > 0n && !openIds.has(p.market.id.toLowerCase()))
           .map((p) => ({
             key: `${p.market.id}:${p.outcomeIndex}`,
@@ -117,7 +134,20 @@ export function ScreenPositions({
     disabled: busy !== null,
   }));
 
-  const items = [...claimRows, ...held];
+  const items: ScreenItem[] = [
+    ...claimRows,
+    ...held,
+    // Said as a row rather than swallowed: an absent list and a list that could
+    // not be fetched look identical and mean opposite things.
+    ...(heldFailed
+      ? [{
+          key: '__held-failed',
+          label: 'Open positions unavailable',
+          sub: 'the indexer did not answer — anything owed to you is still listed above',
+          disabled: true,
+        }]
+      : []),
+  ];
 
   return (
     <ScreenList

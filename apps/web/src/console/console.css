@@ -1796,3 +1796,14 @@
   image-rendering: pixelated;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.75));
 }
+
+/* What the spread takes to get out, on the ticket. Dark on the ticket's steel,
+   and warm rather than red: it is a cost, not a failure. */
+.tspread {
+  margin-top: 5px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: #7A5A28;
+  text-shadow: 0 1px 0 rgba(255,255,255,.4);
+}

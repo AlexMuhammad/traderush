@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { formatUnits, parseUnits } from 'viem';
 import { useSdk } from '../../sdk';
 
@@ -9,7 +10,12 @@ import { useSdk } from '../../sdk';
  */
 export function useMoney() {
   const { cfg } = useSdk();
-  return {
+  // Memoised, and that is not a micro-optimisation: this used to hand back a
+  // fresh object on every render, so any effect listing `money` in its deps
+  // re-ran on every render. The console publishes a snapshot every frame, so
+  // such an effect restarted several times a second — cancelling its own fetch
+  // before it could ever finish. ScreenHistory sat on "reading…" forever.
+  return useMemo(() => ({
     decimals: cfg.decimals,
     symbol: cfg.collateralSymbol,
     /** "12.50 tUSDC" */
@@ -17,5 +23,5 @@ export function useMoney() {
     /** "12.50" */
     plain: (v: bigint) => formatUnits(v, cfg.decimals),
     parse: (v: string) => parseUnits(v || '0', cfg.decimals),
-  };
+  }), [cfg.decimals, cfg.collateralSymbol]);
 }

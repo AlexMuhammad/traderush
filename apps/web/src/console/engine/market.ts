@@ -21,6 +21,10 @@ export function newRace(marketIndex: number, elapsed = 0): Race {
   return {
     marketId: '', symbol: m.asset,
     win: m.sec, t: elapsed, openTime: 0, strike, spot, upP: 0.5,
+    // The demo has no book. A spread of one point either side of the mid is
+    // enough for the exit price to be visibly worse than the quote, which is the
+    // fact the ticket has to teach.
+    bestBid: 0.49, bestAsk: 0.51,
     hist: [strike], histStartT: elapsed,
     pos: null, phase: 'trade', wasDanger: false, settled: [],
   };
@@ -48,6 +52,7 @@ export function tickBackground(race: Race, index: number, speed: number): void {
   const room = Math.max(0.02, (race.win - race.t) / race.win);
   race.spot += (Math.random() - 0.49) * race.strike * 0.0006 * speed * 0.3;
   race.upP = impliedUp(race.spot, race.strike, room);
+  quote(race);
   if (race.t >= race.win) Object.assign(race, newRace(index, 0));
 }
 
@@ -64,6 +69,16 @@ export function tickPrice(race: Race, speed: number): void {
 
   const room = Math.max(0.02, (race.win - race.t) / race.win);
   race.upP = impliedUp(race.spot, race.strike, room, (Math.random() - 0.5) * 0.05 * room);
+  quote(race);
+}
+
+/** The demo's order book: a spread around the mid that WIDENS as the price gets
+ *  lopsided, because that is what a real book does — nobody quotes tight on a
+ *  side that is nearly settled. It is what makes an exit cost something. */
+function quote(race: Race): void {
+  const edge = 0.012 + 0.05 * Math.abs(race.upP - 0.5);
+  race.bestBid = Math.max(0.01, race.upP - edge);
+  race.bestAsk = Math.min(0.99, race.upP + edge);
 }
 
 /** 900 -> "15M", 3600 -> "1H", 86400 -> "24H". The venue runs intervals the

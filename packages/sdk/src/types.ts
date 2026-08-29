@@ -38,6 +38,15 @@ export interface MarketState {
   expiryTime: number;
   upLiquid: boolean;
   downLiquid: boolean;
+  /** Top of book, as probabilities 0..1, or null when that side is empty.
+   *
+   *  There is ONE book, quoted on the UP token. Which side you need depends on
+   *  what you are doing, and the two are not interchangeable:
+   *    buy UP / sell DOWN → lift `bestAsk`
+   *    sell UP / buy DOWN → hit `bestBid`
+   *  `upPrice` is the mid between them and is what nobody actually trades at. */
+  bestBid: number | null;
+  bestAsk: number | null;
   oracleQuestionId: string | null;
   /** e.g. 'disconnected'. watch() never throws; it reports here instead. */
   error?: string;

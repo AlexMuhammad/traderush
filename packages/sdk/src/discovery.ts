@@ -273,6 +273,11 @@ export class MarketDiscovery {
 
     // Implied probability of UP. The book's mid is the live read; lastPrice is
     // the fallback, and 0.5 only when the market has never traded.
+    // Raw book prices are in quote units; everything above the SDK thinks in
+    // probabilities.
+    const prob = (raw: string | null | undefined): number | null =>
+      raw === null || raw === undefined ? null : num(raw) / quoteUnit;
+
     const midRaw = top?.mid ?? m.lastPrice;
     const upPrice = midRaw !== null && midRaw !== undefined
       ? Math.min(0.99, Math.max(0.01, num(midRaw) / quoteUnit))
@@ -296,6 +301,8 @@ export class MarketDiscovery {
       expiryTime: num(m.expiry),
       upLiquid: Boolean(top?.bestAsk),
       downLiquid: Boolean(top?.bestBid),
+      bestBid: prob(top?.bestBid),
+      bestAsk: prob(top?.bestAsk),
       oracleQuestionId: m.oracleQuestionId ?? null,
     };
 

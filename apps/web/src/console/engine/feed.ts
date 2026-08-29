@@ -82,6 +82,7 @@ export class LiveFeed implements MarketFeed {
    */
   private pick(all: { marketId: string; symbol: string; intervalSec: number; strike: number;
                       spot: number; upPrice: number; openTime: number; expiryTime: number;
+                      bestBid: number | null; bestAsk: number | null;
                       status: string }[]): FeedSlot[] {
     const trading = all.filter((m) => m.status === 'Trading');
     const key = (asset: string, iv: number) => `${asset}:${iv}`;
@@ -121,6 +122,8 @@ export class LiveFeed implements MarketFeed {
           strike: m.strike,
           spot: m.spot,
           upP: m.upPrice,
+          bestBid: m.bestBid,
+          bestAsk: m.bestAsk,
           openTime: m.openTime,
           expiryTime: m.expiryTime,
           status: m.status as FeedSlot['status'],
