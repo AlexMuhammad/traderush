@@ -17,6 +17,8 @@ export class LiveFeed implements MarketFeed {
   private readonly listeners = new Set<(slots: FeedSlot[]) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private slots: FeedSlot[] = [];
+  /** `BTC:60` … Chosen once, then held. See `pick`. */
+  private series: string[] = [];
 
   constructor(
     private readonly adapter: MarketAdapter,
@@ -58,23 +60,56 @@ export class LiveFeed implements MarketFeed {
     this.timer = null;
   }
 
-  /** Two intervals per asset, shortest first, in the tuner's order. */
+  /**
+   * Four dials, each locked to a SERIES — an asset at an interval, like
+   * `BTC:60` — rather than to a position in a filtered list.
+   *
+   * That distinction is the whole point. A series rolls every window: the old
+   * market leaves the live list and a new marketId takes its place. If the
+   * dials were positional, that roll would reshuffle which series each dial
+   * pointed at, the engine would read four changed marketIds instead of one,
+   * and it would wipe the trail and the scene on every roll — a display that
+   * comes and goes for no reason a viewer can see.
+   *
+   * Locked to a series, a roll is exactly what it is: one window ending and the
+   * next beginning on the same dial. And a series briefly absent from the list
+   * holds its last reading rather than dragging another series into its place.
+   */
   private pick(all: { marketId: string; symbol: string; intervalSec: number; strike: number;
                       spot: number; upPrice: number; openTime: number; expiryTime: number;
                       status: string }[]): FeedSlot[] {
-    const out: FeedSlot[] = [];
-    for (const asset of ['BTC', 'ETH'] as const) {
-      const mine = all
-        .filter((m) => m.symbol.toUpperCase().includes(asset) && m.status === 'Trading')
-        .sort((a, b) => a.intervalSec - b.intervalSec);
+    const trading = all.filter((m) => m.status === 'Trading');
+    const key = (asset: string, iv: number) => `${asset}:${iv}`;
+    const byKey = new Map<string, typeof trading[number]>();
+    for (const m of trading) {
+      const asset = m.symbol.toUpperCase().includes('BTC') ? 'BTC'
+                  : m.symbol.toUpperCase().includes('ETH') ? 'ETH' : m.symbol.toUpperCase();
+      const k = key(asset, m.intervalSec);
+      // Soonest to expire wins: that is the window currently running.
+      const held = byKey.get(k);
+      if (!held || m.expiryTime < held.expiryTime) byKey.set(k, m);
+    }
 
-      // Distinct intervals, so the two dials are not the same window twice.
-      const seen = new Set<number>();
-      const chosen = mine.filter((m) => !seen.has(m.intervalSec) && seen.add(m.intervalSec)).slice(0, 2);
-      for (const m of chosen) {
+    if (!this.series.length) {
+      // First sight only: each asset's two shortest live intervals.
+      for (const asset of ['BTC', 'ETH'] as const) {
+        const intervals = [...new Set(
+          trading
+            .filter((m) => m.symbol.toUpperCase().includes(asset))
+            .map((m) => m.intervalSec),
+        )].sort((a, b) => a - b).slice(0, 2);
+        for (const iv of intervals) this.series.push(key(asset, iv));
+      }
+    }
+
+    const out: FeedSlot[] = [];
+    this.series.forEach((k, i) => {
+      const m = byKey.get(k);
+      if (m) {
+        const [asset] = k.split(':');
         out.push({
           marketId: m.marketId,
-          symbol: asset,
+          symbol: asset!,
           intervalSec: m.intervalSec,
           strike: m.strike,
           spot: m.spot,
@@ -83,10 +118,13 @@ export class LiveFeed implements MarketFeed {
           expiryTime: m.expiryTime,
           status: m.status as FeedSlot['status'],
         });
+        return;
       }
-      // Keep the grid rectangular even when an asset offers only one interval.
-      while (out.length % 2 !== 0 && chosen.length) out.push({ ...out[out.length - 1]! });
-    }
+      // Between windows, or an indexer hiccup. Hold the dial rather than
+      // reshuffling every other one around it.
+      const previous = this.slots[i];
+      if (previous) out.push(previous);
+    });
     return out;
   }
 }

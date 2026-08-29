@@ -329,6 +329,10 @@ export class Engine implements Scene {
     if (touchedCurrent) {
       this.resetScene();
       this.labelWindow();
+      // A rolled window clears whatever the last one left on the status line —
+      // otherwise 'WAITING FOR NEXT WINDOW' stays up for the rest of the session
+      // while a perfectly live window counts down beneath it.
+      this.statusOverride = null;
     }
     this.publish();
   }
