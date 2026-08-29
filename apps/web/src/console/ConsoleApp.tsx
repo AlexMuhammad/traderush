@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDuelLink } from '@bullrun/sdk';
+import { formatUnits } from 'viem';
 import { useWallet } from '../walletContext';
-import { useSdk } from '../sdk';
+import { useBalance, useSdk } from '../sdk';
 import { usePath } from '../router';
 import { Engine } from './engine/engine';
 import { LiveFeed } from './engine/feed';
@@ -44,6 +45,7 @@ export function ConsoleApp() {
   const [cursor, setCursor] = useState(0);
   const { conn, wrongChain, doConnect, doSwitch, doDisconnect, label } = useWallet();
   const { market, cfg } = useSdk();
+  const balance = useBalance(conn?.account.address as `0x${string}` | undefined);
 
   // Demo mode keeps the built-in simulation; anything else reads the real
   // event contracts, so the dials, the strike and the countdown are the ones
@@ -104,7 +106,10 @@ export function ConsoleApp() {
       : {
           key: 'wallet',
           label: 'Wallet',
-          right: `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`,
+          // The footer's points are the game's paper money. This is the real
+          // balance a duel would actually stake.
+          right: balance === null ? '…' : `${formatUnits(balance, cfg.decimals)} ${cfg.collateralSymbol}`,
+          meta: `${conn.account.address.slice(0, 6)}…${conn.account.address.slice(-4)}`,
           sub: `${label ?? 'signed in'} · tap to sign out`,
         }
     : { key: 'wallet', label: 'Sign in', sub: 'email, social or your own wallet' };

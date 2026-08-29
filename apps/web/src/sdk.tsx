@@ -125,6 +125,27 @@ export function useAllowance(owner: `0x${string}` | undefined, needed: bigint) {
   };
 }
 
+/** The wallet's collateral balance, refreshed. Gotcha §8.7 — read the WALLET,
+ *  not the per-pool vault, which is a payout fallback and reads 0 in normal
+ *  operation. */
+export function useBalance(owner: `0x${string}` | undefined): bigint | null {
+  const { market } = useSdk();
+  const [balance, setBalance] = useState<bigint | null>(null);
+
+  useEffect(() => {
+    if (!owner) { setBalance(null); return; }
+    let alive = true;
+    const read = () => market.balance(owner)
+      .then((b) => { if (alive) setBalance(b); })
+      .catch(() => { if (alive) setBalance(null); });
+    read();
+    const t = setInterval(read, 10_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [market, owner]);
+
+  return balance;
+}
+
 /** A ticking wall clock, in seconds. One interval for every countdown on the page. */
 export function useNow(): number {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
