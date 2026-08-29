@@ -16,6 +16,8 @@ import type { Attack, Outcome, Particle, Race, Ring, Slash } from './types';
 /** What the renderer reads and writes on the engine. */
 export interface Scene {
   race: Race;
+  /** True when the feed is real. Drives the acquiring state above. */
+  live: boolean;
   frame: number;
   speed: number;
   audio: Audio;
@@ -92,7 +94,34 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
   c.fillStyle = '#000';
   c.fillRect(-12, -12, w + 24, h + 24);
 
-  if (R.hist.length > 1) {
+  // Live, but the first reading has not landed. The engine seeds itself with
+  // simulated races so it has something to hold, and drawing those would put
+  // invented prices on a console that promises real ones. Say what is happening
+  // instead — the indexer takes a second or two, and black glass reads as broken.
+  if (S.live && !R.marketId) {
+    c.fillStyle = 'rgba(255,255,255,.03)';
+    for (let x = (-S.frame * 1.1) % 46; x < w; x += 46) c.fillRect(Math.round(x), 0, 1, h);
+
+    c.textAlign = 'center';
+    c.font = '700 10px Barlow Condensed, sans-serif';
+    c.fillStyle = 'rgba(255,200,87,.55)';
+    c.fillText('ACQUIRING MARKETS', w / 2, h / 2 - 6);
+
+    // Three lamps chasing each other, so it reads as working rather than stuck.
+    for (let i = 0; i < 3; i++) {
+      const lit = Math.floor(S.frame / 18) % 3 === i;
+      c.fillStyle = lit ? 'rgba(255,200,87,.9)' : 'rgba(255,200,87,.18)';
+      c.fillRect(w / 2 - 11 + i * 9, h / 2 + 4, 5, 5);
+    }
+    c.textAlign = 'left';
+    S.frame++;
+    return;
+  }
+
+  // One sample is enough to draw the whole scene. Waiting for TWO meant the
+  // glass stayed black until the second poll — a market list already in hand,
+  // and nothing on screen for another three seconds.
+  if (R.hist.length > 0) {
     // ---- vertical scale: fit the trail and the strike, with generous padding
     const lo = Math.min(R.strike, ...R.hist);
     const hi = Math.max(R.strike, ...R.hist);
@@ -201,9 +230,17 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.shadowBlur = 9 + 8 * urgency;
     c.strokeStyle = trailCol; c.lineWidth = 2;
     c.beginPath();
-    for (let i = 0; i < N; i++) {
-      const x = startX + i * step;
-      i ? c.lineTo(x, Y(R.hist[i]!)) : c.moveTo(x, Y(R.hist[i]!));
+    if (N === 1) {
+      // A lone sample has no line to draw. A short mark at the price says
+      // "watching from here" without inventing a shape.
+      const y = Y(R.hist[0]!);
+      c.moveTo(startX, y);
+      c.lineTo(Math.max(startX + 2, nowX), y);
+    } else {
+      for (let i = 0; i < N; i++) {
+        const x = startX + i * step;
+        i ? c.lineTo(x, Y(R.hist[i]!)) : c.moveTo(x, Y(R.hist[i]!));
+      }
     }
     c.stroke();
     c.shadowBlur = 0;

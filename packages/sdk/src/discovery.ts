@@ -172,24 +172,31 @@ export class MarketDiscovery {
   private async hydrate(rows: BinaryMarket[]): Promise<BinaryMarketSummary[]> {
     if (!rows.length) return [];
 
-    await this.watchUnderlying([...new Set(rows.map((r) => r.asset))]);
-
     const ids = rows.map((r) => r.marketId);
 
-    // One round-trip for every book rather than an N+1 fan-out. A market with
-    // no resting orders is simply absent from the map.
-    let tops: Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> = {};
-    try { tops = await this.client.getBookTops(ids); }
-    catch { /* the row's own lastPrice still carries a usable mark */ }
+    // The price feed hydrates a snapshot and opens a socket. Awaiting it here
+    // held the FIRST market list — and so the first frame — behind the slowest
+    // thing in the chain. Start it and move on: `spot` fills in on the next
+    // poll, and the strike scale falls back until it reports.
+    void this.watchUnderlying([...new Set(rows.map((r) => r.asset))]);
 
-    // Reference-mode markets carry `strike: "0"` — the price they resolve
-    // against is the REFERENCE question's opening answer, posted when the
-    // window opens, not a number fixed at creation. Without this the strike
-    // reads zero and the up/down question is meaningless. Fixed-strike markets
-    // are absent from this map and keep their own strike.
-    let opening: Record<string, string | null> = {};
-    try { opening = await this.client.getOpeningPrices(ids); }
-    catch { /* fixed-strike markets do not need it */ }
+    // In parallel, not one after another. Serially these three round trips were
+    // the difference between a console that appears and one you wait for.
+    //
+    // Book tops: one round trip for every book rather than an N+1 fan-out; a
+    // market with no resting orders is simply absent from the map.
+    //
+    // Opening prices: reference-mode markets carry `strike: "0"` — the price
+    // they resolve against is the REFERENCE question's opening answer, posted
+    // when the window opens, not a number fixed at creation. Without it the
+    // strike reads zero and the up/down question is meaningless. Fixed-strike
+    // markets are absent from this map and keep their own strike.
+    const [tops, opening] = await Promise.all([
+      this.client.getBookTops(ids)
+        .catch(() => ({} as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }>)),
+      this.client.getOpeningPrices(ids)
+        .catch(() => ({} as Record<string, string | null>)),
+    ]);
 
     return rows.map((r) => {
       const key = r.marketId.toLowerCase();

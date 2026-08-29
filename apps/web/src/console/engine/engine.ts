@@ -55,6 +55,9 @@ export class Engine implements Scene {
   phaseName = 'OPEN';
   chased = false;
   rising = true;
+  /** Read by the renderer, which must not draw the seeded simulation as if it
+   *  were a market. */
+  get live(): boolean { return this.isLive; }
 
   // --- console state -------------------------------------------------------
   private races: Race[] = initialRaces();
