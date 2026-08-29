@@ -1,142 +1,231 @@
-/** M3 — the real gate. Two wallets complete a duel with NO UI. Tx hashes are recorded.
- *  If this is not green by day 3, stop and re-scope (§10).
+/**
+ * `pnpm e2e` — the whole journey on testnet, in one run.
  *
- *  Usage: PRIVATE_KEY_A=0x.. PRIVATE_KEY_B=0x.. DUEL_ESCROW_ADDRESS=0x.. pnpm e2e
+ * This walks the same code the browser walks: the discovery the console's dials
+ * read, the allowance check the create screen shows, the deadline bounds it
+ * enforces, the blocker list the accept screen renders, and the settlement path
+ * the payout screen calls. What it cannot cover is React rendering and Privy's
+ * login UI — everything below the wallet client is exercised for real, with real
+ * transactions, against live markets.
+ *
+ * It waits for a window to close, so give it the length of one short market.
+ *
+ *   pnpm e2e
  */
 import { createPublicClient, createWalletClient, http, formatUnits, type PublicClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
-  DuelAdapter, MarketAdapter, txUrl,
-  defaultAcceptDeadline, assertDeadlineSafe, MIN_DEADLINE_MARGIN_SEC,
-  erc6909Abi, binarySettlementAbi,
+  DuelAdapter, MarketAdapter, parseDuelLink, txUrl,
+  binarySettlementAbi, erc6909Abi,
+  MIN_DEADLINE_MARGIN_SEC, defaultAcceptDeadline,
 } from '@bullrun/sdk';
 import { cfg, fmt, requireEnv } from './env.js';
 
-const record: { step: string; txHash: string; url: string }[] = [];
-const note = (step: string, txHash: string) => {
-  record.push({ step, txHash, url: txUrl(cfg, txHash) });
-  console.log(fmt.ok(`${step}  ${txHash}`));
-};
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+let checks = 0;
+let failed = 0;
+function check(label: string, ok: boolean, detail = ''): boolean {
+  checks++;
+  if (!ok) failed++;
+  console.log(ok ? fmt.ok(`${label}${detail ? `  (${detail})` : ''}`)
+                 : fmt.bad(`${label}${detail ? `  (${detail})` : ''}`));
+  return ok;
+}
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const A = privateKeyToAccount(requireEnv('PRIVATE_KEY_A') as `0x${string}`);
   const B = privateKeyToAccount(requireEnv('PRIVATE_KEY_B') as `0x${string}`);
-  if (A.address.toLowerCase() === B.address.toLowerCase()) {
-    throw new Error('PRIVATE_KEY_A and PRIVATE_KEY_B are the same wallet — accept() reverts SelfDuel');
-  }
+
+  console.log(fmt.head(`BULLRUN e2e · ${cfg.network} · chain ${cfg.chainId}`));
+
+  // --- 1. what a fresh page load resolves ----------------------------------
+  check('escrow is configured', Boolean(cfg.escrowAddress), cfg.escrowAddress ?? 'unset');
+  check('privy app id is configured', Boolean(cfg.privyAppId), cfg.privyAppId ? 'set' : 'unset');
+  check('the two wallets differ', A.address !== B.address);
+  if (failed) { console.log(fmt.bad('\nconfiguration is incomplete; stopping')); process.exit(1); }
 
   const pub = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) }) as PublicClient;
   const walletA = createWalletClient({ account: A, chain: cfg.chain, transport: http(cfg.rpcUrl) });
   const walletB = createWalletClient({ account: B, chain: cfg.chain, transport: http(cfg.rpcUrl) });
-
   const market = new MarketAdapter(cfg, { publicClient: pub });
   const duels = new DuelAdapter(cfg, undefined, { publicClient: pub });
-  const venue = await market.addresses();
+
   const decimals = await market.collateralDecimals();
-  const unit = (v: bigint) => `${formatUnits(v, decimals)} USDso`;
+  const unit = (v: bigint) => `${formatUnits(v, decimals)} ${cfg.collateralSymbol}`;
 
-  console.log(fmt.head('wallets'));
-  console.log(`A ${A.address}  ${unit(await market.balance(A.address))}`);
-  console.log(`B ${B.address}  ${unit(await market.balance(B.address))}`);
-
-  // --- pick a Trading market with enough runway for the whole flow -----------
+  // --- 2. discovery, as the dials and the market screen read it ------------
+  console.log(fmt.head('markets'));
   const now = () => Math.floor(Date.now() / 1000);
-  const all = await market.listMarkets();
-  const target = all.find((m) => m.status === 'Trading' && m.expiryTime - now() > MIN_DEADLINE_MARGIN_SEC + 120);
-  if (!target) throw new Error('no Trading market with enough runway — rerun when a window has just opened');
-  const marketId = target.marketId as `0x${string}`;
-  console.log(fmt.head('market'));
-  console.log(`${target.symbol} ${target.intervalSec}s  strike ${target.strike}  spot ${target.spot}`);
-  console.log(`${marketId}  expires in ${target.expiryTime - now()}s`);
+  const live = (await market.listMarkets()).filter((m) => m.status === 'Trading');
+  check('live markets found', live.length > 0, `${live.length}`);
+  check('both assets present', new Set(live.map((m) => m.symbol)).size >= 2,
+        [...new Set(live.map((m) => m.symbol))].join('/'));
+  check('every market has outcome ids', live.every((m) => m.ref.upId > 0n && m.ref.downId > 0n));
+  check('every market has a strike', live.every((m) => m.strike > 0));
 
-  const stake = BigInt(10) ** BigInt(decimals); // 1 USDso per side -> pot of 2
+  // The create screen's own rule: a window must hold the accept margin plus
+  // time for someone to actually accept. Shortest such market, so the run ends.
+  const roomy = live
+    .filter((m) => m.expiryTime - now() > MIN_DEADLINE_MARGIN_SEC + 90)
+    .sort((a, b) => (a.expiryTime - now()) - (b.expiryTime - now()));
+  const target = roomy[0];
+  if (!check('a market has room for a duel', Boolean(target))) { market.close(); process.exit(1); }
+  const m = target!;
+  const secondsLeft = m.expiryTime - now();
+  console.log(`   ${m.symbol} ${m.intervalSec}s · strike ${m.strike} · spot ${m.spot} · ${secondsLeft}s left`);
+
+  // --- 3. balances and the allowance the create screen surfaces ------------
+  console.log(fmt.head('wallets'));
+  const stake = 10n ** BigInt(decimals);            // 1 unit per side
   const pot = stake * 2n;
-  console.log(`stake ${unit(stake)} per side, pot ${unit(pot)}, escrow mints ${unit(pot)} of sets`);
-
-  // --- approvals (once per wallet) ------------------------------------------
-  for (const [label, w, acct] of [['A', walletA, A], ['B', walletB, B]] as const) {
-    const allowance = await duels.allowance(venue.collateral, acct.address);
+  for (const [name, acct, wallet] of [['A', A, walletA], ['B', B, walletB]] as const) {
+    const balance = await market.balance(acct.address);
+    if (!check(`${name} can cover the stake`, balance >= stake, unit(balance))) {
+      console.log(fmt.warn('   run `pnpm faucet`'));
+      market.close(); process.exit(1);
+    }
+    const allowance = await duels.allowance(cfg.addresses.collateral, acct.address);
     if (allowance < stake) {
-      const { txHash } = await duels.approve(w, acct, venue.collateral, stake * 100n);
-      note(`approve ${label}`, txHash);
+      const { txHash } = await duels.approve(wallet, acct, cfg.addresses.collateral, stake * 1000n);
+      check(`${name} approved the escrow`, true, txHash.slice(0, 12));
     } else {
-      console.log(fmt.ok(`approve ${label}  (already approved)`));
+      check(`${name} already approved the escrow`, true);
     }
   }
 
-  // --- A opens ---------------------------------------------------------------
-  // §8.11 — acceptDeadline must be >= 30s before expiry. Default is expiry - 60s.
-  const acceptDeadline = defaultAcceptDeadline(target.expiryTime);
-  assertDeadlineSafe(acceptDeadline, target.expiryTime);
-  const opened = await duels.open(walletA, A, marketId, 'up', stake, acceptDeadline, target.expiryTime);
-  note(`open (A, up, deadline ${acceptDeadline})`, opened.txHash);
-  console.log(`duelId ${opened.duelId}   link ${opened.link}`);
+  // --- 4. open, as the create screen does ----------------------------------
+  console.log(fmt.head('open'));
+  // Bounded by the window, exactly as CreateDuelPanel bounds it.
+  const maxMargin = Math.max(0, m.expiryTime - now() - 10);
+  const margin = Math.min(60, maxMargin);
+  check('the deadline clears the margin', margin >= MIN_DEADLINE_MARGIN_SEC, `${margin}s`);
+  const acceptDeadline = m.expiryTime - margin;
+  void defaultAcceptDeadline;
 
-  const afterOpen = await duels.read(opened.duelId);
-  if (afterOpen?.status !== 'Open') throw new Error(`expected Open, got ${afterOpen?.status}`);
+  const opened = await duels.open(
+    walletA, A, m.marketId as `0x${string}`, 'up', stake, acceptDeadline, m.expiryTime,
+  );
+  check('open produced a duel id', opened.duelId > 0n, `#${opened.duelId}`);
+  console.log(`   ${txUrl(cfg, opened.txHash)}`);
 
-  // --- B accepts -------------------------------------------------------------
+  // --- 5. the link, as the accept screen parses it -------------------------
+  const link = parseDuelLink(opened.link);
+  check('the link parses', Boolean(link), opened.link);
+  check('the link names this chain', link?.chainId === cfg.chainId);
+  check('the link names this escrow', link?.escrow.toLowerCase() === duels.escrow.toLowerCase());
+
+  const beforeAccept = await duels.read(opened.duelId);
+  check('the duel reads back as Open', beforeAccept?.status === 'Open', String(beforeAccept?.status));
+  check('the pot is twice the stake', beforeAccept?.pot === pot, unit(beforeAccept?.pot ?? 0n));
+
+  // --- 6. the accept screen's blockers, then accept ------------------------
+  console.log(fmt.head('accept'));
+  const bBalance = await market.balance(B.address);
+  const blockers = [
+    beforeAccept?.status !== 'Open' && 'not open',
+    now() >= (beforeAccept?.acceptDeadline ?? 0) && 'deadline passed',
+    B.address.toLowerCase() === beforeAccept?.challenger.toLowerCase() && 'self duel',
+    bBalance < stake && 'insufficient balance',
+  ].filter(Boolean);
+  check('B has no blockers', blockers.length === 0, blockers.join(', '));
+
   const accepted = await duels.accept(walletB, B, opened.duelId);
-  note('accept (B, down)', accepted.txHash);
+  console.log(`   ${txUrl(cfg, accepted.txHash)}`);
 
   const matched = await duels.read(opened.duelId);
-  if (matched?.status !== 'Matched') throw new Error(`expected Matched, got ${matched?.status}`);
-  if (matched.opponent.toLowerCase() !== B.address.toLowerCase()) throw new Error('opponent mismatch');
+  check('the duel is Matched', matched?.status === 'Matched', String(matched?.status));
+  check('the opponent is B', matched?.opponent.toLowerCase() === B.address.toLowerCase());
 
-  // --- assert the duel arithmetic on-chain (§1) ------------------------------
-  // The indexer carries the outcome ids; no derivation and no module call.
-  const upId = target.ref.upId;
-  const downId = target.ref.downId;
+  // --- 7. the invariants the whole design rests on -------------------------
   const outcomeToken = await pub.readContract({
     address: cfg.addresses.binarySettlement, abi: binarySettlementAbi, functionName: 'outcomeToken',
   }) as `0x${string}`;
-  const [aUp, bDown, escrowCollateral] = await Promise.all([
-    pub.readContract({ address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf', args: [A.address, upId] }) as Promise<bigint>,
-    pub.readContract({ address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf', args: [B.address, downId] }) as Promise<bigint>,
-    market.balance(duels.escrow),
-  ]);
+  const legOf = (who: `0x${string}`, id: bigint) => pub.readContract({
+    address: outcomeToken, abi: erc6909Abi, functionName: 'balanceOf', args: [who, id],
+  }) as Promise<bigint>;
 
-  console.log(fmt.head('post-match invariants'));
-  check('A holds 2S of UP', aUp >= pot, `${aUp} vs ${pot}`);
-  check('B holds 2S of DOWN', bDown >= pot, `${bDown} vs ${pot}`);
-  check('escrow holds zero collateral', escrowCollateral === 0n, `${escrowCollateral}`);
+  check('A holds the whole pot in UP', (await legOf(A.address, m.ref.upId)) >= pot);
+  check('B holds the whole pot in DOWN', (await legOf(B.address, m.ref.downId)) >= pot);
+  check('the escrow kept nothing', (await market.balance(duels.escrow)) === 0n);
 
-  // --- unmatched-refund path (§7, §11) --------------------------------------
-  console.log(fmt.head('unmatched refund path'));
-  const shortDeadline = Math.min(now() + 45, target.expiryTime - MIN_DEADLINE_MARGIN_SEC);
-  if (shortDeadline > now() + 5) {
-    const before = await market.balance(A.address);
-    const orphan = await duels.open(walletA, A, marketId, 'down', stake, shortDeadline, target.expiryTime);
-    note('open (A, orphan)', orphan.txHash);
-    const cancelled = await duels.cancel(walletA, A, orphan.duelId);
-    note('cancel (A)', cancelled.txHash);
-    const after = await market.balance(A.address);
-    check('unmatched duel refunds exactly S', after === before, `${after} vs ${before}`);
-    const state = await duels.read(orphan.duelId);
-    check('orphan status is Cancelled', state?.status === 'Cancelled', String(state?.status));
+  // --- 8. My duels, as that screen builds it -------------------------------
+  const mineA = await duels.listFor(A.address);
+  const mineB = await duels.listFor(B.address);
+  check("the duel shows in A's list", mineA.some((d) => d.id === opened.duelId));
+  check("the duel shows in B's list", mineB.some((d) => d.id === opened.duelId));
+
+  // --- 9. wait it out, then settle as the payout screen does ---------------
+  console.log(fmt.head('settlement'));
+  const closesIn = m.expiryTime - now();
+  console.log(`   window closes in ${closesIn}s, then the oracle posts`);
+  await wait(Math.max(0, closesIn + 20) * 1000);
+
+  let row = null;
+  for (let i = 0; i < 20 && !row; i++) {
+    const fresh = await market.discovery.client.getBinaryMarket(m.marketId);
+    if (fresh && (fresh.winningOutcome !== null || fresh.voided)) row = fresh;
+    else await wait(6_000);
+  }
+  if (!check('the oracle posted a result', Boolean(row))) { market.close(); process.exit(1); }
+
+  const settledMarket = await market.discovery.get(m.marketId);
+  check('a settled market is still readable by id', Boolean(settledMarket),
+        settledMarket ? settledMarket.status : 'missing');
+
+  const voided = Boolean(row!.voided);
+  const winningIdx = (row!.winningOutcome ?? 0) as 0 | 1;
+  console.log(`   ${voided ? 'VOIDED' : `${winningIdx === 0 ? 'UP' : 'DOWN'} took it`}`);
+
+  const claim = async (who: typeof A, wallet: typeof walletA, idx: 0 | 1) => {
+    const id = idx === 0 ? m.ref.upId : m.ref.downId;
+    const held = await legOf(who.address, id);
+    if (held === 0n) return 0n;
+    const before = await market.balance(who.address);
+    const { request } = await pub.simulateContract({
+      account: who, address: cfg.addresses.binarySettlement,
+      abi: binarySettlementAbi, functionName: 'redeem', args: [id, held, who.address],
+    });
+    const hash = await wallet.writeContract(request);
+    await pub.waitForTransactionReceipt({ hash });
+    return (await market.balance(who.address)) - before;
+  };
+
+  const aGot = await claim(A, walletA, 0);
+  const bGot = await claim(B, walletB, 1);
+
+  if (voided) {
+    check('a void refunds both sides', aGot === stake && bGot === stake, `${unit(aGot)} / ${unit(bGot)}`);
   } else {
-    console.log(fmt.warn('window too short to also test the refund path — rerun earlier in a window'));
+    const winnerGot = winningIdx === 0 ? aGot : bGot;
+    const loserGot = winningIdx === 0 ? bGot : aGot;
+    check('the winner takes the whole pot', winnerGot === pot, unit(winnerGot));
+    check('the loser gets nothing, without reverting', loserGot === 0n, unit(loserGot));
   }
 
-  // --- settlement ------------------------------------------------------------
-  console.log(fmt.head('settlement'));
-  console.log(`Window expires at ${new Date(target.expiryTime * 1000).toISOString()}.`);
-  // CORRECTION to PRD §6.2: winnings are claimed, not received. A settled market
-  // pays only when someone asks it to — see docs/FINDINGS.md.
-  console.log('Winnings are CLAIMED, not received. After the oracle posts, the winner calls');
-  console.log(`  redeem(${target.ref.operatorId}, venueId, ${marketId}, <0=up|1=down>, ${pot})`);
-  console.log(`for ${unit(pot)}. The loser's redeem returns 0 and MUST NOT revert (§11).`);
-  console.log('Run `pnpm settle` once the window has closed.');
-  console.log(`Oracle: ${target.oracleQuestionId ? `${cfg.oracleUrl}/${target.oracleQuestionId}?view=graph` : '(no oracleQuestionId on this market)'}`);
+  // --- 10. the unmatched path ----------------------------------------------
+  console.log(fmt.head('unmatched refund'));
+  const stillLive = (await market.listMarkets())
+    .filter((x) => x.status === 'Trading' && x.expiryTime - now() > MIN_DEADLINE_MARGIN_SEC + 60)
+    .sort((a, b) => (a.expiryTime - now()) - (b.expiryTime - now()))[0];
+  if (stillLive) {
+    const before = await market.balance(A.address);
+    const orphan = await duels.open(
+      walletA, A, stillLive.marketId as `0x${string}`, 'down', stake,
+      stillLive.expiryTime - Math.min(60, stillLive.expiryTime - now() - 10), stillLive.expiryTime,
+    );
+    await duels.cancel(walletA, A, orphan.duelId);
+    check('an unmatched duel refunds exactly', (await market.balance(A.address)) === before);
+    check('the cancelled duel reads back Cancelled',
+          (await duels.read(orphan.duelId))?.status === 'Cancelled');
+  } else {
+    console.log(fmt.warn('   no market with room; skipped'));
+  }
 
-  console.log(fmt.head('tx hashes (M3 evidence)'));
-  console.table(record);
+  console.log(fmt.head(failed ? `FAILED — ${failed} of ${checks}` : `PASS — ${checks} checks`));
   market.close();
+  process.exit(failed ? 1 : 0);
 }
 
-function check(label: string, ok: boolean, detail: string) {
-  console.log(ok ? fmt.ok(`${label}  (${detail})`) : fmt.bad(`${label}  (${detail})`));
-  if (!ok) process.exitCode = 1;
-}
-
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(msg(e)); process.exit(1); });

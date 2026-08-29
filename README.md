@@ -120,11 +120,20 @@ Put the resulting address in `.env` as `DUEL_ESCROW_ADDRESS` and `VITE_DUEL_ESCR
 ### The gate
 
 ```bash
-pnpm e2e                  # two wallets complete a duel with no UI; records tx hashes
+pnpm faucet               # tUSDC into both test wallets
+pnpm e2e                  # the whole journey on live testnet, in one run
+pnpm settle               # settle a specific duel:  DUEL_ID=4 pnpm settle
 pnpm dev                  # http://localhost:5173
 ```
 
-`pnpm e2e` is M3 and the real gate. **If it is not green by day 3, stop and re-scope.**
+`pnpm e2e` walks the same code the browser walks — the discovery the dials read,
+the allowance the create screen surfaces, the deadline bounds it enforces, the
+blocker list the accept screen renders, the settlement path the payout screen
+calls — and it does it with real transactions against live markets. It waits for
+a window to close, so it takes as long as one short market.
+
+It does **not** cover React rendering or Privy's login UI. Everything below the
+wallet client is exercised for real; the two things above it are not.
 
 ---
 

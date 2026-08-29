@@ -1,9 +1,11 @@
 # Definition of done (§11)
 
-- [~] Two people on two devices complete a duel end to end — the CONTRACT path is proven
-      twice over (`pnpm e2e` then `pnpm settle`: open, accept, settle, winner paid the whole
-      pot, loser redeemed 0 without reverting). The BROWSER path is wired and typechecked
-      but has not been driven by a human.
+- [~] Two people on two devices complete a duel end to end. `pnpm e2e` walks the WHOLE
+      journey on live testnet in one run — discovery, allowance, deadline bounds, open, the
+      link, the accept screen's blockers, accept, the pot invariants, My duels, settlement,
+      the winner's claim, the loser's zero, and the unmatched refund. 33 checks, all green.
+      What it does NOT cover: React rendering and Privy's login UI. Nobody has driven the
+      browser by hand.
 - [x] Every §4.3 test passes — `pnpm test:contracts`, 25/25 green against mocks that
       mirror the real module interface, not the transcribed one
 - [x] Every §8 gotcha is implemented, with a comment naming which one — see README table
