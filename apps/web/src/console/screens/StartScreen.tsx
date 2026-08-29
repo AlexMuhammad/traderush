@@ -15,7 +15,7 @@ export function StartScreen() {
 
   return (
     <div className="gate__body">
-      <div className="wordmark">BULLRUN</div>
+      {/* <div className="wordmark">BULLRUN</div> */}
 
       <h1 className="gate__headline">
         {wrongChain ? 'Wrong network.' : 'Stay on the right side.'}
@@ -45,7 +45,6 @@ export function StartScreen() {
           : `Shannon testnet · chain ${cfg.chainId} · ${cfg.collateralSymbol} from the faucet.`}
         {' '}Email, a social account or your own wallet — no extension required.
         <br />
-        <strong>BULLRUN has no token.</strong> Unaudited, testnet only.
       </p>
     </div>
   );

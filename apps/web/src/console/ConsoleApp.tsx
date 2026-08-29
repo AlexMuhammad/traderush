@@ -15,6 +15,8 @@ import { NavPad } from './components/NavPad';
 import { ScreenList, type ScreenItem } from './components/ScreenList';
 import { ScreenMarkets } from './components/ScreenMarkets';
 import { ScreenDuels } from './components/ScreenDuels';
+import { ScreenPositions } from './components/ScreenPositions';
+import { ScreenHistory } from './components/ScreenHistory';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
 import { DuelPanel } from './duel/DuelPanel';
 import { AcceptPanel } from './duel/AcceptPanel';
@@ -22,7 +24,13 @@ import { StartScreen } from './screens/StartScreen';
 import './console.css';
 
 /** What the CRT shows. `create` is the market list in pick-for-duel mode. */
-type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels';
+type Screen = 'game' | 'menu' | 'markets' | 'create' | 'duels' | 'positions' | 'history';
+
+/** TestUSDC's own faucet. Not part of the ERC-20 standard, hence a local ABI. */
+const faucetAbi = [
+  { type: 'function', name: 'faucet', stateMutability: 'nonpayable',
+    inputs: [{ name: 'amount', type: 'uint256' }], outputs: [] },
+] as const;
 
 /**
  * The console is the whole application.
@@ -47,16 +55,32 @@ export function ConsoleApp() {
   // Demo mode keeps the built-in simulation; anything else reads the real
   // event contracts, so the dials, the strike and the countdown are the ones
   // a duel would actually settle against.
-  const [demo, setDemo] = useState(false);
+
   /** Set by whichever list is up, so the pad's SELECT can fire the same action
    *  a click would. A ref rather than state: it changes every render and nobody
    *  needs to re-render because of it. */
   const selectRef = useRef<() => void>(() => {});
   const select = () => selectRef.current();
-  const engine = useMemo(
-    () => new Engine(demo ? undefined : new LiveFeed(market)),
-    [demo, market],
-  );
+  const [faucetBusy, setFaucetBusy] = useState(false);
+
+  /** Testnet collateral mints to whoever asks. Being stuck at zero with no
+   *  obvious way forward is the most common way a first run dead-ends. */
+  const runFaucet = async () => {
+    if (!conn) return;
+    setFaucetBusy(true);
+    try {
+      const hash = await conn.wallet.writeContract({
+        chain: cfg.chain, account: conn.account,
+        address: cfg.addresses.collateral, abi: faucetAbi,
+        functionName: 'faucet', args: [10_000n * 10n ** BigInt(cfg.decimals)],
+      });
+      await market.publicClient.waitForTransactionReceipt({ hash });
+    } catch { /* the row goes back to idle; the balance says the rest */ }
+    finally { setFaucetBusy(false); }
+  };
+  // Always the real event contracts. The built-in simulation survives only as
+  // the smoke test's feed — nothing a person can reach runs on invented prices.
+  const engine = useMemo(() => new Engine(new LiveFeed(market)), [market]);
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
 
   useEffect(() => {
@@ -146,6 +170,9 @@ export function ConsoleApp() {
             else show('create');
           }
           else if (i.key === 'duels') show('duels');
+          else if (i.key === 'positions') show('positions');
+          else if (i.key === 'history') show('history');
+          else if (i.key === 'faucet') void runFaucet();
           else if (i.key === 'switch') doSwitch();
           else if (i.key === 'signout') {
             // All the way out: the title card, not the connect step.
@@ -153,6 +180,19 @@ export function ConsoleApp() {
           }
           else doConnect();
         }}
+      />
+    )
+    : screen === 'positions' ? (
+      <ScreenPositions
+        cursor={cursor} onCursor={setCursor}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+      />
+    )
+    : screen === 'history' ? (
+      <ScreenHistory
+        cursor={cursor} onCursor={setCursor}
+        bindSelect={(fire) => { selectRef.current = fire; }}
+        onOpen={(id) => { show('game'); navigate(`/duel/${id}`); }}
       />
     )
     : screen === 'duels' ? (
