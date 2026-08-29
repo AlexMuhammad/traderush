@@ -82,11 +82,14 @@ export class MarketDiscovery {
 
   // ------------------------------------------------------------------ reads
 
-  /** Live markets on the configured venue, soonest to expire first.
-   *  An unset venue means every venue on the deployment. */
+  /** Live markets, soonest to expire first.
+   *
+   *  Every venue unless VENUE_ID pins one. Scoping by default hid the short
+   *  windows entirely — on Shannon the 1m/5m markets sit on a different venue
+   *  than the 1h/4h/24h ones. See `scopeToVenue` in config.ts. */
   async listLive(): Promise<BinaryMarketSummary[]> {
     const rows = await this.client.listLiveBinaryMarkets(
-      this.cfg.venueId ? { venueId: this.cfg.venueId } : undefined,
+      this.cfg.scopeToVenue ? { venueId: this.cfg.venueId } : undefined,
     );
     return this.hydrate(rows);
   }

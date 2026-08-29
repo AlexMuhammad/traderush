@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MIN_DEADLINE_MARGIN_SEC } from '@bullrun/sdk';
-import { useAllowance, useMarket, useSdk } from '../../sdk';
+import { useAllowance, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
@@ -18,10 +18,11 @@ export function CreateDuelPanel({
   const { duels } = useSdk();
   const { conn, wrongChain } = useWallet();
   const money = useMoney();
+  const now = useNow();
 
   const [side, setSide] = useState<'up' | 'down'>('up');
   const [stakeStr, setStakeStr] = useState('1');
-  const [marginSec, setMarginSec] = useState(60);
+  const [marginSec, setMarginSec] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opened, setOpened] = useState<{ duelId: bigint; txHash: string; link: string } | null>(null);
@@ -34,8 +35,17 @@ export function CreateDuelPanel({
   if (!duels) return <Readout title="Create duel"><p className="note err">No escrow deployed on this network.</p></Readout>;
 
   const pot = stake * 2n;
-  const acceptDeadline = state.expiryTime ? state.expiryTime - marginSec : 0;
-  const deadlineOk = marginSec >= MIN_DEADLINE_MARGIN_SEC;
+
+  // Short windows are real: the venue runs 60s and 300s markets alongside the
+  // hour-long ones. A fixed 60s margin puts the deadline BEFORE now on a 60s
+  // window, and the escrow rejects that as DeadlineInPast — so the margin is
+  // bounded by what the window can actually hold.
+  const remaining = Math.max(0, state.expiryTime - now);
+  const maxMargin = Math.max(0, remaining - 10);
+  const roomForDuel = maxMargin >= MIN_DEADLINE_MARGIN_SEC;
+  const margin = Math.min(marginSec ?? 60, maxMargin);
+  const acceptDeadline = state.expiryTime ? state.expiryTime - margin : 0;
+  const deadlineOk = roomForDuel && margin >= MIN_DEADLINE_MARGIN_SEC;
   const ready = Boolean(conn) && !wrongChain && stake > 0n && deadlineOk
     && state.status === 'Trading' && !pending;
 
@@ -87,12 +97,22 @@ export function CreateDuelPanel({
       </label>
 
       <label className="field">
-        <span>accept deadline — seconds before expiry (min {MIN_DEADLINE_MARGIN_SEC})</span>
-        <input type="number" min={MIN_DEADLINE_MARGIN_SEC} value={marginSec}
+        <span>
+          accept deadline — seconds before expiry
+          (min {MIN_DEADLINE_MARGIN_SEC}, max {maxMargin})
+        </span>
+        <input type="number" min={MIN_DEADLINE_MARGIN_SEC} max={maxMargin} value={margin}
                onChange={(e) => setMarginSec(Number(e.target.value))} />
       </label>
-      {!deadlineOk && (
-        // Gotcha §8.11 — the escrow enforces this too, but failing here costs nothing.
+      {!roomForDuel ? (
+        // Gotcha §8.11 — the escrow enforces the 30s margin too, but a window this
+        // short can never satisfy it, so say so instead of letting them try.
+        <p className="note err">
+          This window closes in {remaining}s — too short for a duel. An opponent needs
+          time to accept, and the escrow refuses a deadline inside the last
+          {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
+        </p>
+      ) : !deadlineOk && (
         <p className="note err">
           Accepting inside the last {MIN_DEADLINE_MARGIN_SEC}s reverts for both parties.
         </p>

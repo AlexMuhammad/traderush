@@ -74,8 +74,8 @@ async function main() {
   try {
     const live = await market.listMarkets();
     console.log(live.length
-      ? fmt.ok(`${live.length} live binary markets on venue ${cfg.venueId.slice(0, 12)}…`)
-      : fmt.warn('no live markets on the configured venue — VENUE_ID may have moved (§ they do)'));
+      ? fmt.ok(`${live.length} live binary markets${cfg.scopeToVenue ? ` on venue ${cfg.venueId.slice(0, 12)}…` : ' across all venues'}`)
+      : fmt.warn('no live markets — if VENUE_ID is pinned, it may have moved (they do)'));
     if (live.length) {
       const now = Math.floor(Date.now() / 1000);
       console.table(live.map((m) => ({

@@ -212,6 +212,33 @@ to two strangers.
 
 ---
 
+## 10. There is no 15-minute market, and the short ones are on another venue
+
+The brief specifies a 15-minute window and tells you to probe against one. None
+exists on Shannon. What runs is:
+
+| venue | intervals |
+|---|---|
+| `0x1a1e6821cd…` | **1m, 5m** |
+| `0x679795a019…` (the map's default) | 1h, 4h, 24h |
+
+Pinning the deployment map's venue — which the code did — hid every short window
+and left a console showing only hour-long ones, which is unwatchable as a game
+and slow to test a duel against.
+
+Markets are now read across **all** venues unless `VENUE_ID` is set explicitly.
+That is safe: a market carries its own origin, and `DuelEscrow` reads
+`originOperatorId` / `originVenueId` out of `markets()` on-chain rather than
+trusting config. Pin `VENUE_ID` when you need one venue and only one.
+
+Short windows bring their own edge: a 60s market cannot host a duel at all. The
+30s minimum accept margin plus time for an opponent to actually accept does not
+fit, and a fixed 60s margin puts the deadline before `now`, which the escrow
+rejects as `DeadlineInPast`. The create screen bounds the margin to the window
+and says plainly when a market is too short.
+
+---
+
 ## What is left
 
 1. **The base front end's duel screens have never been driven by a human.** M3 proves the

@@ -19,6 +19,19 @@ export interface BullrunConfig extends Deployment {
   /** Per-network escrow. A mainnet deploy is a DIFFERENT address than testnet,
    *  so this is read per network and never shared. */
   escrowAddress: Address | null;
+  /**
+   * Only filter markets to `venueId` when VENUE_ID was set explicitly.
+   *
+   * The deployment map's venue is a documented starting point, not a fence.
+   * Scoping to it by default hid every short window: on Shannon the 1m and 5m
+   * markets live on a different venue than the 1h/4h/24h ones, and a console
+   * showing only hour-long windows is unwatchable.
+   *
+   * Reading across venues is safe because a market carries its own origin —
+   * DuelEscrow reads `originOperatorId`/`originVenueId` out of `markets()`
+   * on-chain and never trusts config for it. Set VENUE_ID to pin one anyway.
+   */
+  scopeToVenue: boolean;
   chain: Chain;
   apiKey?: string;
 }
@@ -68,6 +81,7 @@ export function loadConfig(env: EnvBag = {}): BullrunConfig {
     tick: big('MM_TICK', d.tick),
     lot: big('MM_LOT', d.lot),
     venueId: addr('VENUE_ID', d.venueId) as Address,
+    scopeToVenue: Boolean(get('VENUE_ID')?.trim()),
     addresses: {
       ...d.addresses,
       collateral: addr('COLLATERAL', d.addresses.collateral),
