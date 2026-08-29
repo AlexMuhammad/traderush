@@ -68,6 +68,10 @@ export interface Race {
   upP: number;
   /** Price trail, oldest first. Capped so the canvas never walks a long array. */
   hist: number[];
+  /** Seconds into the window when the FIRST sample was taken. Joining a 4h
+   *  market at minute ten means we have watched ten minutes, not four hours,
+   *  and the trail must not claim otherwise. */
+  histStartT: number;
   pos: Position | null;
   phase: Phase;
   /** Last known "am I in enemy territory", so a crossing can be detected. */

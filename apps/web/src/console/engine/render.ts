@@ -100,9 +100,16 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     const mn = lo - pad, mx = hi + pad;
     const Y = (p: number) => h - 12 - ((p - mn) / (mx - mn)) * (h - 26);
 
-    const nowX = Math.round(30 + (w - 46) * progress);
+    const xAt = (seconds: number) =>
+      Math.round(30 + (w - 46) * Math.min(1, Math.max(0, seconds / R.win)));
+    const nowX = xAt(R.t);
     const N = R.hist.length;
-    const step = Math.max(0.5, (nowX - 8) / Math.max(1, N - 1));
+    // The trail starts where we STARTED WATCHING, not at the window's open.
+    // Spreading a handful of samples across the whole width claimed hours of
+    // history the console never saw — a 4h market joined at minute ten drew a
+    // line as if it had watched all four.
+    const startX = Math.max(8, Math.min(nowX - 2, xAt(R.histStartT)));
+    const step = Math.max(0.5, (nowX - startX) / Math.max(1, N - 1));
     const ly = Math.round(Y(R.strike)) + 0.5;   // the border between territories
 
     // ---- territories -------------------------------------------------------
@@ -180,8 +187,8 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
     // ---- the trail ---------------------------------------------------------
     c.beginPath();
-    c.moveTo(8, h);
-    for (let i = 0; i < N; i++) c.lineTo(8 + i * step, Y(R.hist[i]!));
+    c.moveTo(startX, h);
+    for (let i = 0; i < N; i++) c.lineTo(startX + i * step, Y(R.hist[i]!));
     c.lineTo(nowX, h);
     c.closePath();
     const grad = c.createLinearGradient(0, 0, 0, h);
@@ -195,7 +202,7 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.strokeStyle = trailCol; c.lineWidth = 2;
     c.beginPath();
     for (let i = 0; i < N; i++) {
-      const x = 8 + i * step;
+      const x = startX + i * step;
       i ? c.lineTo(x, Y(R.hist[i]!)) : c.moveTo(x, Y(R.hist[i]!));
     }
     c.stroke();

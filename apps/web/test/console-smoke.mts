@@ -178,6 +178,45 @@ step('actions');
 engine.stop();
 step('teardown');
 
+// 8a — an explicit tune must survive the clock.
+//      autoTune used to drift to whichever race was nearest the post. Against a
+//      venue that runs 60s windows a short dial is always within a minute of
+//      expiry, so choosing 1H was undone within the second — and every yank
+//      reset the scene. The selection is the user's now.
+{
+  const openTime = Math.floor(Date.now() / 1000) - 5;
+  const mk = (id: string, iv: number) => ({
+    marketId: id, symbol: 'BTC', intervalSec: iv,
+    strike: 100, spot: 101, upP: 0.5,
+    // The short dial is deliberately seconds from expiring.
+    openTime: iv === 60 ? Math.floor(Date.now() / 1000) - 55 : openTime,
+    expiryTime: (iv === 60 ? Math.floor(Date.now() / 1000) - 55 : openTime) + iv,
+    status: 'Trading' as const,
+  });
+  const feed = {
+    live: true,
+    subscribe(cb: (slots: ReturnType<typeof mk>[]) => void) {
+      cb([mk('0xa', 60), mk('0xb', 3600), mk('0xc', 14400), mk('0xd', 86400)]);
+      return () => {};
+    },
+  };
+
+  const live: any = new Engine(feed as never);
+  live.attachCanvas(canvas);
+  live.start();
+  const inner = live as { tickClock(): void; tickPrice(): void };
+
+  live.tuneInterval(1);                       // pick the 1H dial
+  const chosen = live.snapshot().interval;
+  check('an interval can be chosen', chosen === '1H', chosen);
+
+  for (let i = 0; i < 5; i++) { inner.tickClock(); inner.tickPrice(); }
+  check('the choice survives the clock', live.snapshot().interval === chosen,
+        `${chosen} -> ${live.snapshot().interval}`);
+  live.stop();
+  step('tuning sticks');
+}
+
 // 8b — a live result survives the next window opening underneath it.
 //      The venue rolls within seconds of a close, and applying that roll
 //      immediately wiped the GORED / HELD THE LINE card before it could be

@@ -284,6 +284,7 @@ export class Engine implements Scene {
       spot: slot.spot,
       upP: slot.upP,
       hist: [slot.spot || slot.strike],
+      histStartT: Math.max(0, now - slot.openTime),
       pos: null,
       phase: 'trade',
       wasDanger: false,
@@ -362,6 +363,7 @@ export class Engine implements Scene {
           spot: slot.spot,
           upP: slot.upP,
           hist: [slot.spot || slot.strike],
+          histStartT: Math.max(0, now - slot.openTime),
           pos: null,
           phase: 'trade',
           wasDanger: false,
@@ -442,7 +444,11 @@ export class Engine implements Scene {
       if (this.shake < 2.5) this.shake = 2.5;
     }
 
-    this.autoTune();
+    // No auto-tuning. It used to drift to whichever race was closest to the
+    // post, which suited an idle demo — but the venue runs 60s windows, so a
+    // 1M dial is ALWAYS within a minute of expiry. Picking 1H or 4H was undone
+    // within the second, and every yank reset the scene. An explicit choice
+    // has to win.
 
     if (R.t >= R.win) {
       R.phase = 'lock';
@@ -454,18 +460,6 @@ export class Engine implements Scene {
     }
     this.publish();
   };
-
-  /** With no stake and time to spare, drift to whichever race is closest to
-   *  the post. It keeps an idle console showing something about to happen. */
-  private autoTune(): void {
-    const R = this.race;
-    if (R.pos || R.phase !== 'trade' || R.win - R.t <= 120) return;
-    const candidate = this.races
-      .map((r, i) => ({ i, left: i === this.raceIndex ? R.win - R.t : r.win - r.t }))
-      .filter((x) => x.i !== this.raceIndex && !this.races[x.i]!.pos && x.left < 60)
-      .sort((a, b) => a.left - b.left)[0];
-    if (candidate) this.tune(candidate.i);
-  }
 
   // ------------------------------------------------------------------- resolve
 

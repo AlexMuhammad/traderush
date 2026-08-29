@@ -21,7 +21,8 @@ export function newRace(marketIndex: number, elapsed = 0): Race {
   return {
     marketId: '', symbol: m.asset,
     win: m.sec, t: elapsed, openTime: 0, strike, spot, upP: 0.5,
-    hist: [strike], pos: null, phase: 'trade', wasDanger: false, settled: [],
+    hist: [strike], histStartT: elapsed,
+    pos: null, phase: 'trade', wasDanger: false, settled: [],
   };
 }
 
