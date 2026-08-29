@@ -24,7 +24,11 @@ export function CreateRoomPanel({
 
   const [side, setSide] = useState<'up' | 'down'>('up');
   const [stakeStr, setStakeStr] = useState('1');
-  const [marginSec, setMarginSec] = useState<number | null>(null);
+  /** How far into the window entry closes. Expressed as a FRACTION rather than
+   *  seconds-before-expiry: the thing worth controlling is how much of the
+   *  window a late joiner gets to watch before committing, and that is a
+   *  proportion, not a countdown. */
+  const [fraction, setFraction] = useState(0.5);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opened, setOpened] = useState<{ roomId: bigint; txHash: string; link: string } | null>(null);
@@ -36,13 +40,20 @@ export function CreateRoomPanel({
   if (!state) return <Readout title="Open a room"><Loading label="reading the market" /></Readout>;
   if (!rooms) return <Readout title="Open a room"><p className="note err">{roomsError}</p></Readout>;
 
-  // Short windows are real — the venue runs 60s markets. A fixed margin would
-  // put the deadline before now, which the escrow rejects outright.
+  // Entry closing early is what stops someone waiting until the window has
+  // almost played out, seeing the split, and taking the underdog side with
+  // nearly no exposure — the same claim on the pot as whoever went first.
   const remaining = Math.max(0, state.expiryTime - now);
-  const maxMargin = Math.max(0, remaining - 10);
-  const roomFits = maxMargin >= MIN_DEADLINE_MARGIN_SEC;
-  const margin = Math.min(marginSec ?? 60, maxMargin);
-  const entryDeadline = state.expiryTime ? state.expiryTime - margin : 0;
+  const at = (f: number) => Math.floor(state.openTime + state.intervalSec * f);
+  // Needs to be far enough ahead that someone can actually join, and far enough
+  // before expiry that the escrow's own margin is satisfied.
+  const usable = (f: number) =>
+    at(f) > now + 15 && at(f) + MIN_DEADLINE_MARGIN_SEC <= state.expiryTime;
+
+  const choices = [0.25, 0.5, 0.75].filter(usable);
+  const chosen = choices.includes(fraction) ? fraction : choices[choices.length - 1];
+  const roomFits = choices.length > 0 && chosen !== undefined;
+  const entryDeadline = chosen !== undefined ? at(chosen) : 0;
   const ready = Boolean(conn) && !wrongChain && stake > 0n && roomFits
     && state.status === 'Trading' && !pending;
 
@@ -95,15 +106,38 @@ export function CreateRoomPanel({
       </label>
 
       <label className="field">
-        <span>entry closes — seconds before expiry (min {MIN_DEADLINE_MARGIN_SEC}, max {maxMargin})</span>
-        <input type="number" min={MIN_DEADLINE_MARGIN_SEC} max={maxMargin} value={margin}
-               onChange={(e) => setMarginSec(Number(e.target.value))} />
+        <span>entry closes at</span>
+        <div className="seg" style={{ height: 34 }}>
+          {[0.25, 0.5, 0.75].map((f) => {
+            const ok = usable(f);
+            const left = at(f) - now;
+            return (
+              <button
+                key={f}
+                className={chosen === f ? 'on' : undefined}
+                disabled={!ok}
+                onClick={() => setFraction(f)}
+                title={ok ? `${left}s from now` : 'already past, or too close to expiry'}
+              >
+                {Math.round(f * 100)}%
+              </button>
+            );
+          })}
+        </div>
       </label>
 
-      {!roomFits && (
+      {roomFits ? (
+        <p className="note">
+          A quarter of the way in, half, or three quarters. Closing earlier means a
+          late joiner cannot watch most of the window play out and then take the
+          short side with almost nothing at risk.
+          {' '}Entry shuts in {Math.max(0, entryDeadline - now)}s.
+        </p>
+      ) : (
         <p className="note err">
-          This window closes in {remaining}s — too short. People need time to join, and
-          the escrow refuses an entry deadline inside the last {MIN_DEADLINE_MARGIN_SEC}s.
+          This window closes in {remaining}s — too short for a room. People need time
+          to join, and the escrow refuses an entry deadline inside the last
+          {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
         </p>
       )}
 
