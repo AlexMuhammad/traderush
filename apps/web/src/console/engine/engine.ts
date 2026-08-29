@@ -54,6 +54,7 @@ export class Engine implements Scene {
   hoofT = 0; lungeT = 0; lunge = 0; borderT = 0;
   phaseName = 'OPEN';
   chased = false;
+  rising = true;
 
   // --- console state -------------------------------------------------------
   private races: Race[] = initialRaces();

@@ -41,6 +41,10 @@ export interface Scene {
   /** Timers driving the idle behaviours. */
   hoofT: number; lungeT: number; lunge: number; borderT: number;
 
+  /** Which way the price is going, held across flat samples so the arrow above
+   *  the runner does not flicker. */
+  rising: boolean;
+
   /** Set by the renderer, read by the chrome. */
   phaseName: string;
   chased: boolean;
@@ -142,12 +146,37 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
     // ---- the live price, floating above the runner's head ------------------
     const spotLabel = R.spot.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-    const tagW = c.measureText(spotLabel).width + 8;
+    const ARROW_W = 9;
+    const tagW = c.measureText(spotLabel).width + 8 + ARROW_W;
     const headY = Y(R.hist[N - 1]!);
     const tagX = Math.max(2, Math.min(w - tagW - 2, nowX - tagW / 2));
     const tagY = Math.max(10, headY - 24);
-    c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(tagX, tagY, tagW, 11);
-    c.fillStyle = 'rgba(255,255,255,.98)'; c.fillText(spotLabel, tagX + 4, tagY + 8);
+    c.fillStyle = 'rgba(0,0,0,.6)';
+    c.fillRect(tagX, tagY, tagW, 11);
+    c.fillStyle = 'rgba(255,255,255,.98)';
+    c.fillText(spotLabel, tagX + 4, tagY + 8);
+
+    // Which way the last few samples went. Compared over several rather than
+    // the last pair: a single tick flickers, and an arrow that flickers reads
+    // as noise instead of direction. Holds its last direction when flat.
+    const back = R.hist[Math.max(0, N - 4)]!;
+    const latest = R.hist[N - 1]!;
+    if (latest !== back) S.rising = latest > back;
+    const arrowX = tagX + tagW - ARROW_W - 1;
+    const arrowY = tagY + 5.5;
+    c.fillStyle = S.rising ? '#3FD98B' : '#FF5A48';
+    c.beginPath();
+    if (S.rising) {
+      c.moveTo(arrowX + 3.5, arrowY - 3.5);
+      c.lineTo(arrowX + 7, arrowY + 2.5);
+      c.lineTo(arrowX, arrowY + 2.5);
+    } else {
+      c.moveTo(arrowX + 3.5, arrowY + 3.5);
+      c.lineTo(arrowX, arrowY - 2.5);
+      c.lineTo(arrowX + 7, arrowY - 2.5);
+    }
+    c.closePath();
+    c.fill();
 
     // ---- the trail ---------------------------------------------------------
     c.beginPath();
