@@ -16,9 +16,10 @@ export { DEPLOYMENTS, chainFor, parseNetwork } from './networks.js';
  *  Any single value can still be overridden from env for the case where a redeploy
  *  lands before this map is updated. */
 export interface BullrunConfig extends Deployment {
-  /** Per-network escrow. A mainnet deploy is a DIFFERENT address than testnet,
-   *  so this is read per network and never shared. */
+  /** Per-network escrows. A mainnet deploy is a DIFFERENT address than testnet,
+   *  so these are read per network and never shared. */
   escrowAddress: Address | null;
+  roomEscrowAddress: Address | null;
   /**
    * Only filter markets to `venueId` when VENUE_ID was set explicitly.
    *
@@ -75,6 +76,9 @@ export function loadConfig(env: EnvBag = {}): BullrunConfig {
   // The escrow is per-network: DUEL_ESCROW_ADDRESS_MAINNET wins on mainnet, so
   // one .env can carry both deployments and the switch stays a single variable.
   const escrowRaw = (get(`DUEL_ESCROW_ADDRESS_${network.toUpperCase()}`) ?? get('DUEL_ESCROW_ADDRESS') ?? '').trim();
+  const roomRaw = (get(`ROOM_ESCROW_ADDRESS_${network.toUpperCase()}`) ?? get('ROOM_ESCROW_ADDRESS') ?? '').trim();
+  const asAddress = (v: string): Address | null =>
+    /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : null;
 
   return {
     ...d,
@@ -95,7 +99,8 @@ export function loadConfig(env: EnvBag = {}): BullrunConfig {
       collateral: addr('COLLATERAL', d.addresses.collateral),
       binaryModule: addr('BINARY_MODULE', d.addresses.binaryModule),
     },
-    escrowAddress: /^0x[0-9a-fA-F]{40}$/.test(escrowRaw) ? (escrowRaw as Address) : null,
+    escrowAddress: asAddress(escrowRaw),
+    roomEscrowAddress: asAddress(roomRaw),
     chain: chainFor(network),
     apiKey: get('DREAMDEX_API_KEY'),
     privyAppId: get('PRIVY_APP_ID')?.trim() || null,

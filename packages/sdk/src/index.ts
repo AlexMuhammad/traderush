@@ -6,3 +6,8 @@ export * from './abi.js';
 export { MarketDiscovery, DEFAULT_STRIKE_SCALE, type BinaryRef, type BinaryMarketSummary } from './discovery.js';
 export { MarketAdapter, type OrderSubmitter, type MarketAdapterOptions } from './market.js';
 export { DuelAdapter, parseDuelLink, type DuelAdapterOptions } from './duel.js';
+export { roomEscrowAbi } from './roomAbi.js';
+export {
+  RoomAdapter, parseRoomLink,
+  type Room, type Seat, type RoomAdapterOptions,
+} from './room.js';
