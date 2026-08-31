@@ -171,12 +171,39 @@ engine.race.phase = 'trade';
 engine.race.t = 10;
 engine.race.pos = null;
 engine.race.upP = 0.5;
+// The book, pinned. Bailing is priced off it, not off the mid: selling DOWN is
+// closed by lifting the ask, so a DOWN leg fetches 1 - bestAsk a share. This
+// used to assert that bailing returned what you put in, which was only true
+// because the engine paid at a mid no counterparty was offering.
+engine.race.bestBid = 0.48;
+engine.race.bestAsk = 0.52;
 const before = engine.snapshot().balance;
 engine.board('down');
 check('board opens on a fresh window', engine.snapshot().pos !== null);
+
+const paidIn = before - engine.snapshot().balance;
+const legShares = engine.snapshot().pos!.n;
 engine.bail();
 check('bail closes the position', engine.snapshot().pos === null);
-check('bail returns value', engine.snapshot().balance > before - 1, `${engine.snapshot().balance} vs ${before}`);
+
+const expected = before - paidIn + legShares * (1 - 0.52);
+check('bail pays at the book, not the mid',
+      Math.abs(engine.snapshot().balance - expected) < 0.01,
+      `${engine.snapshot().balance} vs ${expected}`);
+check('the spread costs something to leave',
+      engine.snapshot().balance < before,
+      `${engine.snapshot().balance} vs ${before}`);
+
+// An empty side of the book is not a slow exit, it is none.
+engine.race.bestAsk = null;
+engine.board('down');
+check('no ask, no exit for a DOWN leg', engine.snapshot().canBail === false);
+const stuck = engine.snapshot().balance;
+engine.bail();
+check('a refused bail changes nothing', engine.snapshot().pos !== null
+      && engine.snapshot().balance === stuck);
+engine.race.bestAsk = 0.52;
+engine.bail();
 const speeds = [engine.snapshot().speed];
 for (let i = 0; i < 3; i++) { engine.cycleSpeed(); speeds.push(engine.snapshot().speed); }
 check('speed cycles back round', speeds[0] === speeds[3], speeds.join(' → '));
