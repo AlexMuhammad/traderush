@@ -19,7 +19,11 @@ import { ScreenPositions } from './components/ScreenPositions';
 import { ScreenHistory } from './components/ScreenHistory';
 import { ScreenRooms } from './components/ScreenRooms';
 import { CreateRoomPanel } from './room/CreateRoomPanel';
+import { EngineProvider } from './engineContext';
 import { WalletDrawer, type WalletSheet } from './wallet/WalletDrawer';
+import { ShareSheet } from './share/ShareSheet';
+import { ShareProvider } from './share/shareContext';
+import type { WinCard } from './share/winCard';
 import { FAUCET_UNITS, faucetAbi } from './wallet/faucetAbi';
 import { RoomPanel } from './room/RoomPanel';
 import { CreateDuelPanel } from './duel/CreateDuelPanel';
@@ -91,6 +95,8 @@ export function ConsoleApp() {
   // and did on the second — React counts hooks per render, so the count grew,
   // the tree threw, and the whole console went blank.
   const [sheet, setSheet] = useState<WalletSheet>(null);
+  /** A result worth showing off, held while its card is on screen. */
+  const [win, setWin] = useState<WinCard | null>(null);
   // The plate, for the sheet to be portalled into. Held in state rather than
   // read off the ref during render: a ref is null on the first pass, and a
   // portal target that arrives without a re-render never mounts.
@@ -271,6 +277,7 @@ export function ConsoleApp() {
       <ScreenPositions
         cursor={cursor} onCursor={setCursor}
         bindSelect={(fire) => { selectRef.current = fire; }}
+        onWin={setWin}
       />
     )
     : screen === 'history' ? (
@@ -305,6 +312,8 @@ export function ConsoleApp() {
     );
 
   return (
+    <EngineProvider engine={engine}>
+    <ShareProvider onShare={setWin}>
     <div className="console-stage">
       <Panel hot={snap.hot && view.isGame && screen === 'game'} panelRef={plateRef}>
         <Marquee
@@ -347,12 +356,15 @@ export function ConsoleApp() {
       </Panel>
 
       <WalletDrawer sheet={sheet} onClose={() => setSheet(null)} host={plate} />
+      <ShareSheet card={win} host={plate} onClose={() => setWin(null)} />
 
       {/* Nothing until Privy has finished restoring: flashing the card at
           someone who is already signed in, then snatching it away, is worse
           than a moment of the console alone. */}
       {gated && <div className="gate"><StartScreen /></div>}
     </div>
+    </ShareProvider>
+    </EngineProvider>
   );
 }
 

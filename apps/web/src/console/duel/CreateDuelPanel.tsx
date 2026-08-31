@@ -6,7 +6,7 @@ import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
 import { Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
-import { Trail } from '../components/Trail';
+import { MatchScreen } from '../components/MatchScreen';
 import { intervalLabel, price } from '../engine/market';
 
 /** Stake a side and publish a challenge. The console's S4. */
@@ -52,13 +52,18 @@ export function CreateDuelPanel({
   const ready = Boolean(conn) && !wrongChain && stake > 0n && deadlineOk
     && state.status === 'Trading' && !pending;
 
-  const submit = () => {
+  // One press, two signatures the first time. Same reasoning as the room
+  // screens: an approval is not a decision anybody makes.
+  const submit = async () => {
     if (!conn) return;
     setPending(true); setError(null);
-    duels.open(conn.wallet, conn.account, marketId, side, stake, acceptDeadline, state.expiryTime)
-      .then(setOpened)
-      .catch((e) => setError(e))
-      .finally(() => setPending(false));
+    try {
+      await allow.ensure(conn.wallet, conn.account, stake);
+      setOpened(await duels.open(
+        conn.wallet, conn.account, marketId, side, stake, acceptDeadline, state.expiryTime,
+      ));
+    } catch (e) { setError(e); }
+    finally { setPending(false); }
   };
 
   if (opened) {
@@ -76,86 +81,97 @@ export function CreateDuelPanel({
     );
   }
 
-  return (
-    <Readout title="Create duel" right={`${state.symbol} · ${intervalLabel(state.intervalSec)}`}>
-      <Trail state={state} />
-      <Rows>
-        <Row label="strike">{state.strike ? price(state.strike) : '—'}</Row>
-        <Row label="spot" tone={state.spot >= state.strike ? 'up' : 'dn'}>{state.spot ? price(state.spot) : '—'}</Row>
-        {/* The book's view, named as such. A duel pays a flat 2x whatever it
-            says, so a bare percentage on the key implied it set the price. */}
-        <Row label="book odds">
-          <span className="up">{Math.round(state.upPrice * 100)}% up</span>
-          {' / '}
-          <span className="dn">{Math.round((1 - state.upPrice) * 100)}% down</span>
-        </Row>
-      </Rows>
+  const trend = state.spot >= state.strike ? 'up' : 'dn';
 
-      {/* Side is a pair of lit keys, the same control as the game's call keys. */}
-      <div className="calls" style={{ marginTop: 11 }}>
-        {(['up', 'down'] as const).map((s) => (
-          <Key key={s} lit={side === s} onPress={() => setSide(s)}>
-            <SideIcon side={s} />
-            <span className="nm">{s.toUpperCase()}</span>
-            <span className="mul">×2.0</span>
+  // The game face's own parts, same as the room screens. A duel is the same
+  // window being watched by two people with money on it.
+  return (
+    <>
+      <div className="q">
+        <span className="exp">{intervalLabel(state.intervalSec)}</span>
+        Challenge one person on <b>{state.symbol}</b>. Equal stakes, winner takes the pot.
+      </div>
+
+      <div className="window">
+        <div className="crt">
+          {/* Live, and it answers the key you are hovering: take DOWN and the
+              bull is the one that comes for you. */}
+          <MatchScreen state={state} side={side} />
+        </div>
+        <div className="readout">
+          <span className={`px ${trend}`}>{state.spot ? price(state.spot) : '—'}</span>
+          <span className={`dl ${trend}`}>
+            {state.spot >= state.strike ? '+' : ''}{(state.spot - state.strike).toFixed(2)}
+          </span>
+          <span>strike {state.strike ? price(state.strike) : '—'}</span>
+        </div>
+      </div>
+
+      {/* A duel pays a flat 2x whatever the book says, so the keys carry the
+          multiple and nothing else. The book's opinion is a fact for the tray. */}
+      <div className="calls calls--pick">
+        {(['up', 'down'] as const).map((sd) => (
+          <Key key={sd} lit={side === sd} onPress={() => setSide(sd)}>
+            <SideIcon side={sd} />
+            <span className="nm">{sd.toUpperCase()}</span>
           </Key>
         ))}
       </div>
 
-      <label className="field">
-        <span>stake per side ({money.symbol})</span>
-        <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
-      </label>
+      <div className="order">
+        <label className="field field--inline">
+          <span>stake each ({money.symbol})</span>
+          <input value={stakeStr} onChange={(e) => setStakeStr(e.target.value)} inputMode="decimal" />
+        </label>
+        <label className="field field--inline">
+          <span>accept window (s)</span>
+          <input type="number" min={MIN_DEADLINE_MARGIN_SEC} max={maxMargin} value={margin}
+                 onChange={(e) => setMarginSec(Number(e.target.value))} />
+        </label>
 
-      <label className="field">
-        <span>
-          accept deadline — seconds before expiry
-          (min {MIN_DEADLINE_MARGIN_SEC}, max {maxMargin})
-        </span>
-        <input type="number" min={MIN_DEADLINE_MARGIN_SEC} max={maxMargin} value={margin}
-               onChange={(e) => setMarginSec(Number(e.target.value))} />
-      </label>
-      {!roomForDuel ? (
-        // Gotcha §8.11 — the escrow enforces the 30s margin too, but a window this
-        // short can never satisfy it, so say so instead of letting them try.
-        <p className="note err">
-          This window closes in {remaining}s — too short for a duel. An opponent needs
-          time to accept, and the escrow refuses a deadline inside the last
-          {' '}{MIN_DEADLINE_MARGIN_SEC}s. Pick a longer market.
-        </p>
-      ) : !deadlineOk && (
-        <p className="note err">
-          Accepting inside the last {MIN_DEADLINE_MARGIN_SEC}s reverts for both parties.
-        </p>
-      )}
+        <div className="calc">
+          <span>book thinks</span>
+          <span>{Math.round(state.upPrice * 100)} up / {Math.round((1 - state.upPrice) * 100)} down</span>
+        </div>
+        <div className="calc">
+          <span>pot · you win</span>
+          <span className="lamp">{money.format(pot)} · ×2</span>
+        </div>
+        <div className="calc">
+          <span>max loss</span>
+          <span className="dn">{money.format(stake)}</span>
+        </div>
+        {!roomForDuel ? (
+          // Gotcha §8.11 — the escrow enforces the 30s margin too, but a window
+          // this short can never satisfy it, so say so instead of letting them try.
+          <div className="calc calc--bad">
+            <span>too short</span>
+            <span>closes in {remaining}s — pick a longer market</span>
+          </div>
+        ) : !deadlineOk && (
+          <div className="calc calc--bad">
+            <span>deadline</span>
+            <span>inside the last {MIN_DEADLINE_MARGIN_SEC}s reverts for both</span>
+          </div>
+        )}
+      </div>
 
-      <Rows>
-        <Row label="pot" tone="lamp">{money.format(pot)}</Row>
-        <Row label="you win" tone="up">{money.format(pot)} (×2)</Row>
-        <Row label="max loss" tone="dn">{money.format(stake)}</Row>
-      </Rows>
+      <p className="hint">
+        Nothing is minted until someone accepts — unmatched, cancel refunds you exactly.
+        No builder fee applies to duels.
+      </p>
 
-      {allow.enough === false ? (
-        <>
-          <Key className="action" disabled={allow.approving}
-               onPress={() => conn && void allow.approve(conn.wallet, conn.account)}>
-            {allow.approving ? 'approving…' : `Approve ${money.symbol}`}
-          </Key>
-          <p className="note">The escrow needs permission to move your stake. Asked once.</p>
-        </>
-      ) : (
-        <Key className="action" disabled={!ready} onPress={submit}>
-          {pending ? 'pending…' : 'Open duel'}
+      <div className="calls calls--act">
+        <Key onPress={onBack}><span className="nm">back</span></Key>
+        <Key lit={ready} disabled={!ready} onPress={() => void submit()}>
+          <span className="nm">
+            {allow.approving ? 'approving…' : pending ? 'opening…' : 'open duel'}
+          </span>
         </Key>
-      )}
+      </div>
 
       {error ? <Fault error={error} /> : null}
       {allow.error ? <Fault error={allow.error} /> : null}
-      <p className="note">
-        Nothing is minted until someone accepts. Unmatched, cancel refunds you exactly.
-        No builder fee applies to duels.
-      </p>
-      <Key className="action" onPress={onBack}>Back</Key>
-    </Readout>
+    </>
   );
 }

@@ -5,6 +5,8 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { Addr, Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { MatchScreen } from '../components/MatchScreen';
+import { price } from '../engine/market';
 
 /**
  * One duel, from lobby to payout — the console's S5, S6 and S7.
@@ -184,31 +186,67 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
   const delta = market ? market.spot - market.strike : 0;
   const left = market ? Math.max(0, market.expiryTime - now) : 0;
 
+  // Only a player gets hunted. A spectator sees the same window with both
+  // animals still on it, which is exactly what a spectator should see.
+  const iAmIn = Boolean(me && (me === duel.challenger.toLowerCase() || me === duel.opponent.toLowerCase()));
+  const mySide = iAmIn ? (myUp ? 'up' : 'down') : null;
+  const trend = delta >= 0 ? 'up' : 'dn';
+
   return (
-    <Readout title={`Duel #${duelId}`} right="live">
-      <Rows>
-        <Row label="challenger" tone={challengerAhead ? 'up' : undefined}>
-          <Addr value={duel.challenger} /> · {duel.challengerUp ? 'UP' : 'DOWN'}
-          {challengerAhead ? ' · ahead' : ' · behind'}
-        </Row>
-        <Row label="opponent" tone={!challengerAhead ? 'up' : undefined}>
-          <Addr value={duel.opponent} /> · {duel.challengerUp ? 'DOWN' : 'UP'}
-          {!challengerAhead ? ' · ahead' : ' · behind'}
-        </Row>
-        <Row label="pot" tone="lamp">{money.format(duel.pot)} — winner takes all</Row>
-        {market && <Row label="strike">{market.strike}</Row>}
-        {market && <Row label="spot" tone={delta >= 0 ? 'up' : 'dn'}>{market.spot}</Row>}
-        {market && (
-          <Row label="delta" tone={delta >= 0 ? 'up' : 'dn'}>
-            {delta >= 0 ? '+' : ''}{delta.toFixed(4)} — {upWinning ? 'UP' : 'DOWN'} ahead
-          </Row>
-        )}
-        <Row label="expiry">{left ? `${Math.floor(left / 60)}m ${left % 60}s` : '—'}</Row>
-      </Rows>
-      <p className="note">
-        Read-only. A duel has no exit: both legs are minted and there is nobody to sell to.
+    <>
+      <div className="q">
+        <span className="exp">{left ? `${Math.floor(left / 60)}m ${left % 60}s` : '—'}</span>
+        Duel <b>#{String(duelId)}</b> — winner takes <b>{money.format(duel.pot)}</b>
+      </div>
+
+      {market && (
+        <div className="window">
+          <div className="crt">
+            {/* The same scene the game face draws. A duel IS the run: same
+                market, same line, same two animals — and here two people have
+                money on which side of it the price ends. */}
+            <MatchScreen state={market} side={mySide} />
+          </div>
+          <div className="readout">
+            <span className={`px ${trend}`}>{price(market.spot)}</span>
+            <span className={`dl ${trend}`}>{delta >= 0 ? '+' : ''}{delta.toFixed(2)}</span>
+            <span>strike {price(market.strike)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="order">
+        <div className="trayrow">
+          <div className="calc">
+            <span>challenger</span>
+            <span className={challengerAhead ? 'up' : undefined}>
+              {duel.challengerUp ? 'UP' : 'DOWN'} · {challengerAhead ? 'ahead' : 'behind'}
+            </span>
+          </div>
+          <div className="calc">
+            <span>opponent</span>
+            <span className={!challengerAhead ? 'up' : undefined}>
+              {duel.challengerUp ? 'DOWN' : 'UP'} · {!challengerAhead ? 'ahead' : 'behind'}
+            </span>
+          </div>
+        </div>
+        <div className="calc">
+          <span>{iAmIn ? 'your side' : 'watching'}</span>
+          <span className={iAmIn ? (myUp ? 'up' : 'dn') : undefined}>
+            {iAmIn ? (myUp ? 'UP' : 'DOWN') : 'not in this duel'}
+          </span>
+        </div>
+      </div>
+
+      <p className="hint">
+        Read-only. A duel has no exit: both legs are minted and there is nobody to
+        sell to.
       </p>
-      <Key className="action" onPress={onBack}>Back</Key>
-    </Readout>
+
+      <div className="calls calls--act">
+        <Key onPress={onBack}><span className="nm">back</span></Key>
+        <Key disabled><span className="nm">running</span></Key>
+      </div>
+    </>
   );
 }

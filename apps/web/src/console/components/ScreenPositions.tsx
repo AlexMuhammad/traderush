@@ -3,6 +3,7 @@ import { binarySettlementAbi } from '@traderush/sdk';
 import { formatUnits } from 'viem';
 import { useSdk } from '../../sdk';
 import { withTimeout } from '../../timeout';
+import type { WinCard } from '../share/winCard';
 import { useWallet } from '../../walletContext';
 import { intervalLabel } from '../engine/market';
 import { Fault } from './Readout';
@@ -24,11 +25,15 @@ interface Claimable {
  * nothing pays out until someone asks. This is where you ask.
  */
 export function ScreenPositions({
-  cursor, onCursor, bindSelect,
+  cursor, onCursor, bindSelect, onWin,
 }: {
   cursor: number;
   onCursor: (i: number) => void;
   bindSelect?: (fire: () => void) => void;
+  /** Fired the moment a claim lands. Getting paid is the moment worth showing
+   *  off — asking someone to go and find a share button afterwards is asking
+   *  them to do it later, which means never. */
+  onWin?: (card: WinCard) => void;
 }) {
   const { cfg, market } = useSdk();
   const { conn } = useWallet();
@@ -120,6 +125,11 @@ export function ScreenPositions({
       const hash = await conn.wallet.writeContract(request);
       await market.publicClient.waitForTransactionReceipt({ hash });
       setDone((n) => n + 1);
+      onWin?.({
+        market: row.label,
+        side: row.outcomeIdx === 0 ? 'up' : 'down',
+        payout: money(row.estPayout),
+      });
     } catch (e) {
       setError(e);
     } finally { setBusy(null); }

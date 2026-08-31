@@ -5,7 +5,7 @@ import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { Addr, Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
-import { Trail } from '../components/Trail';
+import { MatchScreen } from '../components/MatchScreen';
 import { human, intervalLabel, price } from '../engine/market';
 
 export interface DuelLink { chainId: number; escrow: `0x${string}`; duelId: bigint }
@@ -65,57 +65,103 @@ export function AcceptPanel({ link, onAccepted }: { link: DuelLink; onAccepted: 
     nearExpiry && 'too close to expiry — this would revert for both of you',
   ].filter(Boolean) as string[];
 
-  const accept = () => {
+  // One press, two signatures the first time. The approval rides along with the
+  // accept rather than standing in front of it.
+  const accept = async () => {
     if (!conn || !duels) return;
     setPending(true); setError(null);
-    duels.accept(conn.wallet, conn.account, link.duelId)
-      .then((r) => { setHash(r.txHash); onAccepted(); })
-      .catch((e) => setError(e))
-      .finally(() => setPending(false));
+    try {
+      await allow.ensure(conn.wallet, conn.account, duel.stake);
+      const r = await duels.accept(conn.wallet, conn.account, link.duelId);
+      setHash(r.txHash);
+      onAccepted();
+    } catch (e) { setError(e); }
+    finally { setPending(false); }
   };
 
+  const trend = state && state.spot >= state.strike ? 'up' : 'dn';
+  const ready = Boolean(conn) && !wrongChain && blockers.length === 0 && !pending;
+
   return (
-    <Readout title={`Duel #${link.duelId}`} right="challenged">
-      {state && <Trail state={state} />}
-      <Rows>
-        <Row label="challenger"><Addr value={duel.challenger} /> · {duel.challengerUp ? 'UP' : 'DOWN'}</Row>
-        <Row label="your side" tone="lamp">{mySide}</Row>
-        <Row label="market">
-          {state ? `${state.symbol} · ${intervalLabel(state.intervalSec)} · strike ${price(state.strike)} · spot ${price(state.spot)}` : 'reading…'}
-        </Row>
-        <Row label="your stake">{money.format(duel.stake)}</Row>
-        <Row label="pot" tone="lamp">{money.format(duel.pot)}</Row>
-        <Row label="you win" tone="up">{money.format(duel.pot)}</Row>
-        <Row label="max loss" tone="dn">{money.format(duel.stake)}</Row>
-        <Row label="deadline">{deadlinePassed ? 'passed' : `${human(duel.acceptDeadline - now)} left`}</Row>
-      </Rows>
+    <>
+      <div className="q">
+        <span className="exp">{deadlinePassed ? 'expired' : `${human(duel.acceptDeadline - now)} left`}</span>
+        You have been challenged on <b>{state?.symbol ?? '…'}</b> — your side is <b>{mySide}</b>.
+      </div>
 
-      {blockers.map((b) => <p key={b} className="note warn">{b}</p>)}
-
-      {!conn && (
-        <Key className="action" disabled={connecting} onPress={doConnect}>
-          {connecting ? 'connecting…' : 'Connect wallet'}
-        </Key>
-      )}
-      {conn && wrongChain && <Key className="action" onPress={doSwitch}>Switch to {cfg.chainName}</Key>}
-      {conn && !wrongChain && allow.enough === false && (
-        <Key className="action" disabled={allow.approving}
-             onPress={() => void allow.approve(conn.wallet, conn.account)}>
-          {allow.approving ? 'approving…' : `Approve ${money.symbol}`}
-        </Key>
-      )}
-      {conn && !wrongChain && allow.enough !== false && (
-        <Key className="action" disabled={blockers.length > 0 || pending} onPress={accept}>
-          {pending ? 'pending…' : `Accept — ${money.format(duel.stake)}`}
-        </Key>
+      {state && (
+        <div className="window">
+          <div className="crt">
+            {/* The window you are being asked to take a side of, running. The
+                animal that comes for you is already the right one. */}
+            <MatchScreen state={state} side={mySide === 'UP' ? 'up' : 'down'} />
+          </div>
+          <div className="readout">
+            <span className={`px ${trend}`}>{price(state.spot)}</span>
+            <span className={`dl ${trend}`}>
+              {state.spot >= state.strike ? '+' : ''}{(state.spot - state.strike).toFixed(2)}
+            </span>
+            <span>strike {price(state.strike)}</span>
+          </div>
+        </div>
       )}
 
-      {error ? <Fault error={error} /> : null}
-      {hash && <TxLine hash={hash} label="matched" />}
-      <p className="note">
+      <div className="order">
+        <div className="trayrow">
+          <div className="calc">
+            <span>your side</span>
+            <span className={mySide === 'UP' ? 'up' : 'dn'}>{mySide}</span>
+          </div>
+          <div className="calc">
+            <span>challenger</span>
+            <span><Addr value={duel.challenger} /></span>
+          </div>
+        </div>
+        <div className="calc">
+          <span>your stake</span>
+          <span>{money.format(duel.stake)}</span>
+        </div>
+        <div className="calc">
+          <span>you win · max loss</span>
+          <span><em className="lamp">{money.format(duel.pot)}</em> · {money.format(duel.stake)}</span>
+        </div>
+        {blockers.map((b) => (
+          <div key={b} className="calc calc--bad"><span>blocked</span><span>{b}</span></div>
+        ))}
+      </div>
+
+      <p className="hint">
         Accepting mints {money.plain(duel.pot)} complete sets and hands you the {mySide} leg.
         No builder fee applies to duels.
       </p>
-    </Readout>
+
+      <div className="calls calls--act">
+        {!conn ? (
+          <>
+            <Key disabled><span className="nm">back</span></Key>
+            <Key lit disabled={connecting} onPress={doConnect}>
+              <span className="nm">{connecting ? 'connecting…' : 'sign in'}</span>
+            </Key>
+          </>
+        ) : wrongChain ? (
+          <>
+            <Key disabled><span className="nm">back</span></Key>
+            <Key lit onPress={doSwitch}><span className="nm">switch network</span></Key>
+          </>
+        ) : (
+          <>
+            <Key disabled><span className="nm">back</span></Key>
+            <Key lit={ready} disabled={!ready} onPress={() => void accept()}>
+              <span className="nm">
+                {allow.approving ? 'approving…' : pending ? 'pending…' : `accept ${money.format(duel.stake)}`}
+              </span>
+            </Key>
+          </>
+        )}
+      </div>
+
+      {error ? <Fault error={error} /> : null}
+      {hash && <TxLine hash={hash} label="matched" />}
+    </>
   );
 }

@@ -6,7 +6,8 @@ import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
 import { Loading, Fault, Readout, TxLine } from '../components/Readout';
-import { Trail } from '../components/Trail';
+import { MatchScreen } from '../components/MatchScreen';
+import { useShare } from '../share/shareContext';
 import { intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
 
@@ -30,6 +31,7 @@ export function RoomPanel({
   const { conn, connecting, doConnect } = useWallet();
   const money = useMoney();
   const now = useNow();
+  const share = useShare();
 
   const room = useRoom(roomId);
   const seat = useSeat(roomId, room);
@@ -99,8 +101,13 @@ export function RoomPanel({
       {state && (
         <div className="window">
           <div className="crt">
-            <Trail state={state} />
-            <div className="scan" />
+            {/* The same scene the game face draws — this IS that window, and you
+                have money on it. `side` is which half of the glass is yours, so
+                the other animal is the one that comes for you. */}
+            <MatchScreen
+              state={state}
+              side={seat && seat.up > 0n ? 'up' : seat && seat.down > 0n ? 'down' : null}
+            />
           </div>
           <div className="readout">
             <span className={`px ${trend}`}>{price(state.spot)}</span>
@@ -285,8 +292,10 @@ export function RoomPanel({
 
       // BinarySettlement, not the module: the module's redeem reverts once the
       // pool is released, and settlement pays against the outcome id itself.
+      let paid = 0n;
       for (const [id, amount] of [[r.upId, bal.up], [r.downId, bal.down]] as const) {
         if (amount === 0n) continue;
+        paid += amount;
         const { request } = await adapter.publicClient.simulateContract({
           account: conn.account, address: cfg.addresses.binarySettlement,
           abi: binarySettlementAbi, functionName: 'redeem',
@@ -297,6 +306,22 @@ export function RoomPanel({
         setHash(tx);
       }
       setHeld({ up: 0n, down: 0n });
+
+      // The room knows both halves — what went in and what came out — so its
+      // card can carry the multiple, which is the number people actually post.
+      if (paid > 0n && mine > 0n) {
+        const mult = Number(paid) / Number(mine);
+        share?.({
+          market: state ? `${state.symbol} · ${intervalLabel(state.intervalSec)}` : `Room #${roomId}`,
+          side: seat && seat.up > 0n ? 'up' : 'down',
+          payout: money.format(paid),
+          stake: money.format(mine),
+          multiple: `×${mult.toFixed(2)}`,
+          net: `${paid >= mine ? '+' : ''}${money.plain(paid - mine)}`,
+          strike: state ? price(state.strike) : undefined,
+          close: state ? price(state.spot) : undefined,
+        });
+      }
     } catch (e) { setError(e); }
     finally { setPending(false); }
   };

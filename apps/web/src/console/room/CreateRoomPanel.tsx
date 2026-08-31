@@ -6,7 +6,7 @@ import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
 import { SideIcon } from '../components/SideIcon';
 import { Loading, Fault, Readout, TxLine } from '../components/Readout';
-import { Trail } from '../components/Trail';
+import { MatchScreen } from '../components/MatchScreen';
 import { human, intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
 
@@ -116,8 +116,11 @@ export function CreateRoomPanel({
     <>
       <div className="window">
         <div className="crt">
-          <Trail state={state} />
-          <div className="scan" />
+          {/* The live scene, not a picture of one — and it answers the key you
+              are hovering: press DOWN and the bull is the one that comes for
+              you. That is the thing being bought, so it should be running
+              before the money is. */}
+          <MatchScreen state={state} side={side} />
         </div>
         <div className="readout">
           <span className={`px ${trend}`}>{state.spot ? price(state.spot) : '—'}</span>

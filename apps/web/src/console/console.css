@@ -1807,3 +1807,33 @@
   color: #7A5A28;
   text-shadow: 0 1px 0 rgba(255,255,255,.4);
 }
+
+/* --------------------------------------------------------------- the card
+
+   The share sheet's preview. A dark mount around it, because the card is a
+   16:9 image and the plate is a tall handheld — without the mount it reads as
+   a screenshot that has been squashed to fit. */
+.cardframe {
+  margin: 2px 0 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0A0B0C;
+  box-shadow: inset 0 3px 8px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.5);
+}
+.cardframe img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.cardframe__wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #6B7075;
+}
+
+/* The sheet's own keys sit on steel, so its links do too. */
+.sheet .hint a { color: #2C5D9B; }

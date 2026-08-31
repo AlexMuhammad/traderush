@@ -27,6 +27,8 @@ export interface Scene {
   slashes: Slash[];
   attack: Attack | null;
   outcome: Outcome | null;
+  /** The side held on a duel or room screen. See Engine.watchSide. */
+  watchSide: 'up' | 'down' | null;
   /** ms since the result card appeared. Owned by the engine, advanced here. */
   outcomeT: number;
 
@@ -107,9 +109,14 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
   const trailRGB = bullish ? BULL_RGB : BEAR_RGB;
   const trailCol = bullish ? '#3FD98B' : '#FF5A48';
 
-  const myOdds = R.pos ? (R.pos.side === 'up' ? R.upP : 1 - R.upP) : null;
+  // Moved above `myOdds` so the odds can be read off it: how threatened you are
+  // is the market's chance of the side you are NOT on.
+  const heldSide = R.pos?.side ?? S.watchSide;
+  const myOdds = heldSide ? (heldSide === 'up' ? R.upP : 1 - R.upP) : null;
   const threat = myOdds === null ? 0.4 : 1 - myOdds;
-  const inDanger = R.pos ? (R.pos.side === 'up' ? !bullish : bullish) : false;
+  // Danger is being on the wrong side of the line, whether the side came from
+  // the paper game or from a room you have real money in.
+  const inDanger = heldSide ? (heldSide === 'up' ? !bullish : bullish) : false;
   S.chased = inDanger;
 
   // ---- shake is applied as a transform, so nothing else has to know about it
@@ -192,11 +199,15 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
     // ---- territories -------------------------------------------------------
     // The hunter is whichever animal owns the half you are NOT on.
-    const bullHot = Boolean(R.pos && R.pos.side === 'down' && inDanger);
-    const bearHot = Boolean(R.pos && R.pos.side === 'up' && inDanger);
+    // The side being watched: the paper game's position on the game face, or the
+    // side held in a duel or room. Same scene either way — a window you have
+    // money on should not look like one you are only passing.
+    const mySide = heldSide;
+    const bullHot = Boolean(mySide === 'down' && inDanger);
+    const bearHot = Boolean(mySide === 'up' && inDanger);
     // Before you pick a side both animals are present; after, only your hunter.
-    const wantBull = !R.pos || R.pos.side === 'down';
-    const wantBear = !R.pos || R.pos.side === 'up';
+    const wantBull = !mySide || mySide === 'down';
+    const wantBear = !mySide || mySide === 'up';
     S.bullA += ((wantBull ? 1 : 0) - S.bullA) * 0.10;
     S.bearA += ((wantBear ? 1 : 0) - S.bearA) * 0.10;
 

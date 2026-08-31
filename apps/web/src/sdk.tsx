@@ -190,17 +190,29 @@ export function useAllowance(owner: `0x${string}` | undefined, needed: bigint) {
 
   useEffect(() => { read(); }, [read]);
 
-  const approve = async (wallet: WalletClient, account: Account) => {
-    if (!duels) return;
+  /**
+   * Make sure the escrow can move `amount`, approving only if it cannot.
+   *
+   * Awaited immediately before the write it enables, rather than the screen
+   * putting an Approve key in front of the real one. An approval is plumbing:
+   * nobody decides it, it means nothing on its own, and a first-time player who
+   * asked to open a duel and got a key labelled Approve has to work out where
+   * their button went.
+   *
+   * The allowance is read fresh from the chain — React state can be one approval
+   * behind, which either approves twice or skips one that was never granted.
+   */
+  const ensure = useCallback(async (wallet: WalletClient, account: Account, amount: bigint) => {
+    if (!duels || !owner) return;
+    const have = await duels.allowance(cfg.addresses.collateral, owner);
+    if (have >= amount) return;
     setApproving(true); setError(null);
     try {
       // Approve far more than this stake so a player is asked once, not per duel.
       await duels.approve(wallet, account, cfg.addresses.collateral, 2n ** 255n);
       read();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
     } finally { setApproving(false); }
-  };
+  }, [duels, owner, cfg.addresses.collateral, read]);
 
   return {
     /** null while unknown — do not block the UI on it. */
@@ -208,7 +220,7 @@ export function useAllowance(owner: `0x${string}` | undefined, needed: bigint) {
     enough: allowance === null ? null : allowance >= needed,
     approving,
     error,
-    approve,
+    ensure,
   };
 }
 

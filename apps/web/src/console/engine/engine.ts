@@ -64,6 +64,24 @@ export class Engine implements Scene {
   /** Owned by the renderer: the eased clock and vertical scale. Zero means
    *  "unset", which is the renderer's cue to snap rather than glide. */
   tView = 0; scaleLo = 0; scaleHi = 0; headP = 0;
+
+  /**
+   * The side you hold in a DUEL or a ROOM, for the scene to hunt you on.
+   *
+   * Deliberately not `race.pos`: that is the paper game's position and it is
+   * what settlement pays out against. A room's stake is real money held by an
+   * escrow, and writing it into `pos` would have the console credit a balance
+   * for it. This says only "which half of the glass is his", which is all the
+   * animals need to know.
+   */
+  watchSide: Side | null = null;
+
+  /** Tell the scene which side is held here. Null goes back to a spectator. */
+  setWatchSide(side: Side | null): void {
+    if (this.watchSide === side) return;
+    this.watchSide = side;
+    this.publish();
+  }
   phaseName = 'OPEN';
   chased = false;
   rising = true;
