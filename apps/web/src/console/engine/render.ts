@@ -62,6 +62,9 @@ export interface Scene {
    *  jumped rather than the new point arriving. */
   scaleLo: number;
   scaleHi: number;
+  /** How far through the four-pose stride the runner is. Advanced by DISTANCE,
+   *  so the legs match the ground at any window length. */
+  stridePhase: number;
   /** The head of the trail, in price, eased. The feed answers every few seconds,
    *  so the newest sample lands as a step; easing it turns the step into travel
    *  and keeps the runner welded to the end of his own line. */
@@ -428,7 +431,13 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
       // one on a different period made the two fight and read as jitter.
       const bob = 0;
       const lean = Math.max(-0.4, Math.min(0.4, slope * 0.05)) + (inDanger ? threat * 0.3 : 0);
-      drawRunner(c, nowX, runnerY + bob, lean, '#FFD777', S.frame);
+      // One pose per couple of pixels covered, floored at a slow idle so a long
+      // window does not leave him frozen mid-step. His legs span about nine
+      // pixels, so four poses across that reads as one stride.
+      const groundPerSec = (finishX - startX) / Math.max(1, R.win);
+      const posesPerSec = Math.max(2.2, groundPerSec / 2.2);
+      S.stridePhase += (dt / 1000) * posesPerSec;
+      drawRunner(c, nowX, runnerY + bob, lean, '#FFD777', S.stridePhase);
       if (R.phase === 'trade' && S.frame % 3 === 0) {
         S.particles.push({ x: nowX - 4, y: runnerY + 3, vx: -1.5 - Math.random(), vy: -Math.random() * 0.6, life: 1, col: '255,190,110', sz: 2 });
       }

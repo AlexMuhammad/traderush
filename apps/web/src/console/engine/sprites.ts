@@ -46,6 +46,11 @@ export function drawBear(c: Ctx, x: number, y: number, s: number, frame: number,
 
 /** You. A small glowing figure; the glow is what makes it read as the player. */
 export function drawRunner(c: Ctx, x: number, y: number, rot = 0, col = '#FFD777', frame = 0): void {
+  // `frame` is a STRIDE index, not the render frame: the caller advances it with
+  // the ground the runner covers, so his legs match his speed. Driven by the
+  // frame counter instead, he churned at the same rate on a fifteen minute
+  // window as on a sixty second one — the same legs over a thirteenth of the
+  // ground, which is a treadmill.
   // A four-pose stride: contact, passing, contact mirrored, passing. Two poses
   // a pixel apart — which is what this was — is a shiver, not a run: the legs
   // have to leave the body and the body has to rise off them. Discrete poses
@@ -59,7 +64,7 @@ export function drawRunner(c: Ctx, x: number, y: number, rot = 0, col = '#FFD777
     { fx: 1, fh: 6, bx: -3, bh: 5, af: 2, ab: -4, lift: -1 },
     { fx: -5, fh: 3, bx: 2, bh: 5, af: -5, ab: 4, lift: 0 },
     { fx: -3, fh: 5, bx: 0, bh: 6, af: -4, ab: 2, lift: -1 },
-  ][Math.floor(frame / 3) % 4]!;
+  ][((Math.floor(frame) % 4) + 4) % 4]!;
 
   c.save(); c.translate(x, y); c.rotate(rot);
   c.shadowColor = 'rgba(255,215,119,.9)'; c.shadowBlur = 12;

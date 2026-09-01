@@ -9,8 +9,10 @@
     "probe": "tsx --env-file-if-exists=../../.env src/probe-unknowns.ts",
     "probe:book": "tsx --env-file-if-exists=../../.env src/probe-book.ts",
     "probe:order": "tsx --env-file-if-exists=../../.env src/probe-order.ts",
+    "maker": "tsx --env-file-if-exists=../../.env src/maker.ts",
     "e2e": "tsx --env-file-if-exists=../../.env src/e2e-duel.ts",
     "e2e:room": "tsx --env-file-if-exists=../../.env src/e2e-room.ts",
+    "e2e:book": "tsx --env-file-if-exists=../../.env src/e2e-book.ts",
     "settle": "tsx --env-file-if-exists=../../.env src/settle.ts",
     "typecheck": "tsc --noEmit"
   },

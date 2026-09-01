@@ -1,10 +1,17 @@
 # TRADE RUSH
 
-A peer-to-peer duel layer on top of DreamDEX Event Contracts.
+Three ways to take a side of a DreamDEX Event Contract, wearing a handheld console.
 
-Normally you trade an Up/Down event contract against the order book. TRADE RUSH adds a second
-path: **two specific people put up equal stakes, a contract mints the pair for them, and the
-winner takes the pot.** No order book, no market maker, no liquidity requirement.
+**The run** is the front page: you buy the contract on the venue's own book. The market is
+your counterparty, the fill is immediate, and nobody has to turn up.
+
+**Rooms** are the second path, and the one an order book cannot give you. Everyone stakes into
+one pot and the winning side splits the whole of it by what each of them put in — five against
+three pays the three side more. No market maker, no liquidity requirement, no waiting to be
+matched at your exact size.
+
+**Duels** are a room with two people and equal stakes: a challenge, a link, and a winner who
+takes the pot.
 
 > **Unaudited.** Built and tested on Shannon testnet (chain `50312`). A mainnet path exists
 > and is one config line away, but nothing here has been audited — do not point it at real
@@ -12,7 +19,11 @@ winner takes the pot.** No order book, no market maker, no liquidity requirement
 
 Split/merge is a standard primitive — Polymarket has had `splitPosition` / `mergePositions`
 since launch. Our contribution is the product layer on top of it: the challenge, the link, the
-lobby, and the settlement view. **Builder fees apply to book orders only, never to duels.**
+lobby, the settlement view, and a console where the market IS the game — the strike is a line,
+the two animals hold the ground either side of it, and you are the thing running along it.
+
+**A builder fee is off unless configured, and can only ever apply to book orders** — a room or
+a duel never touches one. See `BUILDER_ADDRESS` in `.env.example`.
 
 ---
 
@@ -62,10 +73,10 @@ quietly mis-rendering every amount.
 ## Layout
 
 ```
-apps/web            base front end — plain, functional, no game art
-packages/contracts  DuelEscrow.sol + forge tests + deploy script
-packages/sdk        market adapter (read/write) + duel adapter (escrow)
-packages/scripts    doctor, §9 probe, two-wallet e2e
+apps/web            the console — canvas engine, screens, wallet
+packages/contracts  DuelEscrow.sol + RoomEscrow.sol + forge tests + deploy
+packages/sdk        market reads, book orders, and the two escrow adapters
+packages/scripts    doctor, probes, market maker, three e2e journeys
 docs/UNKNOWNS.md    the three §9 blocking unknowns — fill these in on day 1
 docs/FINDINGS.md    where the build brief is wrong, verified against the live venue
 ```
@@ -74,9 +85,10 @@ docs/FINDINGS.md    where the build brief is wrong, verified against the live ve
 against the live venue — including where event contracts are discoverable, the collateral's
 decimals, and whether settlement is automatic (it is not).
 
-**The front end never talks to the chain or the socket directly. It talks to the SDK.**
-This is non-negotiable: the polished game console is swapped in later against the same SDK
-surface, so any number that is wrong here would be wrong there too.
+**Every write goes through the SDK, and every price a person acts on comes from the chain.**
+Not from the indexer: on a live market the two read 95.40/97.80 against a real 96.40/98.50, and
+a point is nothing on a list and everything on a control — it decides whether a key can fill
+and what number it promises. The indexer lists markets; the pool prices them.
 
 ---
 
@@ -121,19 +133,46 @@ Put the resulting address in `.env` as `DUEL_ESCROW_ADDRESS` and `VITE_DUEL_ESCR
 
 ```bash
 pnpm faucet               # tUSDC into both test wallets
-pnpm e2e                  # the whole journey on live testnet, in one run
+pnpm e2e                  # a duel, end to end, on live testnet
+pnpm e2e:room             # a room: two players, uneven sides, floating payout
+pnpm e2e:book             # the front page: buy on the book, wait, redeem
 pnpm settle               # settle a specific duel:  DUEL_ID=4 pnpm settle
 pnpm dev                  # http://localhost:5173
 ```
 
-`pnpm e2e` walks the same code the browser walks — the discovery the dials read,
-the allowance the create screen surfaces, the deadline bounds it enforces, the
-blocker list the accept screen renders, the settlement path the payout screen
-calls — and it does it with real transactions against live markets. It waits for
-a window to close, so it takes as long as one short market.
+Each e2e walks the same code the browser walks and does it with **real transactions against
+live markets**, waiting for a real window to close. Between them they cover the three paths:
+`e2e` the duel escrow, `e2e:room` the parimutuel split, `e2e:book` the venue's order book —
+including the assertion that matters most, that a losing contract redeems for nothing *without
+reverting*, because a revert there strands the loser on an error forever.
 
-It does **not** cover React rendering or Privy's login UI. Everything below the
-wallet client is exercised for real; the two things above it are not.
+They do **not** cover React rendering or Privy's login UI. Everything below the wallet client
+is exercised for real; the two things above it are not.
+
+### When the book is thin
+
+```bash
+pnpm probe:book           # would an order cross right now? prints the maths
+pnpm probe:order          # place one minimum lot and report what happened
+pnpm maker -- --watch     # post two-sided quotes and keep them fresh
+```
+
+Short windows turn over faster than a transaction confirms, so an order there can arrive to
+find its level gone — measured on testnet, a sixty second book filled three orders in six while
+five minutes filled five in five. The console therefore **opens** on a window of five minutes
+or more; every interval stays reachable on the dials.
+
+`pnpm maker` is the other half of the answer, and the half nothing else here was using: the
+venue pays yield for posting tight quotes, and everything else in this repo only ever took.
+It quotes **both** sides, which takes inventory — a bid escrows collateral, an ask escrows the
+outcome token itself — so it mints a complete set on each pool first and burns what is still
+paired on the way out. Capital borrowed for the run comes home; capital that became a trade
+stays a trade.
+
+This is also the honest answer to what a room does NOT do. Rooms and duels mint their sets
+directly and never touch the book, which is the point — a parimutuel pot needs no counterparty
+— but it means they add no depth to the venue they are built on. The maker is where this
+project puts liquidity back.
 
 ---
 

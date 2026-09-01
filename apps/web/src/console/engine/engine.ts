@@ -14,6 +14,15 @@ import type {
   Side, Slash, Tally, TallyItem,
 } from './types';
 
+/**
+ * Shortest window the console will OPEN on.
+ *
+ * Every interval stays reachable on the dials; this only decides where the
+ * first press happens. Measured on live testnet, a sixty second book filled
+ * three orders in six while five minutes filled five in five.
+ */
+const OPENING_MIN_WINDOW = 300;
+
 /** Seconds between the window closing and the result landing. */
 const LOCK_SECONDS = 2.2;
 /** Segments in the progress bar. Fixed, so 15m and 1h windows look alike. */
@@ -63,7 +72,7 @@ export class Engine implements Scene {
   hoofT = 0; lungeT = 0; lunge = 0; borderT = 0;
   /** Owned by the renderer: the eased clock and vertical scale. Zero means
    *  "unset", which is the renderer's cue to snap rather than glide. */
-  tView = 0; scaleLo = 0; scaleHi = 0; headP = 0;
+  tView = 0; scaleLo = 0; scaleHi = 0; headP = 0; stridePhase = 0;
 
   /**
    * The side you hold in a DUEL or a ROOM, for the scene to hunt you on.
@@ -106,6 +115,19 @@ export class Engine implements Scene {
   // --- console state -------------------------------------------------------
   private races: Race[] = initialRaces();
   private raceIndex = 0;
+  /**
+   * Whether the opening dial has been settled.
+   *
+   * The feed lists windows shortest first, which is right for stepping through
+   * them and wrong for the one the console opens on: a sixty second book turns
+   * over faster than a transaction confirms, so roughly a third of orders there
+   * come back unfilled. That is the first key anyone presses.
+   *
+   * So the opening choice lands on the shortest window whose book sits still.
+   * Once — an explicit tune must win, and this must never yank a dial out from
+   * under someone.
+   */
+  private openingChosen = false;
   private balance = 2847;
   private stakePct = 25;
   /** Overrides `phaseName` between the horn and the next window. */
@@ -539,6 +561,13 @@ export class Engine implements Scene {
       }
     });
 
+    // First real slots: open on a window with a book worth pressing.
+    if (!this.openingChosen && this.races.some((r) => r.marketId)) {
+      this.openingChosen = true;
+      const i = this.races.findIndex((r) => r.marketId && r.win >= OPENING_MIN_WINDOW);
+      if (i > 0) this.tune(i);
+    }
+
     if (touchedCurrent) {
       this.resetScene();
       this.labelWindow();
@@ -906,6 +935,8 @@ export class Engine implements Scene {
   }
 
   tune(index: number): void {
+    // Any deliberate tune settles the opening question for good.
+    this.openingChosen = true;
     if (index === this.raceIndex || !this.races[index]) return;
     this.raceIndex = index;
     this.resetScene();
