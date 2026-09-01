@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Account, WalletClient } from 'viem';
 import { useWallet as useWalletSafe } from './walletContext';
 import {
-  MarketAdapter, DuelAdapter, RoomAdapter, loadConfig, type TradeRushConfig,
+  MarketAdapter, DuelAdapter, RoomAdapter, loadConfig, makeOrderSubmitter,
+  type TradeRushConfig,
   type MarketState, type MarketSummary, type DuelView, type Room, type Seat,
 } from '@traderush/sdk';
 

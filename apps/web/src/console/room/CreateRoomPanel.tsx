@@ -12,11 +12,13 @@ import { useRoomAllowance } from './useRoomAllowance';
 
 /** Open a room on a market and take the first side. */
 export function CreateRoomPanel({
-  marketId, onOpened, onBack,
+  marketId, onOpened, onBack, initialSide = 'up',
 }: {
   marketId: `0x${string}`;
   onOpened: (roomId: bigint) => void;
   onBack: () => void;
+  /** The side already chosen on the way in, from the call keys. */
+  initialSide?: 'up' | 'down';
 }) {
   const state = useMarket(marketId);
   const { rooms, roomsError } = useSdk();
@@ -24,7 +26,7 @@ export function CreateRoomPanel({
   const money = useMoney();
   const now = useNow();
 
-  const [side, setSide] = useState<'up' | 'down'>('up');
+  const [side, setSide] = useState<'up' | 'down'>(initialSide);
   const [stakeStr, setStakeStr] = useState('1');
   /** How far into the window entry closes. Expressed as a FRACTION rather than
    *  seconds-before-expiry: the thing worth controlling is how much of the

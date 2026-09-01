@@ -212,30 +212,13 @@ export interface ConsoleSnapshot {
   /** True when the panel should run hot: near expiry, or being hunted. */
   hot: boolean;
 
-  pos: Position | null;
-  /** Live mark-to-market of the open position. */
-  pnl: number;
-  /** What bailing out would return right now. */
-  bailValue: number;
-  /** The line under the ticket. Becomes the settlement note once resolved. */
-  ticketNote: string;
-  /** Just 'UP' or 'DOWN' — the numbers live on their own line. */
-  ticketSide: string;
-  /** Implied probability of the side you took, when you took it. */
-  ticketOdds: number;
   /** Label on the exit key. Becomes Paid/Lost once the window has resolved. */
-  bailLabel: string;
-  /** What the spread costs to get out, in points. Zero when there is no exit. */
-  bailSpread: number;
-  /** The exit key only works while trading. */
-  canBail: boolean;
+  /** The side held on the window being watched, from a room or duel. The call
+   *  keys light from this — the console no longer holds a position of its own. */
+  watchSide: Side | null;
   /** Right-hand readout: HOME GROUND / IN ITS TERRITORY / HORNS OUT / NO STAKE. */
   ground: string;
 
-  balance: number;
-  stakePct: number;
-  cost: number;
-  costNote: string;
   /** No liquidity on that side — the key is dead. */
   dryUp: boolean;
   dryDown: boolean;

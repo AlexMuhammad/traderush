@@ -99,20 +99,15 @@ frames(30);
 check('idle renders', canvasOps > 0, `${canvasOps} ops`);
 step('idle');
 
-// 2 — take a side and run it into the other animal's territory.
+// 2 — arm a side and run it into the other animal's territory.
+//     There is no paper position any more: the keys open a room, so what the
+//     scene needs to know is only which half of the glass is his.
 engine.wake();
-engine.setStakePct(50);
 engine.race.upP = 0.5;      // pinned: an extreme price would make a side dry
-engine.board('up');
-check('board opens a position', engine.snapshot().pos !== null);
-const staked = engine.snapshot();
-check('stake left the balance', staked.balance < 2847, `${staked.balance}`);
-// snapshot().cost is what the NEXT bet would cost, computed off the already
-// reduced balance. The stake actually placed lives on the position.
-const placed = staked.pos!.cost;
-check('stake is half the bank at 50%', Math.abs(placed - 2847 / 2) < 0.01, `${placed}`);
+engine.setWatchSide('up');
+check('the armed side reaches the snapshot', engine.snapshot().watchSide === 'up');
 for (let i = 0; i < 40; i++) advance();
-check('ground is reported', staked.ground !== 'NO STAKE', staked.ground);
+check('ground follows the armed side', engine.snapshot().ground !== 'NO SIDE', engine.snapshot().ground);
 step('trading');
 
 // 3 — every cinematic, through its whole timeline. These are the branches a
@@ -133,19 +128,11 @@ engine.attack = null;
 engine.race.t = engine.race.win;
 internals.resolve();
 await spin(2600);
-// The stake is taken once, at board() — settling must not charge it again.
-const afterSettle = engine.snapshot().balance;
-const won = engine.outcome?.win === true;
-check('a loss costs the stake once, not twice',
-  won || Math.abs(afterSettle - (2847 - placed)) < 0.01,
-  `balance ${afterSettle.toFixed(2)}, expected ${(2847 - placed).toFixed(2)}`);
-
 check('resolve produces an outcome', engine.outcome !== null);
 outcomes++;
 check('exactly one outcome', outcomes === 1, String(outcomes));
 const settled = engine.snapshot();
 check('status names a winner', /TAKES IT|FORMING/.test(settled.statusText), settled.statusText);
-check('ticket becomes a receipt', settled.ticketNote !== '—', settled.ticketNote);
 // Green is the bull and red is the bear everywhere on this machine, so the
 // result text has to name the ANIMAL that took the window, not your result.
 const o = engine.outcome!;
@@ -165,45 +152,10 @@ for (const i of [1, 2, 3, 0]) {
 }
 step('tuning');
 
-// 6 — bail and the speed cycle. Needs a live window: after a resolve the
-//     position deliberately stays put as the receipt.
+// 6 — the speed cycle. Nothing to bail out of: a room's stake sits in an escrow
+//     and the console has no way to sell it.
 engine.race.phase = 'trade';
 engine.race.t = 10;
-engine.race.pos = null;
-engine.race.upP = 0.5;
-// The book, pinned. Bailing is priced off it, not off the mid: selling DOWN is
-// closed by lifting the ask, so a DOWN leg fetches 1 - bestAsk a share. This
-// used to assert that bailing returned what you put in, which was only true
-// because the engine paid at a mid no counterparty was offering.
-engine.race.bestBid = 0.48;
-engine.race.bestAsk = 0.52;
-const before = engine.snapshot().balance;
-engine.board('down');
-check('board opens on a fresh window', engine.snapshot().pos !== null);
-
-const paidIn = before - engine.snapshot().balance;
-const legShares = engine.snapshot().pos!.n;
-engine.bail();
-check('bail closes the position', engine.snapshot().pos === null);
-
-const expected = before - paidIn + legShares * (1 - 0.52);
-check('bail pays at the book, not the mid',
-      Math.abs(engine.snapshot().balance - expected) < 0.01,
-      `${engine.snapshot().balance} vs ${expected}`);
-check('the spread costs something to leave',
-      engine.snapshot().balance < before,
-      `${engine.snapshot().balance} vs ${before}`);
-
-// An empty side of the book is not a slow exit, it is none.
-engine.race.bestAsk = null;
-engine.board('down');
-check('no ask, no exit for a DOWN leg', engine.snapshot().canBail === false);
-const stuck = engine.snapshot().balance;
-engine.bail();
-check('a refused bail changes nothing', engine.snapshot().pos !== null
-      && engine.snapshot().balance === stuck);
-engine.race.bestAsk = 0.52;
-engine.bail();
 const speeds = [engine.snapshot().speed];
 for (let i = 0; i < 3; i++) { engine.cycleSpeed(); speeds.push(engine.snapshot().speed); }
 check('speed cycles back round', speeds[0] === speeds[3], speeds.join(' → '));

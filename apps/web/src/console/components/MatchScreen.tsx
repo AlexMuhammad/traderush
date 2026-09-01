@@ -15,11 +15,14 @@ import { Trail } from './Trail';
  * back, and the engine draws into whichever it was given last.
  */
 export function MatchScreen({
-  state, side,
+  state, side, econ,
 }: {
   state: MarketState;
   /** The side held here, or null while nobody has taken one. */
   side: 'up' | 'down' | null;
+  /** What that side is worth, when this screen knows. Feeds the settlement
+   *  count-up with real money instead of leaving it dark. */
+  econ?: { stake: number; payoutIfWon: number } | null;
 }) {
   const engine = useEngine();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -44,9 +47,11 @@ export function MatchScreen({
 
   useEffect(() => {
     if (!engine || tuned !== true) return;
-    engine.setWatchSide(side);
+    engine.setWatchSide(side, econ ?? null);
     return () => engine.setWatchSide(null);
-  }, [engine, tuned, side]);
+    // The market id is a dependency because a roll clears the engine's held
+    // side; a screen that is still showing a real position has to say so again.
+  }, [engine, tuned, side, state.marketId, econ?.stake, econ?.payoutIfWon]);
 
   // Until it is on a dial — and for a market that never will be — the trail is
   // the honest picture: the same window, drawn from the same tape.

@@ -1837,3 +1837,14 @@
 
 /* The sheet's own keys sit on steel, so its links do too. */
 .sheet .hint a { color: #2C5D9B; }
+
+/* The unit on the ticket's running total. Small and quiet — it is there so the
+   number is never mistaken for the collateral, not to be read every time. */
+.pnl em {
+  font-style: normal;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .08em;
+  opacity: .62;
+  margin-left: 4px;
+}

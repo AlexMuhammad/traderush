@@ -43,6 +43,16 @@ export function ScreenPositions({
   const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState(0);
   const [heldFailed, setHeldFailed] = useState(false);
+  /**
+   * What this session has actually redeemed, and the card for each.
+   *
+   * Held here rather than read back from the indexer, for two reasons. The
+   * indexer lags a redeem by however long it takes to index it, so a claimed row
+   * kept saying "claim" and invited a second, pointless signature. And once it
+   * does catch up the row disappears entirely — taking the card with it, at the
+   * exact moment someone might want to post it.
+   */
+  const [claimed, setClaimed] = useState<Map<string, WinCard>>(new Map());
 
   const money = (v: bigint) => `${formatUnits(v, cfg.decimals)} ${cfg.collateralSymbol}`;
 
@@ -125,17 +135,22 @@ export function ScreenPositions({
       const hash = await conn.wallet.writeContract(request);
       await market.publicClient.waitForTransactionReceipt({ hash });
       setDone((n) => n + 1);
-      onWin?.({
+      const card: WinCard = {
         market: row.label,
         side: row.outcomeIdx === 0 ? 'up' : 'down',
         payout: money(row.estPayout),
-      });
+      };
+      setClaimed((m) => new Map(m).set(row.marketId, card));
+      onWin?.(card);
     } catch (e) {
       setError(e);
     } finally { setBusy(null); }
   };
 
-  const claimRows: ScreenItem[] = (rows ?? []).map((r) => ({
+  // Owed, minus anything this session already took.
+  const owed = (rows ?? []).filter((r) => !claimed.has(r.marketId));
+
+  const claimRows: ScreenItem[] = owed.map((r) => ({
     key: r.marketId,
     label: `${r.label} ${r.outcomeIdx === 0 ? 'UP' : 'DOWN'}`,
     right: money(r.estPayout),
@@ -144,8 +159,18 @@ export function ScreenPositions({
     disabled: busy !== null,
   }));
 
+  // Paid, and still pressable: the card is the reason to come back to the row.
+  const paidRows: ScreenItem[] = [...claimed.entries()].map(([marketId, card]) => ({
+    key: marketId,
+    label: `${card.market} ${card.side === 'up' ? 'UP' : 'DOWN'}`,
+    right: card.payout,
+    meta: 'card',
+    sub: 'paid out — open the card to share it',
+  }));
+
   const items: ScreenItem[] = [
     ...claimRows,
+    ...paidRows,
     ...held,
     // Said as a row rather than swallowed: an absent list and a list that could
     // not be fetched look identical and mean opposite things.
@@ -162,14 +187,19 @@ export function ScreenPositions({
   return (
     <ScreenList
       title="Positions"
-      right={!conn ? 'no wallet' : rows === null ? 'reading…' : `${claimRows.length} claimable`}
+      right={!conn ? 'no wallet' : rows === null ? 'reading…'
+        : claimRows.length ? `${claimRows.length} claimable` : `${paidRows.length} paid`}
       items={items}
       cursor={cursor}
       onCursor={onCursor}
       bindSelect={bindSelect}
       loading={Boolean(conn) && rows === null && !error}
       onSelect={(i) => {
-        const row = (rows ?? []).find((r) => r.marketId === i.key);
+        // A row you already took opens its card again rather than asking the
+        // chain a second time for money it has already sent.
+        const card = claimed.get(i.key);
+        if (card) { onWin?.(card); return; }
+        const row = owed.find((r) => r.marketId === i.key);
         if (row) void claim(row);
       }}
       empty={error ? <Fault error={error} /> : ((!conn ? 'Connect a wallet to see your positions.'

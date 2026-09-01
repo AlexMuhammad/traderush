@@ -8,6 +8,7 @@ import { SideIcon } from '../components/SideIcon';
 import { Loading, Fault, Readout, TxLine } from '../components/Readout';
 import { MatchScreen } from '../components/MatchScreen';
 import { useShare } from '../share/shareContext';
+import type { WinCard } from '../share/winCard';
 import { intervalLabel, price } from '../engine/market';
 import { useRoomAllowance } from './useRoomAllowance';
 
@@ -32,6 +33,9 @@ export function RoomPanel({
   const money = useMoney();
   const now = useNow();
   const share = useShare();
+  /** Kept after the payout so the card stays reachable. Once the money is out,
+   *  the only thing left to do on this screen is show it to someone. */
+  const [card, setCard] = useState<WinCard | null>(null);
 
   const room = useRoom(roomId);
   const seat = useSeat(roomId, room);
@@ -91,6 +95,8 @@ export function RoomPanel({
 
   const entryLeft = room.entryDeadline - now;
   const mine = seat ? seat.up + seat.down : 0n;
+  const mySide: 'up' | 'down' | null =
+    seat && seat.up > 0n ? 'up' : seat && seat.down > 0n ? 'down' : null;
 
   // The same parts the game face is built from, in the same order: the question
   // strip, the window, then trays and keys. The create screen already reads this
@@ -104,9 +110,17 @@ export function RoomPanel({
             {/* The same scene the game face draws — this IS that window, and you
                 have money on it. `side` is which half of the glass is yours, so
                 the other animal is the one that comes for you. */}
+            {/* The room knows both halves, so the settlement count-up can be
+                built from money that actually moved. */}
             <MatchScreen
               state={state}
-              side={seat && seat.up > 0n ? 'up' : seat && seat.down > 0n ? 'down' : null}
+              side={mySide}
+              econ={mySide && mine > 0n ? {
+                stake: Number(money.plain(mine)),
+                payoutIfWon: Number(money.plain(
+                  (pot * mine) / (mySide === 'up' ? room.totalUp : room.totalDown),
+                )),
+              } : null}
             />
           </div>
           <div className="readout">
@@ -311,7 +325,7 @@ export function RoomPanel({
       // card can carry the multiple, which is the number people actually post.
       if (paid > 0n && mine > 0n) {
         const mult = Number(paid) / Number(mine);
-        share?.({
+        const won: WinCard = {
           market: state ? `${state.symbol} · ${intervalLabel(state.intervalSec)}` : `Room #${roomId}`,
           side: seat && seat.up > 0n ? 'up' : 'down',
           payout: money.format(paid),
@@ -320,7 +334,9 @@ export function RoomPanel({
           net: `${paid >= mine ? '+' : ''}${money.plain(paid - mine)}`,
           strike: state ? price(state.strike) : undefined,
           close: state ? price(state.spot) : undefined,
-        });
+        };
+        setCard(won);
+        share?.(won);
       }
     } catch (e) { setError(e); }
     finally { setPending(false); }
@@ -361,16 +377,24 @@ export function RoomPanel({
           wording, not which of two screens you happen to be on. */}
       <div className="calls calls--act">
         <Key onPress={onBack}><span className="nm">back</span></Key>
-        <Key lit={owed > 0n && Boolean(conn)} disabled={!conn || pending || owed === 0n}
-             onPress={() => void collect()}>
-          <span className="nm">
-            {pending ? 'pending…'
-              : owed === 0n ? 'nothing owed'
-              : voided ? 'collect refund'
-              : settledMarket ? `collect ${money.format(owed)}`
-              : `claim ${money.format(owed)}`}
-          </span>
-        </Key>
+        {owed === 0n && card ? (
+          // Paid. The key stops offering money that has already moved and offers
+          // the one thing left worth doing with the result.
+          <Key lit onPress={() => share?.(card)}>
+            <span className="nm">your card</span>
+          </Key>
+        ) : (
+          <Key lit={owed > 0n && Boolean(conn)} disabled={!conn || pending || owed === 0n}
+               onPress={() => void collect()}>
+            <span className="nm">
+              {pending ? 'pending…'
+                : owed === 0n ? 'nothing owed'
+                : voided ? 'collect refund'
+                : settledMarket ? `collect ${money.format(owed)}`
+                : `claim ${money.format(owed)}`}
+            </span>
+          </Key>
+        )}
       </div>
 
       {seat?.settled && !settledMarket && (

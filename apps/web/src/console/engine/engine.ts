@@ -76,10 +76,24 @@ export class Engine implements Scene {
    */
   watchSide: Side | null = null;
 
+  /**
+   * What the held side is worth, when the screen showing it knows.
+   *
+   * A room knows both halves — what went in, and what the split would pay if
+   * this side takes it — so the settlement count-up can be built from real
+   * money. Armed from the call keys there is no room yet and this stays null;
+   * the window then ends on the plain card instead of the arithmetic.
+   */
+  private watchEcon: { stake: number; payoutIfWon: number } | null = null;
+
   /** Tell the scene which side is held here. Null goes back to a spectator. */
-  setWatchSide(side: Side | null): void {
-    if (this.watchSide === side) return;
+  setWatchSide(side: Side | null, econ: { stake: number; payoutIfWon: number } | null = null): void {
+    const same = this.watchSide === side
+      && this.watchEcon?.stake === econ?.stake
+      && this.watchEcon?.payoutIfWon === econ?.payoutIfWon;
+    if (same) return;
     this.watchSide = side;
+    this.watchEcon = econ;
     this.publish();
   }
   phaseName = 'OPEN';
@@ -211,22 +225,34 @@ export class Engine implements Scene {
     const R = this.race;
     const bullish = R.spot >= R.strike;
     const upP = R.upP;
-    const cost = this.balance * this.stakePct / 100;
     const progress = Math.min(1, R.t / R.win);
 
-    const myOdds = R.pos ? (R.pos.side === 'up' ? upP : 1 - upP) : 0;
+    // Odds while it is running; the ANSWER once it is not.
+    //
+    // This used to read the book either way, and the book does not stop quoting
+    // when a window closes — so a lost UP leg on a market whose mid had drifted
+    // to 94% showed a green +86 profit under a card that said MAULED. A settled
+    // contract is worth one or nothing, and nothing the book says changes it.
+    const settled = R.phase === 'done';
+    const wonIt = R.pos ? R.pos.side === (bullish ? 'up' : 'down') : false;
+    const bookOdds = R.pos ? (R.pos.side === 'up' ? upP : 1 - upP) : 0;
+    const myOdds = !R.pos ? 0 : settled ? (wonIt ? 1 : 0) : bookOdds;
     // What the position is WORTH at the quote, and what it would actually FETCH.
     // They are not the same number and the difference is the whole point of the
     // exit key: the mid is the price nobody trades at.
     const value = R.pos ? R.pos.n * myOdds : 0;
     const exitPrice = this.exitPrice();
     const exitValue = R.pos && exitPrice !== null ? R.pos.n * exitPrice : null;
-    const danger = R.pos ? (R.pos.side === 'up' ? !bullish : bullish) : false;
-    const threat = R.pos ? 1 - myOdds : 0;
+    // The side that matters to the scene: armed on the keys, or held in a room
+    // or duel. `pos` is gone — the console has no position of its own any more.
+    const side = R.pos?.side ?? this.watchSide;
+    const danger = side ? (side === 'up' ? !bullish : bullish) : false;
+    const sideOdds = side ? (side === 'up' ? upP : 1 - upP) : 0;
+    const threat = side ? 1 - sideOdds : 0;
     const urgent = R.phase === 'trade' && progress > 0.90;
 
-    let ground = 'NO STAKE';
-    if (R.pos) ground = danger ? (myOdds < 0.2 ? 'HORNS OUT' : 'IN ITS TERRITORY') : 'HOME GROUND';
+    let ground = 'NO SIDE';
+    if (side) ground = danger ? (sideOdds < 0.2 ? 'HORNS OUT' : 'IN ITS TERRITORY') : 'HOME GROUND';
 
     return {
       asset: this.isLive ? R.symbol : MARKETS[this.raceIndex]!.asset,
@@ -253,26 +279,9 @@ export class Engine implements Scene {
       urgent,
       hot: urgent || (danger && threat > 0.72),
 
-      pos: R.pos,
-      pnl: R.pos ? value - R.pos.cost : 0,
-      bailValue: exitValue ?? value,
-      // Just the side. The numbers get their own line rather than being
-      // crammed in behind a bullet — "1424 sh @ 50%" made a reader parse
-      // jargon to learn something the next line already says plainly.
-      ticketSide: R.pos ? (R.pos.side === 'up' ? 'UP' : 'DOWN') : '—',
-      ticketOdds: R.pos ? Math.round((R.pos.side === 'up' ? upP : 1 - upP) * 100) : 0,
-      ticketNote: this.ticketNote(),
-      bailLabel: this.bailLabel(exitValue),
-      // No bid on your side is not a slow exit, it is no exit. A key that offers
-      // one anyway is a control lying about being a control.
-      canBail: R.phase === 'trade' && Boolean(R.pos) && exitValue !== null,
-      bailSpread: R.pos && exitValue !== null ? value - exitValue : 0,
+      watchSide: this.watchSide,
       ground,
 
-      balance: this.balance,
-      stakePct: this.stakePct,
-      cost,
-      costNote: `Cost · ${(cost / Math.max(0.01, upP)).toFixed(0)} shares if up`,
       dryUp: upP <= DRY,
       dryDown: upP >= 1 - DRY,
 
@@ -288,11 +297,17 @@ export class Engine implements Scene {
   private ticketNote(): string {
     const R = this.race;
     if (!R.pos) return '—';
+    // The unit, every time. It was on the footer and on the result card but not
+    // here, so the one line that says what you stand to win read as money — and
+    // on a screen where every other number IS money, an unlabelled one is taken
+    // for the same thing.
     if (R.phase !== 'done') {
-      return `${money(R.pos.cost)} to win ${money(R.pos.n)}`;
+      return `${money(R.pos.cost)} to win ${money(R.pos.n)} pts`;
     }
     const won = R.pos.side === (R.spot >= R.strike ? 'up' : 'down');
-    return won ? `${money(R.pos.cost)} returned ${money(R.pos.n)}` : `${money(R.pos.cost)} lost`;
+    return won
+      ? `${money(R.pos.cost)} returned ${money(R.pos.n)} pts`
+      : `${money(R.pos.cost)} pts lost`;
   }
 
   /**
@@ -431,6 +446,12 @@ export class Engine implements Scene {
     this.beasts.bear = newBeastState(1100);
     this.bullX = this.bullY = this.bearX = this.bearY = 0;
     this.bullA = this.bearA = 1;
+    // Nothing is held on a window nobody has taken a side of yet. Left set, the
+    // last window's side carried into the next one: the key stayed lit and an
+    // animal hunted a position that had already settled. A screen that IS
+    // holding something re-asserts it — see MatchScreen.
+    this.watchSide = null;
+    this.watchEcon = null;
   }
 
   /**
@@ -604,27 +625,25 @@ export class Engine implements Scene {
     const winner: Side = R.spot >= R.strike ? 'up' : 'down';
     R.settled.push({ p: R.spot, w: winner });
 
-    const won = R.pos ? R.pos.side === winner : null;
-    let sub = `${winner.toUpperCase()} TAKES IT · ${R.spot.toFixed(0)}`;
+    // The side that was armed on the keys or held in a room. There is no paper
+    // position to settle any more — the escrow settles the real one — so this
+    // decides only which of the three endings plays.
+    const side = this.watchSide;
+    const won = side ? side === winner : null;
+    const sub = `${winner.toUpperCase()} TAKES IT · ${R.spot.toFixed(0)}`;
 
-    // The streak moves BEFORE the tally is built, so the card can show the run
-    // this window just extended rather than the one before it.
+    // The streak moves BEFORE the ending is chosen, so a run reads as the one
+    // this window just extended.
     if (won === true) this.winStreak += 1;
     else if (won === false) this.winStreak = 0;
-    const tally = R.pos ? this.tallyFor(R.pos, won === true, R) : null;
 
-    if (R.pos) {
-      const payout = won ? R.pos.n : 0;
-      // The stake left the balance when the bet was placed (see board()), so
-      // settlement adds the payout and nothing else. Subtracting the cost again
-      // here — which the prototype did — charges a loss twice and, after two of
-      // them, leaves the balance at zero with no way back.
-      this.balance += payout;
-      sub = won ? `+${money(payout - R.pos.cost)} pts` : `-${money(R.pos.cost)} pts`;
-    }
+    // Real money on the glass when the screen knew the numbers.
+    const tally = this.watchEcon && won !== null
+      ? this.tallyFor(this.watchEcon, won, R)
+      : null;
 
-    if (R.pos && won === false) this.playKill(R.pos.side, sub, tally);
-    else if (R.pos && won === true) this.playStand(R.pos.side, sub, tally);
+    if (side && won === false) this.playKill(side, sub, tally);
+    else if (side && won === true) this.playStand(side, sub, tally);
     else this.playBystander(winner, sub);
 
     this.statusOverride = winner === 'up' ? 'BULL TAKES IT' : 'BEAR TAKES IT';
@@ -648,10 +667,7 @@ export class Engine implements Scene {
       this.statusOverride = 'NEXT PACK FORMING';
       this.publish();
       this.later(() => this.openWindow(), 1200);
-      // The card's own beats run to ~3.5s now. Cutting away at 4.2s clipped the
-      // net line and the confetti to a glimpse — the celebration IS the product
-      // here, so the window waits for it.
-    }, tally ? 5600 : 4200);
+    }, this.watchEcon ? 5600 : 4200);
   }
 
   /**
@@ -663,45 +679,40 @@ export class Engine implements Scene {
    * times multiple is the payout — because it is one number expressed three
    * ways, which is what makes the count-up feel earned instead of decorative.
    */
-  private tallyFor(pos: Position, won: boolean, R: Race): Tally {
-    const mult = pos.cost > 0 ? pos.n / pos.cost : 0;
-    const total = won ? Math.round(pos.n) : 0;
-    const stake = Math.round(pos.cost);
+  private tallyFor(
+    econ: { stake: number; payoutIfWon: number }, won: boolean, R: Race,
+  ): Tally {
+    const stake = Math.round(econ.stake);
+    const total = won ? Math.round(econ.payoutIfWon) : 0;
+    const mult = econ.stake > 0 ? econ.payoutIfWon / econ.stake : 0;
 
-    // The breakdown. One payout said three ways is three arrivals instead of
-    // one, and the streak line is the only one that is not simply arithmetic —
-    // it is the thing you carry between windows.
+    // One payout said three ways is three arrivals instead of one, and the
+    // streak line is the only one that is not arithmetic — it is the thing you
+    // carry between windows.
     const items: TallyItem[] = [];
-    let bonus = 0;
     if (won) {
       items.push({ label: 'stake back', value: `+${stake}`, tone: 'up' });
       items.push({ label: 'winnings', value: `+${total - stake}`, tone: 'up' });
       if (this.winStreak >= 2) {
-        // Ten percent a step, capped: enough to be worth protecting, never
-        // enough to be the reason a window was worth taking.
-        bonus = Math.round((total - stake) * Math.min(0.5, 0.1 * this.winStreak));
-        items.push({ label: `${this.winStreak} in a row`, value: `+${bonus}`, tone: 'gold' });
+        items.push({ label: `${this.winStreak} in a row`, value: 'kept', tone: 'gold' });
       }
     }
-    // Paid here rather than in resolve() because this is the only place that
-    // knows the streak was worth anything. Named so it cannot be mistaken for a
-    // pure builder.
-    this.balance += bonus;
 
     const miss = Math.abs(R.spot - R.strike);
     return {
       win: won,
-      stake: money(pos.cost),
+      stake: money(econ.stake),
+      // The split, not the book: in a room the multiple IS the payout.
       oddsPct: mult > 0 ? Math.round((1 / mult) * 100) : 0,
       mult: won ? mult : 0,
       total,
       items,
-      net: Math.round(total + bonus - pos.cost),
+      net: Math.round(total - stake),
       streak: won ? this.winStreak : 0,
       missedBy: won ? '' : miss.toFixed(2),
-      // Close enough that it was decided by noise rather than by the call. The
-      // brain files that under "nearly won", which is the whole reason it is
-      // worth naming — and worth being deliberate about naming.
+      // Close enough that noise decided it rather than the call. The brain files
+      // that under "nearly won", which is why it is named — and why naming it is
+      // a deliberate choice, not a free one.
       nearMiss: !won && R.strike > 0 && miss / R.strike < 0.0004,
     };
   }
@@ -868,53 +879,8 @@ export class Engine implements Scene {
   /** Must be called from a real pointer event before any sound will play. */
   wake(): void { this.audio.start(); }
 
-  board(side: Side): void {
-    const R = this.race;
-    if (R.phase !== 'trade' || R.pos) return;
-    const price = side === 'up' ? R.upP : 1 - R.upP;
-    if ((side === 'up' && R.upP <= DRY) || (side === 'down' && R.upP >= 1 - DRY)) return;
 
-    const cost = this.balance * this.stakePct / 100;
-    if (cost <= 0) return;
 
-    R.pos = { side, n: cost / price, cost };
-    this.balance -= cost;
-    R.wasDanger = side === 'up' ? R.spot < R.strike : R.spot >= R.strike;
-
-    this.shake = 7;
-    this.flash = 0.6;
-    this.flashCol = side === 'up' ? '63,217,139' : '255,90,72';
-    this.centreBurst(side === 'up' ? '91,240,166' : '255,117,102', 26);
-    this.audio.board(side);
-    this.publish();
-  }
-
-  bail(): void {
-    const R = this.race;
-    if (!R.pos || R.phase !== 'trade') return;
-    // Paid at the bid, not the mid. Crediting the mid handed back money the book
-    // was never offering, which made every exit look free and taught the wrong
-    // thing about a venue whose only cost IS the spread.
-    const price = this.exitPrice();
-    if (price === null) { this.audio.reject(); this.shake = 3; return; }
-    this.balance += R.pos.n * price;
-    R.pos = null;
-    this.shake = 4;
-    this.audio.bail();
-    this.publish();
-  }
-
-  setStakePct(pct: number): void { this.stakePct = pct; this.publish(); }
-
-  tune(index: number): void {
-    if (index === this.raceIndex || !this.races[index]) return;
-    this.raceIndex = index;
-    this.resetScene();
-    this.labelWindow();
-    this.statusOverride = null;
-    this.audio.tuneClick();
-    this.publish();
-  }
 
   // ---- the dials, as the tuner sees them ---------------------------------
   //
@@ -937,6 +903,16 @@ export class Engine implements Scene {
       if (!out.includes(a)) out.push(a);
     }
     return out;
+  }
+
+  tune(index: number): void {
+    if (index === this.raceIndex || !this.races[index]) return;
+    this.raceIndex = index;
+    this.resetScene();
+    this.labelWindow();
+    this.statusOverride = null;
+    this.audio.tuneClick();
+    this.publish();
   }
 
   /** Every race on the current asset, shortest window first. */

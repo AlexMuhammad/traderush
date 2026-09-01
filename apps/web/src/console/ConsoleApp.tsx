@@ -19,6 +19,7 @@ import { ScreenPositions } from './components/ScreenPositions';
 import { ScreenHistory } from './components/ScreenHistory';
 import { ScreenRooms } from './components/ScreenRooms';
 import { CreateRoomPanel } from './room/CreateRoomPanel';
+import { makeOrderSubmitter } from '@traderush/sdk';
 import { EngineProvider } from './engineContext';
 import { WalletDrawer, type WalletSheet } from './wallet/WalletDrawer';
 import { ShareSheet } from './share/ShareSheet';
@@ -101,6 +102,18 @@ export function ConsoleApp() {
   // read off the ref during render: a ref is null on the first pass, and a
   // portal target that arrives without a re-render never mounts.
   const [plate, setPlate] = useState<HTMLDivElement | null>(null);
+
+  // Book orders need a signer, and the adapter outlives every sign-in. Handed
+  // over here rather than taken in its constructor: rebuilding the adapter would
+  // throw away the market cache and every live subscription with it.
+  useEffect(() => {
+    if (!conn || wrongChain) { market.setOrderSubmitter(null); return; }
+    market.setOrderSubmitter(makeOrderSubmitter({
+      cfg, discovery: market.discovery, wallet: conn.wallet,
+      account: conn.account, publicClient: market.publicClient,
+    }));
+    return () => market.setOrderSubmitter(null);
+  }, [conn, wrongChain, market, cfg]);
   const plateRef = useCallback((el: HTMLDivElement | null) => setPlate(el), []);
 
   useEffect(() => {
@@ -325,7 +338,11 @@ export function ConsoleApp() {
           onOpenMenu={() => { engine.wake(); show(screen === 'game' ? 'menu' : 'game'); }}
         />
 
-        {view.isGame ? <GameFace engine={engine} s={snap} screen={crt} /> : view.node}
+        {view.isGame ? (
+          <GameFace
+            engine={engine} s={snap} screen={crt}
+          />
+        ) : view.node}
 
         {/* Always present. The arrows step the dials on the game face and move
             the cursor on a list, so no key is ever dead — except back, which
@@ -399,7 +416,9 @@ function renderView(path: string, navigate: (to: string) => void) {
     };
   }
 
-  const createRoom = /^\/market\/(0x[0-9a-fA-F]+)\/room$/.exec(path);
+  // The side can ride in on the link: the call keys send you here with the one
+  // you pressed already taken, so pressing UP means UP all the way through.
+  const createRoom = /^\/market\/(0x[0-9a-fA-F]+)\/room/.exec(path);
   if (createRoom) {
     return {
       isGame: false as const,
@@ -407,6 +426,7 @@ function renderView(path: string, navigate: (to: string) => void) {
       node: (
         <CreateRoomPanel
           marketId={createRoom[1] as `0x${string}`}
+          initialSide={path.includes('side=down') ? 'down' : 'up'}
           onOpened={(id) => navigate(`/room/${id}`)}
           onBack={() => navigate('/')}
         />

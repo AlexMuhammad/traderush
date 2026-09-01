@@ -111,7 +111,9 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
 
   // Moved above `myOdds` so the odds can be read off it: how threatened you are
   // is the market's chance of the side you are NOT on.
-  const heldSide = R.pos?.side ?? S.watchSide;
+  // The side the scene answers to: armed on the keys, or held in a room. The
+  // console keeps no position of its own — the escrow does.
+  const heldSide = S.watchSide;
   const myOdds = heldSide ? (heldSide === 'up' ? R.upP : 1 - R.upP) : null;
   const threat = myOdds === null ? 0.4 : 1 - myOdds;
   // Danger is being on the wrong side of the line, whether the side came from
@@ -202,12 +204,11 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     // The side being watched: the paper game's position on the game face, or the
     // side held in a duel or room. Same scene either way — a window you have
     // money on should not look like one you are only passing.
-    const mySide = heldSide;
-    const bullHot = Boolean(mySide === 'down' && inDanger);
-    const bearHot = Boolean(mySide === 'up' && inDanger);
+    const bullHot = Boolean(heldSide === 'down' && inDanger);
+    const bearHot = Boolean(heldSide === 'up' && inDanger);
     // Before you pick a side both animals are present; after, only your hunter.
-    const wantBull = !mySide || mySide === 'down';
-    const wantBear = !mySide || mySide === 'up';
+    const wantBull = !heldSide || heldSide === 'down';
+    const wantBear = !heldSide || heldSide === 'up';
     S.bullA += ((wantBull ? 1 : 0) - S.bullA) * 0.10;
     S.bearA += ((wantBear ? 1 : 0) - S.bearA) * 0.10;
 
@@ -318,7 +319,7 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     const slope = N > 3 ? Y(R.hist[N - 1]!) - Y(R.hist[N - 4]!) : 0;
 
     // ---- border crossing ---------------------------------------------------
-    if (R.phase === 'trade' && R.pos && inDanger !== R.wasDanger) {
+    if (R.phase === 'trade' && heldSide && inDanger !== R.wasDanger) {
       R.wasDanger = inDanger;
       if (inDanger) {
         S.audio.cross(); S.shake = 10; S.flash = 0.5; S.flashCol = BEAR_RGB;
@@ -386,11 +387,11 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     S.bearY = Math.max(S.bearY, ly + 16);
 
     // The hunter swipes at the border when you skirt it from the safe side.
-    if (R.phase === 'trade' && R.pos && !inDanger && Math.abs(runnerY - ly) < 20) {
+    if (R.phase === 'trade' && heldSide && !inDanger && Math.abs(runnerY - ly) < 20) {
       S.borderT += dt;
       if (S.borderT > 420) {
         S.borderT = 0;
-        burst(S.particles, nowX - 14, ly, 4, R.pos.side === 'up' ? '255,150,130' : '120,230,170', 4);
+        burst(S.particles, nowX - 14, ly, 4, heldSide === 'up' ? '255,150,130' : '120,230,170', 4);
         S.audio.noise(0.06, 0.12, 1600);
       }
     }
@@ -542,7 +543,7 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     if (S.flash < 0.02) S.flash = 0;
   }
 
-  const vig = Math.max(urgency * 0.3, R.pos && inDanger ? Math.max(0, threat - 0.45) * 0.85 : 0);
+  const vig = Math.max(urgency * 0.3, heldSide && inDanger ? Math.max(0, threat - 0.45) * 0.85 : 0);
   if (vig > 0.02) {
     const v = c.createRadialGradient(w / 2, h / 2, h * 0.2, w / 2, h / 2, h * 0.95);
     v.addColorStop(0, 'rgba(0,0,0,0)');
@@ -551,6 +552,6 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.fillRect(0, 0, w, h);
   }
 
-  S.audio.setBed(R.phase === 'trade', urgency, R.pos && inDanger ? threat : 0);
+  S.audio.setBed(R.phase === 'trade', urgency, heldSide && inDanger ? threat : 0);
   S.frame++;
 }

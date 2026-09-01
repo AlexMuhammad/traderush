@@ -1,7 +1,8 @@
+import { formatUnits } from 'viem';
 import type { Engine } from '../engine/engine';
-import { money } from '../engine/market';
 import type { ConsoleSnapshot } from '../engine/types';
-import { useSdk } from '../../sdk';
+import { useBalance, useSdk } from '../../sdk';
+import { useWallet } from '../../walletContext';
 
 /** What you are looking at, and what you have.
  *
@@ -9,10 +10,14 @@ import { useSdk } from '../../sdk';
  *  own window — the chain does not care how fast we are watching — so offering
  *  "×20" beside "live prices" would be a straight contradiction.
  *
- *  The points are paper either way: the console's keys place no real orders.
+ *  The balance is the real one. There used to be a paper score here, which made
+ *  the machine carry two currencies — and the one on the plate was the one that
+ *  did not exist.
  */
 export function Footer({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
   const { cfg } = useSdk();
+  const { conn } = useWallet();
+  const balance = useBalance(conn?.account.address as `0x${string}` | undefined);
 
   return (
     <div className="foot eng">
@@ -23,7 +28,9 @@ export function Footer({ engine, s }: { engine: Engine; s: ConsoleSnapshot }) {
           Demo ×{s.speed} · {s.speed === 1 ? 'real time' : 'tap to slow'}
         </span>
       )}
-      <span>{money(s.balance)} pts</span>
+      <span>
+        {balance === null ? '—' : formatUnits(balance, cfg.decimals)} {cfg.collateralSymbol}
+      </span>
     </div>
   );
 }
