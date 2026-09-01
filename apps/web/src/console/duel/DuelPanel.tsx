@@ -4,9 +4,11 @@ import { useDuel, useMarket, useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from '../components/money';
 import { Key } from '../components/Key';
-import { Addr, Loading, Fault, Readout, Row, Rows, TxLine } from '../components/Readout';
+import { Addr, Loading, Fault, Readout, TxLine } from '../components/Readout';
 import { MatchScreen } from '../components/MatchScreen';
-import { price } from '../engine/market';
+import { useShare } from '../share/shareContext';
+import type { WinCard } from '../share/winCard';
+import { intervalLabel, price } from '../engine/market';
 
 /**
  * One duel, from lobby to payout — the console's S5, S6 and S7.
@@ -21,6 +23,9 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
   const { conn } = useWallet();
   const money = useMoney();
   const now = useNow();
+  const share = useShare();
+  /** Kept after the payout so the card stays reachable. */
+  const [card, setCard] = useState<WinCard | null>(null);
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -72,42 +77,86 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
     const url = `${window.location.origin}${duels!.link(duelId)}`;
     const canCancel = Boolean(conn) && duel.status === 'Open' && (iAmChallenger || expired) && !pending;
 
+    const trend = market && market.spot >= market.strike ? 'up' : 'dn';
+
     return (
-      <Readout title={`Duel #${duelId}`} right={duel.status === 'Cancelled' ? 'refunded' : expired ? 'expired' : 'waiting'}>
-        <Rows>
-          <Row label="challenger"><Addr value={duel.challenger} /> · {duel.challengerUp ? 'UP' : 'DOWN'}</Row>
-          <Row label="stake">{money.format(duel.stake)}</Row>
-          <Row label="pot" tone="lamp">{money.format(duel.pot)}</Row>
-          <Row label="deadline">{expired ? 'passed' : `${Math.floor(left / 60)}m ${left % 60}s left`}</Row>
-        </Rows>
+      <>
+        <div className="q">
+          <span className="exp">
+            {duel.status === 'Cancelled' ? 'refunded' : expired ? 'expired' : `${Math.floor(left / 60)}m ${left % 60}s`}
+          </span>
+          Duel <b>#{String(duelId)}</b> — <b>{money.format(duel.stake)}</b> a side,
+          winner takes <b>{money.format(duel.pot)}</b>
+        </div>
+
+        {market && (
+          <div className="window">
+            <div className="crt">
+              {/* Nothing is minted yet, so nobody is being hunted — the window is
+                  simply running, and this is the one being offered. */}
+              <MatchScreen state={market} side={null} />
+            </div>
+            <div className="readout">
+              <span className={`px ${trend}`}>{price(market.spot)}</span>
+              <span className={`dl ${trend}`}>
+                {market.spot >= market.strike ? '+' : ''}{(market.spot - market.strike).toFixed(2)}
+              </span>
+              <span>strike {price(market.strike)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="order">
+          <div className="trayrow">
+            <div className="calc">
+              <span>challenger</span>
+              <span className={duel.challengerUp ? 'up' : 'dn'}>
+                {duel.challengerUp ? 'UP' : 'DOWN'}
+              </span>
+            </div>
+            <div className="calc">
+              <span>their address</span>
+              <span><Addr value={duel.challenger} /></span>
+            </div>
+          </div>
+          <div className="calc">
+            <span>{duel.status === 'Cancelled' ? 'refunded' : expired ? 'expired' : 'accepting until'}</span>
+            <span className={expired && duel.status === 'Open' ? 'dn' : undefined}>
+              {duel.status === 'Cancelled' ? 'the stake went back to the challenger'
+                : expired ? 'nobody accepted — nothing was minted'
+                : `${Math.floor(left / 60)}m ${left % 60}s from now`}
+            </span>
+          </div>
+        </div>
 
         {duel.status === 'Open' && !expired && (
           <>
-            <p className="note">Waiting for an opponent. Send them this.</p>
+            <p className="hint">Waiting for an opponent. Send them this.</p>
             <div className="linkline">
-              <code>{url}</code>
+              <code title={url}>{url}</code>
               <button onClick={() => void navigator.clipboard.writeText(url)}>copy</button>
             </div>
           </>
         )}
-        {expired && duel.status === 'Open' && (
-          <p className="note warn">Nobody accepted. Nothing was minted — cancel refunds the stake exactly.</p>
-        )}
-        {duel.status === 'Cancelled' && <p className="note ok">Cancelled. The stake went back to the challenger.</p>}
-
-        {duel.status === 'Open' && (
-          <Key className="action" disabled={!canCancel}
-               onPress={() => conn && run(() => duels!.cancel(conn.wallet, conn.account, duelId))}>
-            {pending ? 'pending…' : 'Cancel and refund'}
-          </Key>
-        )}
         {!canCancel && !expired && duel.status === 'Open' && (
-          <p className="note">Only the challenger can cancel before the deadline.</p>
+          <p className="hint">Only the challenger can cancel before the deadline.</p>
         )}
+
+        <div className="calls calls--act">
+          <Key onPress={onBack}><span className="nm">back</span></Key>
+          {duel.status === 'Open' ? (
+            <Key lit={canCancel} disabled={!canCancel}
+                 onPress={() => conn && run(() => duels!.cancel(conn.wallet, conn.account, duelId))}>
+              <span className="nm">{pending ? 'pending…' : 'cancel and refund'}</span>
+            </Key>
+          ) : (
+            <Key disabled><span className="nm">refunded</span></Key>
+          )}
+        </div>
+
         {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} />}
-        <Key className="action" onPress={onBack}>Back</Key>
-      </Readout>
+      </>
     );
   }
 
@@ -133,50 +182,113 @@ export function DuelPanel({ duelId, onBack }: { duelId: bigint; onBack: () => vo
         const tx = await conn.wallet.writeContract(request);
         await adapter.publicClient.waitForTransactionReceipt({ hash: tx });
         setHash(tx);
+
+        // A duel knows both halves — stake in, pot out — so its card can carry
+        // the multiple. It is a flat 2x by construction, which is the one number
+        // a duel has that a room never does.
+        const won: WinCard = {
+          market: market ? `${market.symbol} · ${intervalLabel(market.intervalSec)}` : `Duel #${duelId}`,
+          side: myUp ? 'up' : 'down',
+          payout: money.format(held),
+          stake: money.format(duel.stake),
+          multiple: `×${(Number(money.plain(held)) / Number(money.plain(duel.stake))).toFixed(2)}`,
+          net: `${held >= duel.stake ? '+' : ''}${money.plain(held - duel.stake)}`,
+          strike: market ? price(market.strike) : undefined,
+          close: market ? price(market.spot) : undefined,
+        };
+        setCard(won);
+        share?.(won);
         setHeld(0n);
       } catch (e) { setError(e); }
       finally { setPending(false); }
     };
 
-    return (
-      <Readout title={`Duel #${duelId}`} right={voided ? 'called off' : 'settled'}>
-        {voided ? (
-          // §8.10 — a void is not a loss.
-          <p className="note warn">
-            Called off. The market was voided, so both sides redeem 0.5 — each of you gets
-            your {money.format(duel.stake)} back. Nobody lost.
-          </p>
-        ) : (
-          <Rows>
-            <Row label="winner" tone="up"><Addr value={winner} />{iWon && ' — you'}</Row>
-            <Row label="amount" tone="lamp">{money.format(duel.pot)}</Row>
-            <Row label="final">strike {market.strike} · spot {market.spot} · {upWon ? 'UP' : 'DOWN'}</Row>
-          </Rows>
-        )}
+    const trend = market.spot >= market.strike ? 'up' : 'dn';
 
-        <Rows>
-          <Row label="your leg">{held === null ? '…' : `${money.plain(held)} contracts`}</Row>
-          <Row label="oracle">
-            {market.oracleQuestionId
-              ? <a href={oracleUrl(cfg, market.oracleQuestionId)} target="_blank" rel="noreferrer">oracle question</a>
-              : 'none'}
-          </Row>
-        </Rows>
+    return (
+      <>
+        <div className="q">
+          <span className="exp">{voided ? 'called off' : 'settled'}</span>
+          Duel <b>#{String(duelId)}</b> — {voided
+            ? 'the market was voided, so nobody lost'
+            : iWon ? <b>you took the pot</b> : 'the other side took the pot'}
+        </div>
+
+        <div className="window">
+          <div className="crt">
+            <MatchScreen state={market} side={myUp ? 'up' : 'down'} />
+          </div>
+          <div className="readout">
+            <span className={`px ${trend}`}>{price(market.spot)}</span>
+            <span className={`dl ${trend}`}>{upWon ? 'UP' : 'DOWN'}</span>
+            <span>strike {price(market.strike)}</span>
+          </div>
+        </div>
+
+        <div className="order">
+          {voided ? (
+            // §8.10 — a void is not a loss.
+            <div className="calc">
+              <span>called off</span>
+              <span>both sides redeem half — your {money.format(duel.stake)} comes back</span>
+            </div>
+          ) : (
+            <div className="trayrow">
+              <div className="calc">
+                <span>winner</span>
+                <span className={iWon ? 'up' : undefined}>
+                  {iWon ? 'you' : <Addr value={winner} />}
+                </span>
+              </div>
+              <div className="calc">
+                <span>pot</span>
+                <span className="lamp">{money.format(duel.pot)}</span>
+              </div>
+            </div>
+          )}
+          <div className="calc">
+            <span>your leg</span>
+            <span>{held === null ? '…' : `${money.plain(held)} contracts`}</span>
+          </div>
+          <div className="calc">
+            <span>oracle</span>
+            <span>
+              {market.oracleQuestionId
+                ? <a href={oracleUrl(cfg, market.oracleQuestionId)} target="_blank" rel="noreferrer">oracle question</a>
+                : 'none'}
+            </span>
+          </div>
+        </div>
 
         {/* CORRECTION to PRD §6.2: winnings are claimed, not received. */}
-        <p className={held && held > 0n ? 'note warn' : 'note'}>
-          {held && held > 0n
-            ? 'Winnings are NOT paid out automatically. A settled market pays only when asked.'
-            : 'Nothing left to claim on this leg.'}
-        </p>
-        <Key className="action" disabled={pending || !held || held === 0n} onPress={() => void claim()}>
-          {pending ? 'pending…' : held === 0n ? 'already claimed' : `Claim ${voided ? 'refund' : 'winnings'}`}
-        </Key>
+        {held !== null && held > 0n && (
+          <p className="hint hint--warn">
+            Winnings are not paid out automatically — a settled market pays only when asked.
+          </p>
+        )}
+
+        <div className="calls calls--act">
+          <Key onPress={onBack}><span className="nm">back</span></Key>
+          {held !== null && held === 0n && card ? (
+            // Paid. The key stops offering money that has already moved.
+            <Key lit onPress={() => share?.(card)}>
+              <span className="nm">your card</span>
+            </Key>
+          ) : (
+            <Key lit={Boolean(held && held > 0n)} disabled={pending || !held || held === 0n}
+                 onPress={() => void claim()}>
+              <span className="nm">
+                {pending ? 'pending…'
+                  : held === 0n ? 'nothing to claim'
+                  : `claim ${voided ? 'refund' : 'winnings'}`}
+              </span>
+            </Key>
+          )}
+        </div>
 
         {error ? <Fault error={error} /> : null}
         {hash && <TxLine hash={hash} label="claimed" />}
-        <Key className="action" onPress={onBack}>Back</Key>
-      </Readout>
+      </>
     );
   }
 

@@ -1,4 +1,5 @@
 import type { useTakeSide } from '../room/useTakeSide';
+import { Key } from './Key';
 import { Fault } from './Readout';
 
 /**
@@ -11,6 +12,50 @@ import { Fault } from './Readout';
 export function AmountPad({ take }: { take: ReturnType<typeof useTakeSide> }) {
   const up = take.returns('up');
   const down = take.returns('down');
+
+  // Holding something on this window turns the pad into a position, because
+  // there is only one thing left to decide: keep it or sell it back.
+  if (take.heldSide && take.held > 0n) {
+    return (
+      <div className="order">
+        <div className="trayrow">
+          <div className="calc">
+            <span>you hold</span>
+            <span className={take.heldSide === 'up' ? 'up' : 'dn'}>
+              {take.heldSide.toUpperCase()}
+            </span>
+          </div>
+          <div className="calc">
+            <span>pays if it wins</span>
+            <span className="lamp">{take.format(take.held)}</span>
+          </div>
+        </div>
+
+        {/* Not the value of the position — the price the bids are offering for
+            it, read from the pool. The spread is what changing your mind costs. */}
+        <div className={`calc${take.tradeable ? '' : ' calc--bad'}`}>
+          <span>{take.tradeable ? 'sell back at' : 'window closed'}</span>
+          <span>
+            {!take.tradeable ? 'redeem it under Positions'
+              : take.exitAt === null ? 'nobody bidding'
+              : take.format(take.exitAt)}
+          </span>
+        </div>
+
+        {/* Once the window is done there is no book to sell into and the money
+            is redeemed, not traded. Offering a key that cannot work is worse
+            than offering none — see the sentence above it. */}
+        {take.tradeable && (
+          <Key className="action" disabled={take.pending !== null || take.exitAt === null}
+               onPress={() => void take.exit()}>
+            {take.pending ? 'selling…' : 'Sell back'}
+          </Key>
+        )}
+
+        {take.error ? <Fault error={take.error} /> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="order">

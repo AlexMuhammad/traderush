@@ -335,7 +335,20 @@ export function ConsoleApp() {
           riders={view.isGame ? snap.riders : view.label}
           expiryLabel={snap.expiryLabel}
           strike={snap.strike}
-          onOpenMenu={() => { engine.wake(); show(screen === 'game' ? 'menu' : 'game'); }}
+          menuOpen={screen === 'menu'}
+          // The menu key opens the MENU, from wherever you are.
+          //
+          // Two ways it used to fail to. It toggled against the GAME, so on the
+          // markets list it closed the list and dropped you on the run. And the
+          // menu is drawn on the CRT, which only exists on the game route — so
+          // from a room or a duel screen it set a state nothing was rendering
+          // and the key did, visibly, nothing at all. A panel is somewhere you
+          // went; the menu is how you leave.
+          onOpenMenu={() => {
+            engine.wake();
+            if (!view.isGame) { navigate('/'); show('menu'); return; }
+            show(screen === 'menu' ? 'game' : 'menu');
+          }}
         />
 
         {view.isGame ? (

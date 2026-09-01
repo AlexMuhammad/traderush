@@ -4,6 +4,7 @@ import { useWallet } from '../../walletContext';
 import { useEngine } from '../engineContext';
 import { useMoney } from '../components/money';
 import { useRoomAllowance } from './useRoomAllowance';
+import { useBookTop } from '../useBookTop';
 
 /**
  * Taking a side on the run: the amount, what it would return, and the one press
@@ -31,8 +32,24 @@ export function useTakeSide(
   const state = useMarket((marketId ?? null) as `0x${string}` | null);
   const money = useMoney();
   const balance = useBalance(conn?.account.address as `0x${string}` | undefined);
+  // Every price below comes from the pool, not the indexer — see useBookTop.
+  const top = useBookTop(marketId);
 
-  const [amountStr, setAmountStr] = useState('1');
+  const [amountStr, setAmountStrRaw] = useState('1');
+  /**
+   * The side a first tap has armed, if any.
+   *
+   * A single tap used to place the order. With an injected wallet the signature
+   * prompt is a brake; with an embedded one there is none, so on that path there
+   * was nothing at all between a finger and the money — beside a key of the same
+   * size that means the opposite thing.
+   *
+   * So the first tap arms and says what it is about to do, and the second does
+   * it. Same key, so the finger does not move; the number is simply read once
+   * more at the moment it starts to matter.
+   */
+  const [armed, setArmed] = useState<'up' | 'down' | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** What was paid for the current holding, when this session is the one that
    *  paid it. A reload cannot know it, and the settlement card says so by
    *  showing the plain result rather than inventing a cost. */
@@ -46,18 +63,18 @@ export function useTakeSide(
   // the escrows, different spender.
   const allow = useRoomAllowance(amount);
 
+  const scale = 10n ** BigInt(money.decimals);
+
   /**
-   * What a taker actually pays for one contract of a side.
+   * What a taker actually pays for one contract of a side, in raw units.
    *
    * The far side of the book, never the mid. Buying UP lifts the ask; buying
-   * DOWN is selling YES, so it hits the bid and costs 1 minus it. On a book
-   * quoting 11.6 / 13.9 those are two and a half points apart, and quoting the
-   * mid would promise a return nobody is offering.
+   * DOWN is selling YES, so it costs one minus the bid.
    */
-  const cost = (side: 'up' | 'down'): number | null => {
-    if (!state) return null;
-    const p = side === 'up' ? state.bestAsk : (state.bestBid === null ? null : 1 - state.bestBid);
-    return p !== null && p > 0 && p < 1 ? p : null;
+  const costRaw = (side: 'up' | 'down'): bigint | null => {
+    if (!top) return null;
+    const p = side === 'up' ? top.ask : (top.bid === null ? null : scale - top.bid);
+    return p !== null && p > 0n && p < scale ? p : null;
   };
 
   /**
@@ -68,21 +85,25 @@ export function useTakeSide(
    * cheap side pays more: you are buying more of them.
    */
   const returns = (side: 'up' | 'down'): bigint | null => {
-    const p = cost(side);
+    const p = costRaw(side);
     if (p === null || amount === 0n) return null;
-    return BigInt(Math.floor(Number(amount) / p));
+    // One contract pays one collateral, so a budget buys budget/price of them —
+    // all in raw units, no float on a number anyone acts on.
+    return (amount * scale) / p;
   };
 
   /** A side nobody is offering cannot be bought at any price. */
-  const liquid = (side: 'up' | 'down') => cost(side) !== null;
+  const liquid = (side: 'up' | 'down') => costRaw(side) !== null;
 
-  // Declared before the blockers read it — `liquid` closes over `cost`, which
-  // needs the state the blockers are also checking.
-  const liquidAt = (side: 'up' | 'down') => {
-    if (!state) return false;
-    const p = side === 'up' ? state.bestAsk : (state.bestBid === null ? null : 1 - state.bestBid);
-    return p !== null && p > 0 && p < 1;
-  };
+  // The engine draws whatever the wallet is holding. One place decides it, and
+  // it is the chain.
+  const heldTokens = holding.held
+    ? (holding.side === 'up' ? holding.held.up : holding.side === 'down' ? holding.held.down : 0n)
+    : 0n;
+
+  /** A closed window has no book to sell into; what is owed is redeemed on the
+   *  Positions screen instead. */
+  const tradeable = state?.status === 'Trading';
 
   const short = balance !== null && amount > balance;
   const blocker = !conn ? 'sign in to take a side'
@@ -90,16 +111,15 @@ export function useTakeSide(
     : amount === 0n ? 'enter an amount'
     : short ? `insufficient balance — you have ${money.format(balance!)}`
     : state?.status !== 'Trading' ? 'this window is not trading'
-    : !liquidAt('up') && !liquidAt('down') ? 'no orders on this book yet'
+    : !liquid('up') && !liquid('down') ? 'no orders on this book yet'
     : null;
 
   const ready = blocker === null && pending === null;
 
-  // The engine draws whatever the wallet is holding. One place decides it, and
-  // it is the chain.
-  const heldTokens = holding.held
-    ? (holding.side === 'up' ? holding.held.up : holding.side === 'down' ? holding.held.down : 0n)
-    : 0n;
+
+  // An arm cannot outlive the window it was made on.
+  useEffect(() => { disarm(); }, [marketId]);
+
   useEffect(() => {
     if (!engine) return;
     if (!holding.side) { spent.current = null; engine.setWatchSide(null); return; }
@@ -108,6 +128,67 @@ export function useTakeSide(
       payoutIfWon: Number(money.plain(heldTokens)),
     });
   }, [engine, holding.side, heldTokens, money]);
+
+  /**
+   * Sell the position back to the book before the window closes.
+   *
+   * The venue supports it — "you can sell back at the live price any time while
+   * the window is open" — and the SDK has since the start; there was simply no
+   * way to ask. What comes back is whatever the resting bids pay, which is less
+   * than the position is notionally worth, because the spread is the cost of
+   * changing your mind.
+   */
+  /** What the resting bids would pay for the whole holding, right now. */
+  const exitAt: bigint | null = (() => {
+    if (!top || !holding.side || heldTokens === 0n || !tradeable) return null;
+    // Selling UP hits the bid; selling DOWN is buying YES, so it lifts the ask
+    // and the position is worth one minus it.
+    const px = holding.side === 'up' ? top.bid : (top.ask === null ? null : scale - top.ask);
+    if (px === null || px <= 0n || px >= scale) return null;
+    return (heldTokens * px) / scale;
+  })();
+
+  const exit = async () => {
+    if (!conn || !state || !holding.side || heldTokens === 0n || pending || !tradeable) return;
+    setPending(holding.side); setError(null);
+    try {
+      const sold = await market.sell(state.marketId as `0x${string}`, holding.side, heldTokens);
+      if (sold.proceeds === 0n) throw new Error('nothing crossed — no bid at that size');
+      holding.refresh();
+      spent.current = null;
+      return sold;
+    } catch (e) { setError(e); return undefined; }
+    finally { setPending(null); }
+  };
+
+  const disarm = () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = null;
+    setArmed(null);
+  };
+
+  /** Changing the amount un-arms: the number on the key is no longer the number
+   *  that was agreed to. */
+  const setAmountStr = (v: string) => { disarm(); setAmountStrRaw(v); };
+
+  /**
+   * One press to arm, a second to commit.
+   *
+   * Arming the other side moves the arm rather than stacking a second one, and
+   * an arm nobody confirms lapses — a key left lit is a key that will eventually
+   * be pressed by accident.
+   */
+  const press = async (side: 'up' | 'down') => {
+    if (!ready || !liquid(side)) return;
+    if (armed !== side) {
+      if (armTimer.current) clearTimeout(armTimer.current);
+      setArmed(side);
+      armTimer.current = setTimeout(() => setArmed(null), 4_000);
+      return;
+    }
+    disarm();
+    return take(side);
+  };
 
   const take = async (side: 'up' | 'down') => {
     if (!ready || !conn || !state || !liquid(side)) return;
@@ -131,7 +212,8 @@ export function useTakeSide(
 
   return {
     amountStr, setAmountStr, amount, balance, blocker, ready, pending, error,
-    returns, cost, liquid, take, approving: allow.approving,
+    returns, liquid, press, armed, exit, exitAt, tradeable, held: heldTokens, heldSide: holding.side,
+    approving: allow.approving,
     symbol: money.symbol, format: money.format,
   };
 }

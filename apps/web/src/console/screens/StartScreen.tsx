@@ -41,6 +41,15 @@ export function StartScreen() {
 
       {error && <p className="gate__warn">{error}</p>}
 
+      {/* Whose rails these are. Directly under the button, because it is part of
+          what someone is agreeing to when they press it — the markets, the
+          settlement and the book all belong to DreamDEX. */}
+      <a className="powered" href="https://dreamdex.io" target="_blank" rel="noreferrer noopener">
+        <span>powered by</span>
+        <img src="/dreamdex.png" alt="" width={20} height={20} />
+        <b>DreamDEX</b>
+      </a>
+
       <p className="gate__fine">
         {cfg.network === 'mainnet'
           ? `Somnia mainnet · chain ${cfg.chainId} · real ${cfg.collateralSymbol}.`

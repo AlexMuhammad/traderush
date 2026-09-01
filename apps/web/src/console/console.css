@@ -1848,3 +1848,64 @@
   opacity: .62;
   margin-left: 4px;
 }
+
+/* --------------------------------------------------------- the attribution
+
+   Under the start key: whose rails these are. Quiet by construction — it is a
+   credit, not a second call to action sitting beneath the first. */
+.powered {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px auto 0;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  text-decoration: none;
+  background: rgba(255,255,255,.045);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+.powered:hover,
+.powered:focus-visible {
+  background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.16);
+}
+.powered span {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #6B7075;
+}
+.powered img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: block;
+}
+.powered b {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #C6CACE;
+}
+
+/* ------------------------------------------------------------- an armed key
+
+   One press arms, the next spends. The lamp already says "this one"; these two
+   lines say what the next press does and what it costs, and they want to be
+   read rather than glanced at — so the word takes the display face and drops to
+   a size that fits the cap, instead of the 23px mono the percentage wears. */
+.key.armed .cap .pct {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  margin-top: 3px;
+}
+.key.armed .cap .mul {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .02em;
+}

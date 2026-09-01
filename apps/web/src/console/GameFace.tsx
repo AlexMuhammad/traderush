@@ -43,8 +43,9 @@ export function GameFace({
 
       <CallKeys
         engine={engine} s={s}
-        disabled={!take.ready} pending={take.pending}
-        onTake={(side) => { engine.wake(); void take.take(side); }}
+        disabled={!take.ready} pending={take.pending} armed={take.armed}
+        armedLabel={take.format(take.amount)}
+        onTake={(side) => { engine.wake(); void take.press(side); }}
       />
     </>
   );

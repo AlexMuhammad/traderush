@@ -3,12 +3,13 @@
  *  Not built on `Key` — that one is a chunky control with a 3px skirt sized for
  *  a thumb. This is a flush panel fitting, so it gets its own shallow well.
  */
-export function MenuKey({ onOpen }: { onOpen: () => void }) {
+export function MenuKey({ onOpen, open = false }: { onOpen: () => void; open?: boolean }) {
   return (
     <button
       type="button"
       className="menu-key"
-      aria-label="Open menu"
+      aria-label={open ? 'Close menu' : 'Open menu'}
+      aria-expanded={open}
       onPointerDown={onOpen}
     >
       <span className="menu-key__housing" />
