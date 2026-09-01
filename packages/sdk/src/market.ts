@@ -12,6 +12,9 @@ import { type MarketState, type Position, type Side, type VenueAddresses } from 
 export interface OrderSubmitter {
   submit(order: {
     marketId: string;
+    /** Buying escrows collateral; selling escrows outcome tokens. The venue
+     *  needs to know which — the side alone does not say it. */
+    action: 'buy' | 'sell';
     side: Side;
     /** Base units on the 18-decimal grid, already snapped. Never a float (§8.2). */
     price: bigint;
@@ -24,9 +27,9 @@ export interface OrderSubmitter {
 const notWired: OrderSubmitter = {
   async submit() {
     throw new Error(
-      'No OrderSubmitter wired. Book trading (S3 "Trade on book") needs the signed-order ' +
-      'client from dreamdex-bot-kit packages/core. Duels do not need it — they go straight ' +
-      'through DuelEscrow. Pass one to `new MarketAdapter(cfg, { orders })`.',
+      'No OrderSubmitter wired. Build one with makeOrderSubmitter() and hand it over with ' +
+      'setOrderSubmitter() once a wallet is connected. Rooms and duels do not need it — ' +
+      'they go straight through their escrows.',
     );
   },
 };
@@ -45,7 +48,7 @@ export interface MarketAdapterOptions {
 export class MarketAdapter {
   readonly discovery: MarketDiscovery;
   readonly publicClient: PublicClient;
-  private readonly orders: OrderSubmitter;
+  private orders: OrderSubmitter;
   private readonly tickSize: bigint;
   private readonly lotSize: bigint;
   private venue: VenueAddresses | null = null;
@@ -215,6 +218,18 @@ export class MarketAdapter {
     if (now >= expiry) throw new Error(`market ${marketId} expired at ${expiry}`);
   }
 
+  /**
+   * Hand the adapter a way to sign orders.
+   *
+   * The adapter is built once, when the app starts; the wallet arrives later and
+   * can change. Taking the submitter in the constructor would mean rebuilding
+   * the adapter — and with it the market cache and every live subscription —
+   * every time someone signs in.
+   */
+  setOrderSubmitter(orders: OrderSubmitter | null): void {
+    this.orders = orders ?? notWired;
+  }
+
   /** Solo book trade. `cost` is what you are willing to spend, in collateral base units. */
   async buy(marketId: `0x${string}`, side: Side, cost: bigint): Promise<Position> {
     await this.assertTradingOnChain(marketId);
@@ -222,13 +237,18 @@ export class MarketAdapter {
     if (!state) throw new Error(`unknown market ${marketId}`);
 
     const probability = side === 'up' ? state.upPrice : 1 - state.upPrice;
-    const price = snapPrice(probability, this.tickSize);          // §8.2 — bigint, on the grid
-    const rawSize = (cost * 10n ** 18n) / price;
+    // The book quotes in COLLATERAL units, not on an 18-decimal grid: a tick of
+    // 1_000 is a tenth of a percent at six decimals and a rounding error at
+    // eighteen. This defaulted to 18 for as long as nothing could place an
+    // order, so the mistake had nowhere to show.
+    const scale = 10n ** BigInt(this.cfg.decimals);
+    const price = snapPrice(probability, this.tickSize, this.cfg.decimals);   // §8.2
+    const rawSize = (cost * scale) / price;
     const size = snapSize(rawSize, this.lotSize);                 // §8.3 — skip if it rounds to 0
     if (size === null) throw new Error('size rounds to zero on the lot grid — order skipped');
 
     const { txHash, filled } = await this.orders.submit({
-      marketId, side, price, size,
+      marketId, action: 'buy', side, price, size,
       timeInForce: DEFAULT_TIME_IN_FORCE,                          // §8.5 — IOC for taker flow
       expireTimestampNs: expireTimestampNs(30),                    // §8.4 — mandatory, dead-man's switch
     });
@@ -241,16 +261,17 @@ export class MarketAdapter {
     const state = this.cache.get(marketId);
     if (!state) throw new Error(`unknown market ${marketId}`);
     const probability = side === 'up' ? state.upPrice : 1 - state.upPrice;
-    const price = snapPrice(probability, this.tickSize);
+    const scale = 10n ** BigInt(this.cfg.decimals);
+    const price = snapPrice(probability, this.tickSize, this.cfg.decimals);
     const snapped = snapSize(size, this.lotSize);
     if (snapped === null) throw new Error('size rounds to zero on the lot grid — order skipped');
 
     const { txHash, filled } = await this.orders.submit({
-      marketId, side, price, size: snapped,
+      marketId, action: 'sell', side, price, size: snapped,
       timeInForce: DEFAULT_TIME_IN_FORCE,
       expireTimestampNs: expireTimestampNs(30),
     });
-    return { proceeds: (filled * price) / 10n ** 18n, txHash };
+    return { proceeds: (filled * price) / scale, txHash };
   }
 
   /** Gotcha §8.7 — reconcile against the WALLET, not the vault. The per-pool vault is a

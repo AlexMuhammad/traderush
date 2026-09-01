@@ -32,6 +32,33 @@ const RULES: { when: RegExp; title: string; detail?: string; benign?: boolean }[
     benign: true,
   },
 
+  // --- the book, which moves under you --------------------------------------
+  {
+    when: /ImmediateOrCancelNoFill/i,
+    title: 'The book moved before your order landed.',
+    detail:
+      'Nothing was bought and nothing was charged. On a one minute window the '
+      + 'resting orders turn over faster than a transaction confirms, so this '
+      + 'happens; press again, or pick a longer window where the book sits still.',
+    benign: true,
+  },
+  {
+    when: /OrderExpiryBeyondMarket/i,
+    title: 'That order would outlive the window.',
+    detail: 'Nothing was sent. Try again — the expiry is clamped to the market now.',
+  },
+  {
+    when: /InvalidQuantity|QuantityBelowMinimum/i,
+    title: 'That size is off this book\'s grid.',
+    detail: 'Raise the amount a little — the pool only accepts whole lots.',
+  },
+  {
+    when: /nothing offered on this side|nobody bidding on this side/i,
+    title: 'Nobody is on the other side of that yet.',
+    detail: 'Nothing was sent. Take the other side, or wait for a quote.',
+    benign: true,
+  },
+
   // --- money and permission ------------------------------------------------
   {
     when: /ERC20InsufficientAllowance|insufficient allowance/i,

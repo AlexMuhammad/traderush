@@ -13,6 +13,8 @@
     "doctor": "pnpm --filter @traderush/scripts doctor",
     "faucet": "pnpm --filter @traderush/scripts faucet",
     "probe": "pnpm --filter @traderush/scripts probe",
+    "probe:book": "pnpm --filter @traderush/scripts probe:book",
+    "probe:order": "pnpm --filter @traderush/scripts probe:order",
     "e2e": "pnpm --filter @traderush/scripts e2e",
     "e2e:room": "pnpm --filter @traderush/scripts e2e:room",
     "settle": "pnpm --filter @traderush/scripts settle",

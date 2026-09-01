@@ -67,8 +67,13 @@ export interface Deployment {
   explorerUrl: string;
   oracleUrl: string;
   addresses: DeploymentAddresses;
-  /** Book granularity in raw units. Binary market rows carry no tickSize/lotSize
-   *  (unlike spot), so these are NOT discoverable and must come from config. */
+  /** Book granularity in raw units, as a FALLBACK.
+   *
+   *  These are discoverable after all — `getBinaryBookParams(pool)` reads the
+   *  pool's own tick, lot and minimum, and that is what an order is snapped to.
+   *  A live testnet pool answers tick 1000, lot 1000, min 1000; this config said
+   *  lot 1, and the chain replied `InvalidQuantity(5917159, 1000)`. Trust the
+   *  pool; these only size a quote before one is known. */
   tick: bigint;
   lot: bigint;
   /** bytes32 venue id. **These move** — both networks changed venue three times in
@@ -101,7 +106,7 @@ export const DEPLOYMENTS: Record<Network, Deployment> = {
     },
     // Measured: the testnet venue accepted orders down to 1 raw unit.
     tick: 1_000n,
-    lot: 1n,
+    lot: 1_000n,
     venueId: '0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c',
     faucet: true,
   },
