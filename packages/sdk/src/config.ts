@@ -16,6 +16,20 @@ export { DEPLOYMENTS, chainFor, parseNetwork } from './networks.js';
  *  Any single value can still be overridden from env for the case where a redeploy
  *  lands before this map is updated. */
 export interface TradeRushConfig extends Deployment {
+  /**
+   * Where routing fees go, and how much of one to charge.
+   *
+   * Off unless both are set, and off is the honest default: the venue takes
+   * nothing from either side, so anything charged here is ours and has to be a
+   * decision somebody made rather than one that arrived with the code.
+   *
+   * The fee is per order, in the pool's bps×1000 unit, and the pool caps it at
+   * the venue's frozen ceiling. It applies to BOOK orders only — a room or a
+   * duel never touches it.
+   */
+  builderAddress: `0x${string}` | null;
+  builderFeeBpsTimes1k: bigint;
+
   /** Per-network escrows. A mainnet deploy is a DIFFERENT address than testnet,
    *  so these are read per network and never shared. */
   escrowAddress: Address | null;
@@ -104,6 +118,10 @@ export function loadConfig(env: EnvBag = {}): TradeRushConfig {
     chain: chainFor(network),
     apiKey: get('DREAMDEX_API_KEY'),
     privyAppId: get('PRIVY_APP_ID')?.trim() || null,
+    // Both or neither: a builder with no fee earns nothing and a fee with no
+    // builder has nowhere to go, so half a configuration is off.
+    builderAddress: (get('BUILDER_ADDRESS')?.trim() as `0x${string}` | undefined) || null,
+    builderFeeBpsTimes1k: BigInt(get('BUILDER_FEE_BPS_TIMES_1K')?.trim() || '0'),
   };
 }
 

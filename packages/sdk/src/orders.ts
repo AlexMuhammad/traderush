@@ -1,5 +1,7 @@
-import type {
-  BinarySide, OrderFill, PlaceOrderParams, PlaceOrderResult, Trader,
+import {
+  quoteBinaryStakeOverBook, quoteBinarySellOverBook,
+  type BinaryBuySide, type BinarySellSide, type BinarySide, type OrderFill,
+  type PlaceOrderParams, type PlaceOrderResult, type Trader,
 } from '@somnia-chain/markets-sdk';
 import type { Account, PublicClient, WalletClient } from 'viem';
 import type { TradeRushConfig } from './config.js';
@@ -59,6 +61,9 @@ export function makeOrderSubmitter(opts: {
   // Built on first use and kept: it caches pool lookups and token approvals, and
   // rebuilding it per order throws that away.
   let cached: Trader | null = null;
+  /** Pools this wallet has already granted the builder on. The approval lives on
+   *  the pool, and pools are recycled across windows, so one grant covers many. */
+  const approvedFor = new Set<string>();
   const trader = (): Trader => (cached ??= discovery.client.createTrader({
     walletClient: wallet,
     account,
@@ -84,48 +89,48 @@ export function makeOrderSubmitter(opts: {
       // both "long YES" and cross upward; the other two cross downward.
       const longYes = (order.action === 'buy') === (order.side === 'up');
 
-      // The real resting book, in raw units — no float anywhere on this path.
-      const book = await discovery.client.getBinaryOrderBook(ref.poolAddress, {
-        depth: 8, decimals: cfg.decimals,
-      });
-      const levels = longYes ? book.yesAsks : book.yesBids;
-      if (!levels.length) {
-        throw new Error(longYes
-          ? 'nothing offered on this side of the book'
-          : 'nobody bidding on this side of the book');
-      }
-
-      // Walk down as far as this order actually needs, and price against THAT
-      // level rather than the touch.
+      // The four-sided book, by eth_call.
       //
-      // A limit that only clears the top of book is a limit that fails whenever
-      // the top of book moves — which on a sixty second window is most of the
-      // time; measured, two orders in five came back ImmediateOrCancelNoFill.
-      // Crossing costs the MAKER'S price, not the limit, so reaching deeper is
-      // free when the depth is not needed and is the difference between a fill
-      // and a revert when it is.
-      let taken = 0n;
-      let deepest = levels[0]!.price;
-      for (const level of levels) {
-        deepest = level.price;
-        taken += level.quantity;
-        if (taken >= order.size) break;
+      // NOT the live mirror. That one is a store the client keeps warm from a
+      // subscription, so it reads empty until the subscription has caught up —
+      // which is every short-lived process and every first order after a page
+      // load. A round trip is cheaper than an order that says the book is empty
+      // when it is not.
+      const book = await discovery.client.getBinaryOrderBook(ref.poolAddress, {
+        depth: 20, decimals: cfg.decimals,
+      });
+
+      // The venue's own sweep, rather than the one this file used to walk by
+      // hand. It buys down the asks cheapest-first, stops when the next level
+      // would push the escrow past the stake, pads the protective limit so the
+      // IOC still crosses if the book ticks up before it lands, aligns to the
+      // tick grid and snaps the quantity DOWN to a whole lot.
+      //
+      // Every one of those steps was written here and two of them were written
+      // wrong — a limit off the top of book that failed whenever the top moved,
+      // and a quantity off a lot size taken from config. This is the function
+      // that exists for it.
+      const params = { tickSize: grid.tickSize, lotSize: grid.lotSize, minQuantity: grid.minQuantity };
+      const quote = order.action === 'buy'
+        // A budget becomes a quantity: sweep the asks cheapest-first while the
+        // escrow at the worst level touched still fits inside the stake.
+        ? quoteBinaryStakeOverBook(
+            book, (longYes ? 'BUY_YES' : 'BUY_NO') as BinaryBuySide,
+            order.amount, scale, params,
+          )
+        // A quantity becomes proceeds: sweep the bids, best first.
+        : quoteBinarySellOverBook(
+            book, (order.side === 'up' ? 'SELL_YES' : 'SELL_NO') as BinarySellSide,
+            order.amount, scale, params,
+          );
+
+      if (!quote) {
+        throw new Error(order.action === 'buy'
+          ? (longYes
+              ? 'nothing offered on this side of the book'
+              : 'nobody bidding on this side of the book')
+          : 'nobody is bidding for this position yet');
       }
-
-      // Then a cushion past that, because the level can still move between the
-      // read and the transaction landing. Three percent, floored at ten ticks so
-      // a long shot — where the percentage rounds to almost nothing — still gets
-      // real slack.
-      const pad = max(deepest * 300n / 10_000n, grid.tickSize * 10n);
-      const wanted = longYes ? deepest + pad : deepest - pad;
-
-      // Snap the way that keeps it crossing: rounding a buy limit down, or a
-      // sell limit up, can land it back inside the spread. Then clamp — a
-      // binary price is strictly inside (0, 1) and the pool rejects the ends.
-      const snapped = longYes
-        ? ((wanted + grid.tickSize - 1n) / grid.tickSize) * grid.tickSize
-        : (wanted / grid.tickSize) * grid.tickSize;
-      const yesPrice = clamp(snapped, grid.tickSize, scale - grid.tickSize);
 
       // Never past the market's own end. The caller asks for a dead-man's switch
       // a few seconds out; on a short window that is already beyond expiry, and
@@ -135,17 +140,29 @@ export function makeOrderSubmitter(opts: {
       if (marketEndNs <= nowNs) throw new Error('this window has already closed');
       const expiry = order.expireTimestampNs > marketEndNs ? marketEndNs : order.expireTimestampNs;
 
-      const quantity = (order.size / grid.lotSize) * grid.lotSize;
-      if (quantity === 0n) {
-        throw new Error(`too small — this book trades in lots of ${grid.lotSize}`);
-      }
-      if (grid.minQuantity > 0n && quantity < grid.minQuantity) {
-        throw new Error(`below this book's minimum order of ${grid.minQuantity}`);
-      }
+      // A stake that cannot buy one lot is not an order, and the venue says so
+      // by quoting nothing.
+      const quantity = quote.quantity;
+      const yesPrice = quote.yesPrice;
 
       const side: BinarySide = order.action === 'buy'
         ? (order.side === 'up' ? 'BUY_YES' : 'BUY_NO')
         : (order.side === 'up' ? 'SELL_YES' : 'SELL_NO');
+
+      // Routing attribution, when this build is configured for it. The grant is
+      // per pool and rides along with the first order on that pool rather than
+      // standing in front of it — the same reasoning as every other approval
+      // here: nobody decides an approval, they decide the thing it enables.
+      const builder = cfg.builderAddress;
+      const fee = cfg.builderFeeBpsTimes1k;
+      if (builder && fee > 0n && !approvedFor.has(ref.poolAddress)) {
+        await trader().approveBuilder({
+          pool: ref.poolAddress,
+          builder,
+          maxFeeBpsTimes1k: fee,
+        });
+        approvedFor.add(ref.poolAddress);
+      }
 
       const res: PlaceOrderResult = await trader().placeOrder({
         pool: ref.poolAddress,
@@ -159,6 +176,7 @@ export function makeOrderSubmitter(opts: {
         // to show as "maybe".
         orderType: order.timeInForce === 'IOC' ? 2 : 0,
         expireTimestampNs: expiry,
+        ...(builder && fee > 0n ? { builder, builderFeeBpsTimes1k: fee } : {}),
       } satisfies PlaceOrderParams);
 
       return {

@@ -36,10 +36,13 @@ const RULES: { when: RegExp; title: string; detail?: string; benign?: boolean }[
   {
     when: /ImmediateOrCancelNoFill/i,
     title: 'The book moved before your order landed.',
+    // Said without naming a direction: the same revert is a buy that found no
+    // offer and a sell that found no bid, and "nothing was bought" is plainly
+    // wrong on the way out.
     detail:
-      'Nothing was bought and nothing was charged. On a one minute window the '
-      + 'resting orders turn over faster than a transaction confirms, so this '
-      + 'happens; press again, or pick a longer window where the book sits still.',
+      'Nothing changed hands and nothing was charged — the resting order it was '
+      + 'aiming at was gone by the time the transaction confirmed. Short windows '
+      + 'turn over fastest; press again, or use one with more time left.',
     benign: true,
   },
   {

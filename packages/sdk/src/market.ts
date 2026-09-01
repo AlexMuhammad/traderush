@@ -2,7 +2,7 @@ import { createPublicClient, http, type PublicClient } from 'viem';
 import type { TradeRushConfig } from './config.js';
 import { MarketDiscovery, type BinaryMarketSummary } from './discovery.js';
 import { binaryModuleReadAbi, erc20Abi, MARKET } from './abi.js';
-import { snapPrice, snapSize, expireTimestampNs, DEFAULT_TIME_IN_FORCE } from './ticks.js';
+import { expireTimestampNs, DEFAULT_TIME_IN_FORCE } from './ticks.js';
 import { type MarketState, type Position, type Side, type VenueAddresses } from './types.js';
 
 /** A signed-order transport. The reference implementation lives in
@@ -16,9 +16,17 @@ export interface OrderSubmitter {
      *  needs to know which — the side alone does not say it. */
     action: 'buy' | 'sell';
     side: Side;
-    /** Base units on the 18-decimal grid, already snapped. Never a float (§8.2). */
-    price: bigint;
-    size: bigint;
+    /**
+     *  A BUDGET on a buy (collateral, raw) and a QUANTITY on a sell (outcome
+     *  tokens, raw).
+     *
+     *  Not a price and a size: the venue quotes an order by sweeping the live
+     *  book from one of those two, and it is the sweep that decides both the
+     *  protective limit and the fillable quantity. Handing it a price computed
+     *  up here — off a mid, off a top of book, off a tick grid taken from
+     *  config — is how this path produced three different reverts.
+     */
+    amount: bigint;
     timeInForce: 'IOC' | 'GTC';
     expireTimestampNs: bigint;
   }): Promise<{ txHash: `0x${string}`; filled: bigint }>;
@@ -108,6 +116,30 @@ export class MarketAdapter {
    *  look like no winnings unless they are asked for by name. */
   listFinalizedMarkets(limit?: number): Promise<BinaryMarketSummary[]> {
     return this.discovery.listSettled(limit);
+  }
+
+  /**
+   * Top of book, from the pool itself, in raw collateral units.
+   *
+   * The indexer carries a top too and it is what the market list shows, but it
+   * lags: on a live market the two read 95.40/97.80 against a real 96.40/98.50.
+   * A point is nothing on a list and everything on a control — it decides
+   * whether a key is offered and what number it promises. Anything a person is
+   * about to act on comes from here.
+   *
+   * Both sides are YES prices. A DOWN position sells into `ask` (selling NO is
+   * buying YES) and a DOWN entry pays `1 - bid`.
+   */
+  async bookTop(marketId: string): Promise<{ bid: bigint | null; ask: bigint | null } | null> {
+    const hit = await this.discovery.get(marketId);
+    if (!hit) return null;
+    const book = await this.discovery.client.getBinaryOrderBook(hit.ref.poolAddress, {
+      depth: 1, decimals: this.cfg.decimals,
+    });
+    return {
+      bid: book.yesBids[0]?.price ?? null,
+      ask: book.yesAsks[0]?.price ?? null,
+    };
   }
 
   /** The venue fields DuelEscrow needs: outcome ids, origin venue, pool nonce. */
@@ -233,24 +265,10 @@ export class MarketAdapter {
   /** Solo book trade. `cost` is what you are willing to spend, in collateral base units. */
   async buy(marketId: `0x${string}`, side: Side, cost: bigint): Promise<Position> {
     await this.assertTradingOnChain(marketId);
-    const state = this.cache.get(marketId) ?? (await this.listMarkets()).find((m) => m.marketId === marketId);
-    if (!state) throw new Error(`unknown market ${marketId}`);
-
-    const probability = side === 'up' ? state.upPrice : 1 - state.upPrice;
-    // The book quotes in COLLATERAL units, not on an 18-decimal grid: a tick of
-    // 1_000 is a tenth of a percent at six decimals and a rounding error at
-    // eighteen. This defaulted to 18 for as long as nothing could place an
-    // order, so the mistake had nowhere to show.
-    const scale = 10n ** BigInt(this.cfg.decimals);
-    const price = snapPrice(probability, this.tickSize, this.cfg.decimals);   // §8.2
-    const rawSize = (cost * scale) / price;
-    const size = snapSize(rawSize, this.lotSize);                 // §8.3 — skip if it rounds to 0
-    if (size === null) throw new Error('size rounds to zero on the lot grid — order skipped');
-
     const { txHash, filled } = await this.orders.submit({
-      marketId, action: 'buy', side, price, size,
+      marketId, action: 'buy', side, amount: cost,
       timeInForce: DEFAULT_TIME_IN_FORCE,                          // §8.5 — IOC for taker flow
-      expireTimestampNs: expireTimestampNs(30),                    // §8.4 — mandatory, dead-man's switch
+      expireTimestampNs: expireTimestampNs(30),                    // §8.4 — clamped to the market
     });
     return { marketId, side, size: filled, txHash };
   }
@@ -258,20 +276,14 @@ export class MarketAdapter {
   /** Sells the whole position back to the book. Duel legs have no book exit by design (§6.1 S6). */
   async sell(marketId: `0x${string}`, side: Side, size: bigint): Promise<{ proceeds: bigint; txHash: `0x${string}` }> {
     await this.assertTradingOnChain(marketId);
-    const state = this.cache.get(marketId);
-    if (!state) throw new Error(`unknown market ${marketId}`);
-    const probability = side === 'up' ? state.upPrice : 1 - state.upPrice;
-    const scale = 10n ** BigInt(this.cfg.decimals);
-    const price = snapPrice(probability, this.tickSize, this.cfg.decimals);
-    const snapped = snapSize(size, this.lotSize);
-    if (snapped === null) throw new Error('size rounds to zero on the lot grid — order skipped');
-
     const { txHash, filled } = await this.orders.submit({
-      marketId, action: 'sell', side, price, size: snapped,
+      marketId, action: 'sell', side, amount: size,
       timeInForce: DEFAULT_TIME_IN_FORCE,
       expireTimestampNs: expireTimestampNs(30),
     });
-    return { proceeds: (filled * price) / scale, txHash };
+    // What came back is decided by the levels the sweep actually hit, so the
+    // submitter reports it rather than this multiplying by a price it guessed.
+    return { proceeds: filled, txHash };
   }
 
   /** Gotcha §8.7 — reconcile against the WALLET, not the vault. The per-pool vault is a
