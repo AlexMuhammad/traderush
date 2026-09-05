@@ -1,15 +1,33 @@
 import type { MarketDef, Race } from './types';
 
-/** The four races on the card. Two assets x two window lengths. */
+/**
+ * The races on the demo card. Two assets x three window lengths.
+ *
+ * The minute is here for the ending. A window has to CLOSE before the result
+ * card, the count-up and the streak can be seen at all, and the venue's own
+ * short series come and go — when it is running hour and day markets there is
+ * nothing to watch settle. At the demo's default twenty times real time a
+ * minute lands in about three seconds; slowed to ×1 it is a real minute, which
+ * is long enough for the run to be worth something and short enough to sit
+ * through twice.
+ *
+ * It is NOT the dial the demo opens on. The console lands on the first entry
+ * here, and a window that settles every three seconds gives nobody time to
+ * read the result it just drew — the minute is a thing to tune TO.
+ */
 export const MARKETS: MarketDef[] = [
   { asset: 'BTC', interval: '15M', sec: 900, base: 78000 },
+  { asset: 'BTC', interval: '1M', sec: 60, base: 78000 },
   { asset: 'BTC', interval: '1H', sec: 3600, base: 78000 },
   { asset: 'ETH', interval: '15M', sec: 900, base: 3100 },
+  { asset: 'ETH', interval: '1M', sec: 60, base: 3100 },
   { asset: 'ETH', interval: '1H', sec: 3600, base: 3100 },
 ];
 
 /** Staggered starts, so the four races are never in step. */
-const STAGGER = [0, 900, 300, 1800];
+/** Where each dial starts inside its own window, so switching to one lands
+ *  mid-race rather than on a suspiciously fresh start. One per dial. */
+const STAGGER = [0, 12, 900, 300, 34, 1800];
 
 /** Trail length. Long enough to fill the canvas, short enough to stay cheap. */
 export const HIST_MAX = 170;

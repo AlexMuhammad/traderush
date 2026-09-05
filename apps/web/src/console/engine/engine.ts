@@ -31,6 +31,16 @@ export const PROGRESS_SEGMENTS = 48;
 const SPEEDS = [20, 5, 1];
 /** Below this implied probability a side is treated as having no liquidity. */
 const DRY = 0.04;
+/**
+ * What the demo's book charges to take a position back.
+ *
+ * Live, an exit fetches the resting BID rather than the mid, and the gap is
+ * most of what makes changing your mind cost something. The demo has no book to
+ * quote, so the same lesson is charged explicitly: sell back and you get the
+ * side's own price less this. A frictionless demo would teach the wrong thing
+ * about the product it is demonstrating.
+ */
+const PAPER_SPREAD = 0.06;
 
 type Listener = (s: ConsoleSnapshot) => void;
 
@@ -44,7 +54,14 @@ type Listener = (s: ConsoleSnapshot) => void;
 export class Engine implements Scene {
   // --- scene state (read by the renderer) ----------------------------------
   frame = 0;
-  speed = SPEEDS[0]!;
+  /** Demo starts at five times real time, not twenty.
+   *
+   *  Twenty makes a fifteen minute window land in forty-five seconds, which
+   *  sounds convenient and plays badly: the animals barely move, and on the
+   *  minute dial a whole window is over in three seconds — the result card is
+   *  drawn and gone before it can be read. Five is still a demo and still
+   *  finishes, and the footer says which it is. */
+  speed = SPEEDS[1]!;
   readonly audio = new Audio();
 
   particles: Particle[] = [];
@@ -94,6 +111,77 @@ export class Engine implements Scene {
    * the window then ends on the plain card instead of the arithmetic.
    */
   private watchEcon: { stake: number; payoutIfWon: number } | null = null;
+
+  /**
+   * Take a side on paper. Demo only.
+   *
+   * The console owns no position when it is live — the book and the escrows do,
+   * and writing one here would have the machine credit a balance for money it
+   * is not holding. In demo there is no chain to hold anything, so the paper
+   * position IS the position, and it is what the settlement card counts.
+   *
+   * Priced off the same implied probability the keys already show, so what the
+   * card pays back reconciles with what the key promised. Returns false when
+   * the window will not take it, which is what the caller shows as a blocker.
+   */
+  takePaper(side: Side, stake: number): boolean {
+    const R = this.race;
+    if (this.isLive || R.phase !== 'trade' || !(stake > 0)) return false;
+    const p = side === 'up' ? R.upP : 1 - R.upP;
+    if (!(p > 0.01) || !(p < 0.99)) return false;
+    // Changing your mind is free here, and it has to be. A demo exists to be
+    // poked at; trapping someone on the first key they pressed for the rest of
+    // the window teaches them the product is unforgiving, which is the opposite
+    // of what it is for. The old stake comes back and the new one goes on.
+    if (R.pos) this.balance += R.pos.cost;
+    R.pos = { side, n: stake / p, cost: stake };
+    this.balance -= stake;
+    // The scene hunts whoever `watchSide` names, and the keys light from the
+    // same place. Leaving it null meant a demo position you could see in the
+    // readout and nowhere else: the animals grazed through it and the key you
+    // had just pressed stayed dark. A paper side IS which half of the glass is
+    // his, which is all either of them was ever asking.
+    this.watchSide = side;
+    this.audio.tone(880, 0.06, 'square', 0.06);
+    this.publish();
+    return true;
+  }
+
+  /**
+   * What the paper position would fetch if sold back right now, or null when
+   * there is nothing to sell or the window has stopped trading. Demo only.
+   */
+  get paperExit(): number | null {
+    const R = this.race;
+    if (this.isLive || !R.pos || R.phase !== 'trade') return null;
+    const p = R.pos.side === 'up' ? R.upP : 1 - R.upP;
+    const px = p * (1 - PAPER_SPREAD);
+    return px > 0 ? R.pos.n * px : null;
+  }
+
+  /**
+   * Sell the paper position back into the demo's book.
+   *
+   * Returns the proceeds, or null when there was nothing to sell. The side goes
+   * with it: the scene stops hunting, the key goes dark, and the window can be
+   * taken again from scratch — which is the whole point of being able to leave.
+   */
+  exitPaper(): number | null {
+    const v = this.paperExit;
+    if (v === null) return null;
+    this.balance += v;
+    this.race.pos = null;
+    this.watchSide = null;
+    this.audio.tone(392, 0.09, 'square', 0.06);
+    this.publish();
+    return v;
+  }
+
+  /** Whether a paper side can be taken right now. Demo only; false when live.
+   *  Holding one already is not a reason to refuse — see `takePaper`. */
+  get canTakePaper(): boolean {
+    return !this.isLive && this.race.phase === 'trade';
+  }
 
   /** Tell the scene which side is held here. Null goes back to a spectator. */
   setWatchSide(side: Side | null, econ: { stake: number; payoutIfWon: number } | null = null): void {
@@ -387,7 +475,7 @@ export class Engine implements Scene {
    * the same market, so a slow reply cannot overwrite a window that has since
    * rolled or a dial the viewer has since left.
    */
-  private requestBackfill(slot: FeedSlot, index: number): void {
+  private requestBackfill(slot: FeedSlot): void {
     if (!this.feed?.backfill) return;
     const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - slot.openTime);
     const covered = slot.history?.length ? elapsed - slot.history[0]!.t : 0;
@@ -396,8 +484,12 @@ export class Engine implements Scene {
 
     void this.feed.backfill(slot).then((points) => {
       if (points.length < 2) return;
-      const race = this.races[index];
-      if (!race || race.marketId !== slot.marketId) return;
+      // Found by market, not by the index it sat at when this was asked for.
+      // The dials are rebuilt whenever the venue's list changes, so a position
+      // captured a network round-trip ago names a different window by the time
+      // the tape lands — and the answer would be dropped, or worse, kept.
+      const race = this.races.find((r) => r.marketId === slot.marketId);
+      if (!race) return;
       const trimmed = points.length > HIST_MAX ? points.slice(points.length - HIST_MAX) : points;
       race.hist = trimmed.map((p) => p.price);
       race.histStartT = trimmed[0]!.t;
@@ -439,7 +531,7 @@ export class Engine implements Scene {
       settled: this.races[i]?.settled ?? [],
     };
     this.pendingSlot = null;
-    this.requestBackfill(slot, i);
+    this.requestBackfill(slot);
     this.resetScene();
     this.labelWindow();
     this.statusOverride = null;
@@ -484,15 +576,56 @@ export class Engine implements Scene {
    * opened underneath us — which is a real event, not a glitch, so it resets the
    * scene the same way a simulated roll does.
    */
+  /**
+   * Put the venue's windows on the dials.
+   *
+   * Slots are matched to dials by SERIES — the symbol and the window length —
+   * and never by position. Both the order and the LENGTH of the feed's answer
+   * move as the venue opens and closes windows, and matching by index meant a
+   * dial could be handed another asset's window entirely. The worse half was
+   * the dials the answer did not reach: iterating the slots only ever touched
+   * `0 … slots.length - 1`, so a shorter answer left the tail of `races`
+   * holding whatever was there before. On the early polls that tail is still
+   * the demo seed — which is how a 15M dial the venue does not run could
+   * appear, vanish on the next poll, and, when tuned to, sit on ACQUIRING
+   * MARKETS forever: it had no market id to acquire.
+   *
+   * So the list is rebuilt from the slots each time. A series the venue has
+   * stopped running leaves the dials rather than lingering as a ghost.
+   */
   private applySlots(slots: FeedSlot[]): void {
-    const now = Math.floor(Date.now() / 1000);
-    let touchedCurrent = false;
+    // An empty answer is a poll that failed, not a venue with no markets.
+    // Rebuilding from it would clear the dials and leave `race` undefined.
+    if (slots.length === 0) return;
 
-    slots.forEach((slot, i) => {
-      const prev = this.races[i];
+    const now = Math.floor(Date.now() / 1000);
+    const keyOf = (symbol: string, win: number) => `${symbol}:${win}`;
+
+    // What is on the glass right now, named the one way that survives a rebuild.
+    const before = this.races[this.raceIndex];
+    const currentKey = before ? keyOf(before.symbol, before.win) : null;
+
+    const existing = new Map<string, Race>();
+    for (const r of this.races) existing.set(keyOf(r.symbol, r.win), r);
+
+    let touchedCurrent = false;
+    const next: Race[] = [];
+    const seen = new Set<string>();
+    const backfills: FeedSlot[] = [];
+
+    for (const slot of slots) {
+      const win = slot.intervalSec || 900;
+      const key = keyOf(slot.symbol, win);
+      // One dial per series. A feed that lists a series twice must not put the
+      // same race object on the dials twice.
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const prev = existing.get(key);
+      const isCurrent = key === currentKey;
       const rolled = !prev || prev.marketId !== slot.marketId;
 
-      if (rolled && i === this.raceIndex && prev) {
+      if (rolled && isCurrent && prev) {
         // The clock usually notices the expiry first, but the feed can get here
         // in the same second. Do not let a roll skip the settlement of a window
         // someone had a position in.
@@ -506,15 +639,16 @@ export class Engine implements Scene {
         }
         if (this.holdingResult) {
           this.pendingSlot = slot;   // park it; the result owns the screen
-          return;
+          next.push(prev);           // which keeps the window it is settling
+          continue;
         }
       }
 
       if (rolled) {
-        this.races[i] = {
+        next.push({
           marketId: slot.marketId,
           symbol: slot.symbol,
-          win: slot.intervalSec || 900,
+          win,
           t: Math.max(0, now - slot.openTime),
           openTime: slot.openTime,
           strike: slot.strike,
@@ -528,14 +662,14 @@ export class Engine implements Scene {
           wasDanger: false,
           // A rolled window keeps the series' form guide.
           settled: prev?.settled ?? [],
-        };
-        this.requestBackfill(slot, i);
-        if (i === this.raceIndex) touchedCurrent = true;
-        return;
+        });
+        backfills.push(slot);
+        if (isCurrent) touchedCurrent = true;
+        continue;
       }
 
       prev.symbol = slot.symbol;
-      prev.win = slot.intervalSec || prev.win;
+      prev.win = win;
       prev.strike = slot.strike || prev.strike;
       prev.upP = slot.upP || prev.upP;
       // Null is meaningful here — it says that side of the book is EMPTY, which
@@ -559,7 +693,25 @@ export class Engine implements Scene {
         prev.hist.push(slot.spot);
         if (prev.hist.length > HIST_MAX) prev.hist.shift();
       }
-    });
+      next.push(prev);
+    }
+
+    // A fixed order, so a dial does not slide under the tuner when the venue
+    // answers in a different order than it did on the last poll.
+    next.sort((a, b) => a.symbol.localeCompare(b.symbol) || a.win - b.win);
+    this.races = next;
+
+    // Stay on the same SERIES across the rebuild — its index has almost
+    // certainly moved. A series the venue has stopped running cannot be watched
+    // at all, so the tuner falls back to the first dial and the scene is
+    // rebuilt for whatever that is.
+    const at = currentKey ? next.findIndex((r) => keyOf(r.symbol, r.win) === currentKey) : -1;
+    if (at >= 0) this.raceIndex = at;
+    else { this.raceIndex = 0; touchedCurrent = true; }
+
+    // Asked for only once the dials are settled, so the tape lands on the list
+    // it was asked about.
+    for (const slot of backfills) this.requestBackfill(slot);
 
     // First real slots: open on a window with a book worth pressing.
     if (!this.openingChosen && this.races.some((r) => r.marketId)) {
@@ -654,10 +806,11 @@ export class Engine implements Scene {
     const winner: Side = R.spot >= R.strike ? 'up' : 'down';
     R.settled.push({ p: R.spot, w: winner });
 
-    // The side that was armed on the keys or held in a room. There is no paper
-    // position to settle any more — the escrow settles the real one — so this
-    // decides only which of the three endings plays.
-    const side = this.watchSide;
+    // Demo settles a paper position; live settles the escrow's. Only one of the
+    // two can exist at a time — `takePaper` refuses while live — so the paper
+    // one simply wins where it is there.
+    const paper = R.pos;
+    const side = paper?.side ?? this.watchSide;
     const won = side ? side === winner : null;
     const sub = `${winner.toUpperCase()} TAKES IT · ${R.spot.toFixed(0)}`;
 
@@ -666,10 +819,19 @@ export class Engine implements Scene {
     if (won === true) this.winStreak += 1;
     else if (won === false) this.winStreak = 0;
 
-    // Real money on the glass when the screen knew the numbers.
-    const tally = this.watchEcon && won !== null
-      ? this.tallyFor(this.watchEcon, won, R)
-      : null;
+    // The stake left the balance when the bet was placed, so settlement adds the
+    // payout and nothing else.
+    if (paper) this.balance += won ? paper.n : 0;
+
+    // A held side gets the full ending, whether or not the money is known.
+    //
+    // This used to require `watchEcon` too, and the stake is not always
+    // recoverable — it lives in a ref that a reload clears — so a window you
+    // were actually in could settle on a bare word and silence. The beats never
+    // needed the arithmetic; only the plaque does, and that is the renderer's
+    // call to make from `tally.money`.
+    const econ = paper ? { stake: paper.cost, payoutIfWon: paper.n } : this.watchEcon;
+    const tally = won !== null ? this.tallyFor(econ, won, R) : null;
 
     if (side && won === false) this.playKill(side, sub, tally);
     else if (side && won === true) this.playStand(side, sub, tally);
@@ -696,7 +858,9 @@ export class Engine implements Scene {
       this.statusOverride = 'NEXT PACK FORMING';
       this.publish();
       this.later(() => this.openWindow(), 1200);
-    }, this.watchEcon ? 5600 : 4200);
+      // The card holds for as long as it has beats left to play, which is a
+      // question about the tally rather than about the money behind it.
+    }, tally ? 5600 : 4200);
   }
 
   /**
@@ -709,17 +873,21 @@ export class Engine implements Scene {
    * ways, which is what makes the count-up feel earned instead of decorative.
    */
   private tallyFor(
-    econ: { stake: number; payoutIfWon: number }, won: boolean, R: Race,
+    econ: { stake: number; payoutIfWon: number } | null, won: boolean, R: Race,
   ): Tally {
-    const stake = Math.round(econ.stake);
-    const total = won ? Math.round(econ.payoutIfWon) : 0;
-    const mult = econ.stake > 0 ? econ.payoutIfWon / econ.stake : 0;
+    const stake = Math.round(econ?.stake ?? 0);
+    const total = won ? Math.round(econ?.payoutIfWon ?? 0) : 0;
+    const mult = econ && econ.stake > 0 ? econ.payoutIfWon / econ.stake : 0;
 
     // One payout said three ways is three arrivals instead of one, and the
     // streak line is the only one that is not arithmetic — it is the thing you
     // carry between windows.
+    //
+    // With no money there are no sums to say three ways, and the breakdown is
+    // empty. That is what the beats count, so an unpriced win plays shorter
+    // rather than pretending to lines it does not have.
     const items: TallyItem[] = [];
-    if (won) {
+    if (won && econ) {
       items.push({ label: 'stake back', value: `+${stake}`, tone: 'up' });
       items.push({ label: 'winnings', value: `+${total - stake}`, tone: 'up' });
       if (this.winStreak >= 2) {
@@ -730,7 +898,8 @@ export class Engine implements Scene {
     const miss = Math.abs(R.spot - R.strike);
     return {
       win: won,
-      stake: money(econ.stake),
+      money: econ !== null,
+      stake: money(econ?.stake ?? 0),
       // The split, not the book: in a room the multiple IS the payout.
       oddsPct: mult > 0 ? Math.round((1 / mult) * 100) : 0,
       mult: won ? mult : 0,
