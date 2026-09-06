@@ -105,7 +105,11 @@ export function intervalLabel(sec: number): string {
   if (!sec) return '—';
   if (sec < 60) return `${sec}S`;
   if (sec < 3600) return `${Math.round(sec / 60)}M`;
-  return `${Math.round(sec / 3600)}H`;
+  // Past two days an hour count stops being a length anyone can feel: the
+  // venue's 3,888,000s window read "1080H", which is arithmetically right and
+  // useless. Days are the unit a person holds a 45-day position in.
+  if (sec < 172_800) return `${Math.round(sec / 3600)}H`;
+  return `${Math.round(sec / 86_400)}D`;
 }
 
 /** 8026 -> "2h 14m". A screen that says "entry shuts in 8026s" is making the
