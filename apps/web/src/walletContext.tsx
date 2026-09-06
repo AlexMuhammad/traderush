@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PrivyProvider, usePrivy, useWallets } from '@privy-io/react-auth';
-import { createWalletClient, custom, type Account, type WalletClient } from 'viem';
+import { createWalletClient, custom, http, type Account, type WalletClient } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { useSdk } from './sdk';
 
 /**
@@ -50,6 +51,44 @@ export function useWallet(): WalletCtx {
  *  the app runs, so there is no hook-order hazard in branching here. */
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { cfg } = useSdk();
+
+  // A local signer, for capture and for driving the console without a human at
+  // the login prompt. DEV builds only and never bundled otherwise: `import.meta
+  // .env.DEV` is a compile-time constant, so the branch and the key both drop
+  // out of a production build. The key is a throwaway testnet one — treat
+  // anything set here as published, because in a dev bundle it is.
+  const keys = import.meta.env.DEV
+    ? {
+        b: import.meta.env.VITE_DEMO_KEY as string | undefined,
+        a: import.meta.env.VITE_DEMO_KEY_A as string | undefined,
+      }
+    : {};
+
+  /**
+   * `?wallet=` picks the signer for THIS TAB.
+   *
+   *   (nothing)  the local signer, VITE_DEMO_KEY
+   *   a          the second local signer, VITE_DEMO_KEY_A
+   *   privy      no local signer at all — the real front door
+   *
+   * Per-tab rather than per-dev-server, because the two things a single key
+   * makes impossible are both shots the film needs. `privy` is the connect
+   * flow, which demo mode is precisely what removes. And `a` is the other half
+   * of a DUEL: two sides, two signers, one escrow, filmed side by side. Two dev
+   * servers would work and would also mean two builds, two ports and two
+   * chances for them to drift apart mid-take.
+   */
+  const want = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('wallet');
+
+  const key = want === 'privy' ? undefined : want === 'a' ? keys.a : keys.b;
+
+  if (key && /^0x[0-9a-fA-F]{64}$/.test(key.trim())) {
+    // Keyed so React rebuilds the whole subtree when the signer changes, rather
+    // than leaving a screen holding the other player's balance.
+    return <DemoWallet key={key} privateKey={key.trim() as `0x${string}`}>{children}</DemoWallet>;
+  }
 
   if (!cfg.privyAppId) return <Unconfigured>{children}</Unconfigured>;
 
@@ -153,6 +192,46 @@ function PrivyWallet({ children }: { children: ReactNode }) {
         // for a reason that is not "signed out".
         ready: ready && (!authenticated || conn !== null || wallets.length === 0),
         doConnect, doSwitch, doDisconnect, signingOut, label,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
+  );
+}
+
+/**
+ * A local signer held in the page — capture mode.
+ *
+ * Privy is the front door for people; this is the door for a script. It signs
+ * with a key from the environment and talks straight to the RPC, so every write
+ * below it is the same write a person makes: real transactions, real markets,
+ * the same SDK. Nothing downstream can tell the difference, which is the point —
+ * footage of a bypass that behaves differently is footage of a different product.
+ *
+ * It is connected from the first frame. There is no login to wait for, so
+ * `ready` is true immediately and `doConnect` has nothing to do.
+ */
+function DemoWallet({ privateKey, children }: { privateKey: `0x${string}`; children: ReactNode }) {
+  const { cfg } = useSdk();
+
+  const conn = useMemo<Connection>(() => {
+    const account = privateKeyToAccount(privateKey);
+    return {
+      wallet: createWalletClient({ chain: cfg.chain, transport: http(cfg.rpcUrl), account }),
+      account,
+      chainId: cfg.chainId,
+    };
+  }, [privateKey, cfg.chain, cfg.chainId, cfg.rpcUrl]);
+
+  // Signing out of a key that is compiled in would only put up a title card the
+  // next reload walks straight back past. It is inert on purpose.
+  return (
+    <WalletContext.Provider
+      value={{
+        conn, connecting: false, error: null, wrongChain: false, ready: true,
+        doConnect: () => {}, doSwitch: () => {},
+        doDisconnect: async () => {}, signingOut: false,
+        label: `demo ${conn.account.address.slice(0, 6)}…`,
       }}
     >
       {children}
