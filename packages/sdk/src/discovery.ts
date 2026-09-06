@@ -210,21 +210,35 @@ export class MarketDiscovery {
    *
    * So it is inferred: the strike and the live underlying describe the same
    * price, so their ratio rounds to the power of ten between them. Measured on
-   * Shannon this is 1e2 (strike 7749385 against a feed price of 77481). Cached
-   * per asset, and only ever computed from a real feed reading.
+   * Shannon this is 1e2 (strike 7749385 against a feed price of 77481).
+   *
+   * It is computed PER MARKET, and the per-asset value is only a fallback.
+   *
+   * This used to return the cached value for an asset as soon as it had one,
+   * which assumed the scale was a property of the oracle feed. It is not — the
+   * venue runs more than one scale for the same asset at the same time. On
+   * 2026-09-05 the short BTC windows carried 1e2 while a new 45-day window
+   * carried 1e6 (strike 79610750000 against a spot of 79608.295). With one
+   * number cached per asset, whichever market was seen first won for all of
+   * them, and the 45-day market rendered a strike of 796,107,500 — a line the
+   * price can never reach, on a market that was still tradeable.
+   *
+   * A ratio against a live spot is cheap and correct per row, so there is no
+   * reason to reuse yesterday's answer when today's is available. The cache
+   * survives only for the frames before the feed reports.
    */
   private strikeScaleFor(asset: string, rawStrike: number): number {
-    const cached = this.scales.get(asset);
-    if (cached) return cached;
     const spot = this.underlying(asset);
     if (spot > 0 && rawStrike > 0) {
       const scale = 10 ** Math.round(Math.log10(rawStrike / spot));
       if (scale >= 1 && scale <= 1e18) {
+        // Remembered as the fallback for rows read before the feed reports,
+        // never as the answer for a row that can compute its own.
         this.scales.set(asset, scale);
         return scale;
       }
     }
-    return DEFAULT_STRIKE_SCALE;
+    return this.scales.get(asset) ?? DEFAULT_STRIKE_SCALE;
   }
 
   // ------------------------------------------------------------- normalizing
