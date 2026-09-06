@@ -1,0 +1,52 @@
+# Tech stack
+
+> Frameworks, libraries, and tools used across the Trade Rush frontend, SDK, scripts, and contracts.
+
+## Frontend
+
+| Item | Choice |
+| --- | --- |
+| App framework | Vite |
+| UI library | React 19 |
+| Wallet auth | Privy |
+| Chain client | viem |
+| Language | TypeScript |
+
+## SDK
+
+| Item | Choice |
+| --- | --- |
+| Package | `@traderush/sdk` |
+| Market SDK | `@somnia-chain/markets-sdk` |
+| Config | `NETWORK` / `VITE_NETWORK` |
+| Outputs | TypeScript build in `packages/sdk/dist` |
+
+## Contracts
+
+| Item | Choice |
+| --- | --- |
+| Language | Solidity `^0.8.24` |
+| Framework | Foundry |
+| Contracts | `DuelEscrow`, `RoomEscrow` |
+| Libraries | OpenZeppelin `SafeERC20`, `ReentrancyGuard` |
+| Tests | Forge unit tests |
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm doctor` | Environment and live venue verification |
+| `pnpm test:contracts` | Contract unit tests |
+| `pnpm e2e` | Live duel journey |
+| `pnpm e2e:room` | Live room journey |
+| `pnpm e2e:book` | Live book journey |
+| `pnpm maker` | Two-sided quote posting |
+
+## Documentation
+
+| Item | Choice |
+| --- | --- |
+| Docs framework | Mintlify |
+| Config | `docs/mint.json` |
+| LLM index | `docs/llms.txt` |
+| Source format | MDX |

@@ -1,0 +1,36 @@
+# Hackathon notes
+
+> Verified notes for the Event Contracts Hackathon build.
+
+The DoraHacks page for the Event Contracts Hackathon is protected by human verification when fetched automatically, but public search snippets identify it as the Somnia x DreamDEX Event Contracts Hackathon with a 5,000 USD prize pool. Trade Rush was built against the live Somnia/DreamDEX environment and the local repo's verified findings.
+
+## Live-venue corrections
+
+| Finding | What Trade Rush does |
+| --- | --- |
+| Event contracts are not listed on `GET /v0/markets` | Uses the indexer and `@somnia-chain/markets-sdk` |
+| Testnet collateral has 6 decimals | Formats through network config |
+| Settlement is claimed | Keeps claim actions visible |
+| Market status is not an on-chain enum | Derives tradability from `tradingStart` and `expiry` |
+| Module signatures differed from assumptions | Uses ABI exports from the Somnia markets SDK |
+| Reference-mode markets can have strike `0` | Does not parse question text as protocol truth |
+
+## Definition of done
+
+| Deliverable | Status |
+| --- | --- |
+| Contract tests | `pnpm test:contracts` |
+| Duel e2e | `pnpm e2e` |
+| Room e2e | `pnpm e2e:room` |
+| Book e2e | `pnpm e2e:book` |
+| Environment verification | `pnpm doctor` |
+
+## Repo notes
+
+Detailed historical findings remain in:
+
+| File | Purpose |
+| --- | --- |
+| `docs/FINDINGS.md` | Live-venue discrepancies and implementation consequences |
+| `docs/UNKNOWNS.md` | Blocking protocol unknowns and answers |
+| `docs/CHECKLIST.md` | Hackathon completion checklist |

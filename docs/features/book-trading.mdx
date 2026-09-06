@@ -1,0 +1,23 @@
+# Book trading
+
+> The run mode buys or sells through the DreamDEX book with protocol-specific guards.
+
+Book trading is the direct DreamDEX path. It is the right mode when the user wants immediate exposure through the venue's own liquidity rather than a social pot.
+
+## What Trade Rush adds
+
+| Area | Behavior |
+| --- | --- |
+| Price safety | Snap prices to the tick grid |
+| Size safety | Snap quantities to the lot grid and skip zero-size orders |
+| Expiry | Attach mandatory order expiry |
+| Taker flow | Prefer immediate-or-cancel behavior for direct buys |
+| Reads | Pull actionable prices from chain-aware paths, not stale UI state |
+
+## Thin-book reality
+
+Short event windows can turn over faster than a transaction confirms. Trade Rush keeps short intervals reachable but opens on windows long enough for a real player to act.
+
+## Market maker
+
+The repo includes `pnpm maker`, which posts two-sided quotes and refreshes them. Rooms and duels deliberately do not touch the book, so the maker is the path that puts liquidity back into the venue.

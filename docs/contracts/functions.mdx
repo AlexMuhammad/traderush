@@ -1,0 +1,94 @@
+# Function reference
+
+> Reference for the public functions Trade Rush uses on `DuelEscrow` and `RoomEscrow`.
+
+## DuelEscrow
+
+### `open`
+
+```solidity
+function open(bytes32 marketId, bool challengerUp, uint128 stake, uint64 acceptDeadline)
+    external
+    returns (uint256 id)
+```
+
+Escrows the challenger's stake and creates an open challenge. Nothing is minted yet, so an unmatched challenge is refundable.
+
+### `accept`
+
+```solidity
+function accept(uint256 id) external
+```
+
+Matches a duel, pulls the opponent's stake, mints `2S` complete sets, and sends opposite outcome legs to the two players.
+
+### `cancel`
+
+```solidity
+function cancel(uint256 id) external
+```
+
+Refunds an unmatched challenge. The challenger can cancel before the deadline; anyone can cancel after the deadline so funds do not stay stuck.
+
+### `duels`
+
+```solidity
+function duels(uint256 id) external view returns (...)
+```
+
+Reads the stored duel record.
+
+## RoomEscrow
+
+### `open`
+
+```solidity
+function open(bytes32 marketId, bool up, uint128 stake, uint64 entryDeadline)
+    external
+    returns (uint256 id)
+```
+
+Creates a room and takes the first stake.
+
+### `join`
+
+```solidity
+function join(uint256 id, bool up, uint128 stake) external
+```
+
+Adds a stake to either side before entry closes.
+
+### `claim`
+
+```solidity
+function claim(uint256 id) external
+```
+
+Transfers a participant's proportional outcome-token share after entry closes in a contested room.
+
+### `refund`
+
+```solidity
+function refund(uint256 id) external
+```
+
+Returns collateral for one-sided rooms after entry closes.
+
+### `shareOf`
+
+```solidity
+function shareOf(uint256 id, address who) external view returns (uint256 up, uint256 down)
+```
+
+Previews what a participant can claim from a room.
+
+## Shared errors
+
+| Error | Meaning |
+| --- | --- |
+| `StakeZero` | Stake must be greater than zero |
+| `DeadlineInPast` | Deadline must be in the future |
+| `DeadlineTooLate` | Deadline is too close to market expiry |
+| `MarketNotTrading` | Current chain time is outside the market trading window |
+| `MarketUnknown` | Market record was not found |
+| `WrongCollateral` | Market collateral differs from escrow collateral |

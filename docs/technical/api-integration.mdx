@@ -1,0 +1,62 @@
+# API integration
+
+> How to integrate with Trade Rush from TypeScript, scripts, and contracts.
+
+## Install
+
+The repo is a pnpm workspace.
+
+```bash
+pnpm install
+pnpm build
+```
+
+## Load config
+
+```ts
+import { loadConfig } from "@traderush/sdk";
+
+const config = loadConfig();
+console.log(config.deployment.chainId);
+```
+
+## Select network
+
+```bash
+NETWORK=testnet pnpm doctor
+NETWORK=mainnet pnpm doctor
+```
+
+Use `VITE_NETWORK` for browser builds.
+
+## Run checks
+
+```bash
+pnpm doctor
+pnpm test:contracts
+pnpm e2e
+pnpm e2e:room
+pnpm e2e:book
+```
+
+## Contract deployment
+
+Deploy escrows with the network-specific collateral, module, and outcome token. The scripts and `doctor` command print the values that should be used for the active network.
+
+```bash
+pnpm deploy:escrow
+```
+
+After deployment, place the address in the matching environment variable, for example `DUEL_ESCROW_ADDRESS_TESTNET` or `ROOM_ESCROW_ADDRESS_TESTNET`.
+
+## Frontend development
+
+```bash
+pnpm dev
+```
+
+The Vite app runs the console UI.
+
+## Public app ID
+
+`VITE_PRIVY_APP_ID` is a public browser value. Do not put the Privy app secret in this repository, `.env`, shell history, or frontend bundle.

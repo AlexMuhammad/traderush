@@ -1,0 +1,48 @@
+# Deployed addresses
+
+> Network constants and deployed-contract slots for Trade Rush.
+
+Protocol addresses are defined in `packages/sdk/src/networks.ts`. Escrow deploys are per network and should be supplied through environment variables after deployment.
+
+## Somnia Shannon Testnet
+
+| Item | Value |
+| --- | --- |
+| Chain ID | `50312` |
+| Native token | STT |
+| Collateral | tUSDC |
+| Collateral decimals | `6` |
+| Collateral address | `0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E` |
+| BinaryMarketsModule | `0x3ecC694Cef705358864a646142ac17A90E29e388` |
+| BinarySettlement | `0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23` |
+| MarketsCore | `0x2802504314685D89bF6C992CA5a8e7cC78bc0294` |
+| Explorer | `https://shannon-explorer.somnia.network` |
+
+## Somnia Mainnet
+
+| Item | Value |
+| --- | --- |
+| Chain ID | `5031` |
+| Native token | SOMI |
+| Collateral | USDso |
+| Collateral decimals | `18` |
+| Collateral address | `0x00000022dA000002656c64D9eA6011ea952D008A` |
+| BinaryMarketsModule | `0x3ecC694Cef705358864a646142ac17A90E29e388` |
+| BinarySettlement | `0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23` |
+| MarketsCore | `0x2802504314685D89bF6C992CA5a8e7cC78bc0294` |
+| Explorer | `https://explorer.somnia.network` |
+
+## Escrow environment
+
+| Variable | Purpose |
+| --- | --- |
+| `DUEL_ESCROW_ADDRESS_TESTNET` | Testnet `DuelEscrow` deploy |
+| `DUEL_ESCROW_ADDRESS_MAINNET` | Mainnet `DuelEscrow` deploy |
+| `ROOM_ESCROW_ADDRESS_TESTNET` | Testnet `RoomEscrow` deploy |
+| `ROOM_ESCROW_ADDRESS_MAINNET` | Mainnet `RoomEscrow` deploy |
+| `VITE_DUEL_ESCROW_ADDRESS` | Browser-visible duel escrow |
+| `VITE_ROOM_ESCROW_ADDRESS` | Browser-visible room escrow |
+
+<Note>
+  A previously verified Shannon duel flow used `DuelEscrow` at `0xbfaaf7b082c5b39dedbb9f9224b6a435bda03a57`. Re-run `pnpm doctor` against your active `.env` before trusting any address.
+</Note>

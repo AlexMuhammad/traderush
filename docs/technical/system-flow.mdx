@@ -1,0 +1,65 @@
+# System flow
+
+> How data and transactions move through Trade Rush.
+
+## Market discovery
+
+```mermaid
+sequenceDiagram
+    participant UI as Frontend
+    participant SDK as SDK
+    participant IDX as Indexer
+
+    UI->>SDK: loadMarkets()
+    SDK->>IDX: list binary markets
+    IDX-->>SDK: market rows
+    SDK-->>UI: normalized event contracts
+```
+
+Event contracts are discovered from the indexer, not the spot/perp REST registry.
+
+## Duel flow
+
+```mermaid
+sequenceDiagram
+    participant A as Challenger
+    participant B as Opponent
+    participant E as DuelEscrow
+    participant M as BinaryMarketsModule
+
+    A->>E: open(marketId, side, stake, deadline)
+    B->>E: accept(id)
+    E->>M: markets(marketId)
+    E->>M: mintCompleteSet(operatorId, venueId, marketId, 2S)
+    E-->>A: one outcome leg
+    E-->>B: opposite outcome leg
+```
+
+## Room flow
+
+```mermaid
+sequenceDiagram
+    participant P as Player
+    participant R as RoomEscrow
+    participant M as BinaryMarketsModule
+
+    P->>R: open() or join()
+    R->>M: markets(marketId)
+    R->>M: mintCompleteSet(..., stake)
+    P->>R: claim() after entry closes
+    R-->>P: proportional outcome tokens
+```
+
+## Settlement flow
+
+```mermaid
+sequenceDiagram
+    participant W as Winner
+    participant SET as BinarySettlement
+    participant COL as Collateral
+
+    W->>SET: redeem(outcomeId, amount, to)
+    SET-->>W: collateral payout
+```
+
+Settlement is explicit. A winning position does not automatically become collateral in the wallet.

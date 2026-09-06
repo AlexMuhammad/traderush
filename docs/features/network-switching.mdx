@@ -1,0 +1,38 @@
+# Network switching
+
+> One environment variable moves Trade Rush between Shannon testnet and Somnia mainnet.
+
+Nothing in Trade Rush should hardcode a chain. Network-specific values live in `packages/sdk/src/networks.ts` and load through `loadConfig()`.
+
+```bash
+NETWORK=testnet
+NETWORK=mainnet
+```
+
+## Network table
+
+| Field | Testnet | Mainnet |
+| --- | --- | --- |
+| Chain | Somnia Shannon Testnet | Somnia |
+| Chain ID | `50312` | `5031` |
+| Collateral | tUSDC | USDso |
+| Decimals | 6 | 18 |
+| Faucet | Yes | No |
+| RPC | `api.infra.testnet.somnia.network` | `api.infra.mainnet.somnia.network` |
+
+## Why decimals matter
+
+Testnet collateral is 6 decimals. Mainnet collateral is 18 decimals. A single hardcoded formatter silently breaks balances, stakes, and pots.
+
+## Link safety
+
+Duel links carry chain identity. A testnet duel link should not silently open against a mainnet build.
+
+## Verification
+
+```bash
+pnpm doctor
+NETWORK=mainnet pnpm doctor
+```
+
+`doctor` checks deployed code, collateral decimals, and live market discovery before the app is trusted.
