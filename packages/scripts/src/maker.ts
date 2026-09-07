@@ -41,6 +41,26 @@ const minted = new Map<`0x${string}`, bigint>();
 const MIN_LEFT = 45;
 
 const watch = process.argv.includes('--watch');
+/**
+ * Leave the quotes on the book when this exits.
+ *
+ * The default is to pull them, and that default is right for a person at a
+ * terminal: an abandoned quote is a position somebody else gets to choose the
+ * moment to take. But it also means the book is only ever as alive as this
+ * process, and a run that ends leaves nothing behind — which is no use at all
+ * when the point is for the venue to be quoted while nobody is watching.
+ *
+ * Orders already outlive the run: `expireTimestampNs` is the MARKET's expiry,
+ * not a few minutes out, so what is posted here rests until the window it
+ * belongs to closes. Only `cleanup()` was taking them away. This says don't.
+ *
+ * The inventory stays too — the asks are escrowed against it, so burning it
+ * back would cancel them by another route.
+ *
+ * Use it for the scheduled runs. Whatever is left can be pulled by hand with a
+ * plain `pnpm maker`, which cancels everything this wallet has resting.
+ */
+const leave = process.argv.includes('--leave');
 
 /**
  * The maker signs as SOMEBODY ELSE, and that is the point.
@@ -186,6 +206,7 @@ async function unwind(): Promise<void> {
 }
 
 process.on('SIGINT', () => {
+  if (leave) process.exit(0);
   void cleanup().then(unwind).then(() => process.exit(0));
 });
 
@@ -199,7 +220,11 @@ if (watch) {
     await pass();
   }
 }
-await cleanup();
-await unwind();
+if (leave) {
+  console.log(fmt.head(`leaving ${resting.length} orders resting — they expire with their windows`));
+} else {
+  await cleanup();
+  await unwind();
+}
 market.close();
 process.exit(0);

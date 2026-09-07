@@ -1,0 +1,77 @@
+# Keep the book quoted while nobody is watching.
+#
+# The console's UP/DOWN keys buy from resting orders, and on testnet there is
+# nobody to rest them: the venue is empty unless we quote it. Run by hand, the
+# maker is only as alive as the terminal it was started in — close the laptop
+# and the keys go dead, which is exactly when someone is most likely to look.
+#
+# So it runs here instead. Each run posts two-sided quotes and LEAVES them:
+# `expireTimestampNs` is the market's own expiry, so what is posted rests until
+# the window it belongs to closes, hours or days later. The schedule is not
+# keeping orders alive — they do that themselves — it is there to reprice, and
+# to pick up windows that opened since the last run.
+#
+# It signs as the MAKER wallet (never the wallet anyone plays on), so its fills
+# land in an account nobody is reading.
+#
+# TO SET THIS UP, one secret:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#   Name:  MAKER_PRIVATE_KEY
+#   Value: a THROWAWAY testnet key, funded with tUSDC from the faucet and a
+#          little STT for gas. Never a key that holds anything you would miss.
+#
+# TO STOP IT: disable the workflow in the Actions tab, then run `pnpm maker`
+# once locally with the same key — a plain run cancels everything that wallet
+# has resting.
+name: maker
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub's cron is best-effort on a free runner and can
+    # drift by ten minutes or more; that is fine here, because the orders from
+    # the previous run are still on the book while this one is late.
+    - cron: '*/30 * * * *'
+  # So a run can be forced before a demo rather than waited for.
+  workflow_dispatch:
+
+# One maker at a time. Two overlapping runs would quote the same windows twice
+# and double the inventory minted for the asks.
+concurrency:
+  group: maker
+  cancel-in-progress: false
+
+jobs:
+  quote:
+    runs-on: ubuntu-latest
+    # A pass over every live window is a minute or two of RPC round trips. The
+    # cap is here so a hung indexer cannot hold a runner for six hours.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The scripts import @traderush/sdk from its build output, not its source.
+      - run: pnpm --filter @traderush/sdk build
+
+      - name: Post two-sided quotes and leave them resting
+        env:
+          # Everything else — RPC, indexer, collateral, decimals, tick and lot —
+          # follows from the network through the deployment map in networks.ts.
+          NETWORK: testnet
+          MAKER_PRIVATE_KEY: ${{ secrets.MAKER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MAKER_PRIVATE_KEY" ]; then
+            echo "::error::MAKER_PRIVATE_KEY is not set — add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          pnpm maker -- --leave
