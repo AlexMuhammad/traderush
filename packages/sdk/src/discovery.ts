@@ -328,8 +328,11 @@ export class MarketDiscovery {
    * nothing to take a ratio against, and a wrong strike is worse than no strike.
    */
   private strikeScaleFor(marketId: string, asset: string, rawStrike: number): number | null {
-    const cached = this.scales.get(marketId);
-    if (cached) return cached;
+    // Computed fresh, not read from the cache first. A ratio against a live spot
+    // is one division and it is right for the row in hand, so there is no reason
+    // to keep answering with the first one ever taken — and a first answer taken
+    // while the feed was mid-report would otherwise be wrong for the life of the
+    // window. (The recompute is #4's idea; the rest of this is why it is safe.)
     const spot = this.underlying(asset);
     if (spot > 0 && rawStrike > 0) {
       const scale = 10 ** Math.round(Math.log10(rawStrike / spot));
@@ -338,7 +341,11 @@ export class MarketDiscovery {
         return scale;
       }
     }
-    return null;
+    // No feed reading, so nothing to take a ratio against. Fall back to what
+    // THIS market last answered — never another market's, which is the bug this
+    // was keyed per market to avoid, and never a constant, because a plausible
+    // wrong strike is worse than an honest blank.
+    return this.scales.get(marketId) ?? null;
   }
 
   // ------------------------------------------------------------- normalizing
