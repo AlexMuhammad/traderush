@@ -9,3 +9,6 @@ broadcast/
 .DS_Store
 packages/contracts/lib/
 apps/web/.vite/
+.vercel
+.env*
+!.env.example
