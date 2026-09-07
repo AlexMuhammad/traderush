@@ -63,14 +63,22 @@ export function useMarkets(): { markets: MarketSummary[]; error: string | null; 
 
   useEffect(() => {
     let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    // Chained, not on an interval. The indexer behind this has answered the same
+    // query in under a second and in over thirty; on a fixed 5s tick the slow
+    // case opened a seventh request before the first came back, and the pile-up
+    // was its own cause. The next poll is scheduled from the end of the last.
     const load = () => apiMarkets()
       .catch(() => market.listMarkets())
       .then((m) => { if (alive) { setMarkets(m); setError(null); } })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => { if (alive) setLoading(false); });
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+        timer = setTimeout(load, 5_000);
+      });
     load();
-    const t = setInterval(load, 5_000);
-    return () => { alive = false; clearInterval(t); };
+    return () => { alive = false; clearTimeout(timer); };
   }, [market]);
 
   return { markets, error, loading };

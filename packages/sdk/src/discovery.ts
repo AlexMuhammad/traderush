@@ -55,6 +55,31 @@ function toStatus(raw: string, voided: boolean): MarketStatus {
 const num = (v: string | null | undefined): number =>
   v === null || v === undefined || v === '' ? 0 : Number(v);
 
+/**
+ * How long any one indexer query is allowed to hold a screen.
+ *
+ * Measured on Shannon: the same 0.5KB query answered in 812ms, 9.6s and 26.9s
+ * within one minute, against a 500ms round trip to the same host for a trivial
+ * one. The variance is the indexer's, not the network's, and nothing here can
+ * make it faster — but waiting the worst case is a choice, and it was the wrong
+ * one. Past this the answer is treated as absent, which every caller below
+ * already handles: a market list falls back to what it last knew, and an
+ * enrichment falls back to null.
+ */
+const LIST_DEADLINE_MS = 6_000;
+/** Enrichment gets less. It decorates rows that are already on screen. */
+const ENRICH_DEADLINE_MS = 3_500;
+
+/** Stop WAITING at `ms`. The request is left to finish on its own — the markets
+ *  SDK exposes no abort signal — so this bounds the screen, not the socket. */
+function deadline<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    p.then((v) => { clearTimeout(timer); resolve(v); },
+           () => { clearTimeout(timer); resolve(fallback); });
+  });
+}
+
 export class MarketDiscovery {
   private exchange: SomniaMarkets | null = null;
   /** Oracle price scale per asset, inferred once — see `strikeScaleFor`. */
@@ -65,6 +90,22 @@ export class MarketDiscovery {
   private readonly priceWatches: PriceWatchHandle[] = [];
   /** Candle backfills, keyed by asset and window open. */
   private readonly candles = new Map<string, { t: number; price: number }[]>();
+  /** The last list that actually arrived, and the fetch currently in flight.
+   *  The console polls every five seconds against a query that has taken thirty;
+   *  without these, every tick opened another request on a host already failing
+   *  to answer the first, and the pile-up is its own cause. */
+  private lastLive: BinaryMarketSummary[] | null = null;
+  private liveInFlight: Promise<BinaryMarketSummary[]> | null = null;
+  /** A window's opening price is fixed the moment the window opens — it is the
+   *  answer the market resolves AGAINST, not a quote. Re-asking for it on every
+   *  poll bought nothing and cost the slowest query in the set, so the first
+   *  answer is kept for good. Without this the enrichment deadline below simply
+   *  deleted `strike`, which is the whole up/down question. */
+  private readonly openingPrices = new Map<string, string>();
+  /** Book tops DO move, so these are only a floor: when a refresh does not come
+   *  back in time the row keeps the last top it had instead of flipping to
+   *  "no book" and back. */
+  private readonly lastTops = new Map<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }>();
 
   constructor(private readonly cfg: TradeRushConfig) {}
 
@@ -90,10 +131,33 @@ export class MarketDiscovery {
    *  windows entirely — on Shannon the 1m/5m markets sit on a different venue
    *  than the 1h/4h/24h ones. See `scopeToVenue` in config.ts. */
   async listLive(): Promise<BinaryMarketSummary[]> {
+    // One request at a time. Callers that arrive mid-flight join the one already
+    // running rather than starting another.
+    const flight = this.liveInFlight
+      ??= this.fetchLive().finally(() => { this.liveInFlight = null; });
+
+    // Known list: hand it back NOW and let the refresh land on its own. Waiting
+    // on a query that answers in eighteen seconds, to replace rows five seconds
+    // old with rows zero seconds old, is the whole delay and none of the value.
+    // Every caller here polls, so the next tick collects what this one started.
+    if (this.lastLive) {
+      flight.catch(() => { /* the poll after this one tries again */ });
+      return this.lastLive;
+    }
+
+    // Nothing known yet, so there is nothing to show instead: wait it out and
+    // hand back what the indexer really says, including a rejection. An indexer
+    // that is down has to read as down, not as a venue with no markets.
+    return flight;
+  }
+
+  private async fetchLive(): Promise<BinaryMarketSummary[]> {
     const rows = await this.client.listLiveBinaryMarkets(
       this.cfg.scopeToVenue ? { venueId: this.cfg.venueId } : undefined,
     );
-    return this.hydrate(rows);
+    const hydrated = await this.hydrate(rows);
+    this.lastLive = hydrated;
+    return hydrated;
   }
 
   /** Gotcha §8.8 — settled markets leave the live list, and the registry sweep
@@ -251,16 +315,35 @@ export class MarketDiscovery {
     // when the window opens, not a number fixed at creation. Without it the
     // strike reads zero and the up/down question is meaningless. Fixed-strike
     // markets are absent from this map and keep their own strike.
+    //
+    // Both are bounded. `getBookTops` was measured hanging past twenty-five
+    // seconds and then failing — and because the failure was caught but never
+    // timed, the whole list waited for it before rendering rows that did not
+    // need it. A book top that is not back in three and a half seconds is a
+    // book top the row renders without.
+    // Only ask for the openings still unknown. Once every live window has been
+    // seen once this list is empty and the query is skipped outright.
+    const missing = ids.filter((id) => !this.openingPrices.has(id.toLowerCase()));
+
     const [tops, opening] = await Promise.all([
-      this.client.getBookTops(ids)
-        .catch(() => ({} as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }>)),
-      this.client.getOpeningPrices(ids)
-        .catch(() => ({} as Record<string, string | null>)),
+      deadline(
+        this.client.getBookTops(ids),
+        ENRICH_DEADLINE_MS,
+        null as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> | null,
+      ),
+      missing.length
+        ? deadline(this.client.getOpeningPrices(missing), ENRICH_DEADLINE_MS, null as Record<string, string | null> | null)
+        : Promise.resolve(null),
     ]);
+
+    for (const [k, v] of Object.entries(opening ?? {})) {
+      if (v !== null && v !== undefined && v !== '') this.openingPrices.set(k.toLowerCase(), v);
+    }
+    for (const [k, v] of Object.entries(tops ?? {})) this.lastTops.set(k.toLowerCase(), v);
 
     return rows.map((r) => {
       const key = r.marketId.toLowerCase();
-      return this.toSummary(r, tops[key], opening[key] ?? null);
+      return this.toSummary(r, tops?.[key] ?? this.lastTops.get(key), this.openingPrices.get(key) ?? null);
     });
   }
 
