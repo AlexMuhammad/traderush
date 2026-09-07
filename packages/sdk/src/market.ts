@@ -1,6 +1,6 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
 import type { TradeRushConfig } from './config.js';
-import { MarketDiscovery, type BinaryMarketSummary } from './discovery.js';
+import { MarketDiscovery, type BinaryMarketSummary, type OpeningStore } from './discovery.js';
 import { binaryModuleReadAbi, erc20Abi, MARKET } from './abi.js';
 import { expireTimestampNs, DEFAULT_TIME_IN_FORCE } from './ticks.js';
 import { type MarketState, type Position, type Side, type VenueAddresses } from './types.js';
@@ -50,6 +50,9 @@ export interface MarketAdapterOptions {
   lotSize?: bigint;
   /** How often watch() re-reads the indexer. */
   pollMs?: number;
+  /** Where opening prices survive a reload — see `OpeningStore`. Without one
+   *  they are still cached, just only for the life of this adapter. */
+  openings?: OpeningStore;
 }
 
 /** §5.1 — read + book writes. Composes with DuelAdapter; neither replaces the other. */
@@ -66,7 +69,7 @@ export class MarketAdapter {
   private readonly cache = new Map<string, MarketState>();
 
   constructor(private readonly cfg: TradeRushConfig, opts: MarketAdapterOptions = {}) {
-    this.discovery = new MarketDiscovery(cfg);
+    this.discovery = new MarketDiscovery(cfg, opts.openings);
     this.publicClient = opts.publicClient ?? (createPublicClient({
       chain: cfg.chain,
       transport: http(cfg.rpcUrl),

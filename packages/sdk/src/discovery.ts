@@ -80,6 +80,25 @@ function deadline<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   });
 }
 
+/**
+ * Somewhere an opening price survives a reload.
+ *
+ * A window's opening price is fixed the moment the window opens and is what the
+ * market resolves against — it is the one number here that is safe to keep
+ * forever. Asking the indexer for it again on every page load is the difference
+ * between a strike that is on the glass with the first frame and one that shows
+ * up most of a minute later, because that query is measured at 2.4s, 9.3s, 8.6s
+ * and then a 30s failure.
+ *
+ * Passed in rather than reached for, so the SDK does not have to know whether it
+ * is in a browser: the console hands it localStorage, scripts hand it nothing
+ * and keep the in-memory map they already had.
+ */
+export interface OpeningStore {
+  load(): Record<string, string>;
+  save(all: Record<string, string>): void;
+}
+
 export class MarketDiscovery {
   private exchange: SomniaMarkets | null = null;
   /** Oracle price scale per MARKET, inferred once — see `strikeScaleFor`. */
@@ -113,7 +132,14 @@ export class MarketDiscovery {
   private readonly lastTops = new Map<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }>();
   private openingsInFlight = false;
 
-  constructor(private readonly cfg: TradeRushConfig) {}
+  constructor(private readonly cfg: TradeRushConfig, private readonly store?: OpeningStore) {
+    // Whatever a previous visit already learned. Nothing here is fetched.
+    if (store) {
+      try {
+        for (const [k, v] of Object.entries(store.load())) this.openingPrices.set(k, v);
+      } catch { /* a cache that cannot be read is just a cold one */ }
+    }
+  }
 
   private get ex(): SomniaMarkets {
     this.exchange ??= new SomniaMarkets({
@@ -345,8 +371,15 @@ export class MarketDiscovery {
     // timed, the whole list waited for it before rendering rows that did not
     // need it. A book top that is not back in three and a half seconds is a
     // book top the row renders without.
-    // Openings are fetched OFF this path — see `primeOpenings`.
-    void this.primeOpenings(ids);
+    // Openings are fetched off this path — see `primeOpenings` — with one
+    // exception. When NOTHING is known for any of these rows, the strike would
+    // render as unknown on every one of them, and a board of windows whose only
+    // question is "which side of this price" is not worth painting a moment
+    // earlier without the price. So a cold start waits, briefly, and a warm one
+    // never does. The cache outlives the page, so this is paid once.
+    const cold = ids.every((id) => !this.openingPrices.has(id.toLowerCase()));
+    const priming = this.primeOpenings(ids);
+    if (cold) await deadline(priming, ENRICH_DEADLINE_MS, undefined);
 
     const tops = await deadline(
       this.client.getBookTops(ids),
@@ -378,34 +411,63 @@ export class MarketDiscovery {
    * window opens and never moves.
    */
   private async primeOpenings(ids: string[]): Promise<void> {
-    const missing = ids.filter((id) => !this.openingPrices.has(id.toLowerCase()));
-    if (!missing.length || this.openingsInFlight) return;
+    if (this.openingsInFlight) return;
+    const wanted = () => ids.filter((id) => !this.openingPrices.has(id.toLowerCase()));
+    if (!wanted().length) return;
     this.openingsInFlight = true;
     try {
-      const opening = await this.client.getOpeningPrices(missing);
-      let learned = false;
-      for (const [k, v] of Object.entries(opening)) {
-        if (v !== null && v !== undefined && v !== '') {
-          this.openingPrices.set(k.toLowerCase(), v);
-          learned = true;
-        }
+      // Retried on its OWN clock, not the list's. Tied to the poll, a failed
+      // openings query waited out a whole eighteen-second list refresh before
+      // trying again, and two unlucky attempts put the strike most of a minute
+      // behind a screen that was otherwise finished — which is exactly how this
+      // was reported. The delays are short because the answer is small and the
+      // failures are the host's, not ours.
+      for (const backoffMs of [0, 1_000, 2_500, 5_000]) {
+        const missing = wanted();
+        if (!missing.length) return;
+        if (backoffMs) await new Promise((r) => setTimeout(r, backoffMs));
+        try {
+          if (this.learn(await this.client.getOpeningPrices(missing))) return;
+        } catch { /* fall through to the next attempt */ }
       }
-      // Fold it straight into the list already on screen. No network, no list
-      // query — the rows are held for exactly this. Without it the strike is
-      // correct but arrives a whole refresh late, which is the part that reads
-      // as broken: a number that shows up eventually, at no time you can name.
-      if (learned && this.lastRaw) {
-        this.lastLive = this.lastRaw.map((r) => {
-          const key = r.marketId.toLowerCase();
-          return this.toSummary(r, this.lastTops.get(key), this.openingPrices.get(key) ?? null);
-        });
-      }
-    } catch {
-      // The next poll asks again. Nothing on screen depends on this having
-      // worked THIS time.
     } finally {
       this.openingsInFlight = false;
     }
+  }
+
+  /** Take what an openings answer taught us: keep it, persist it, and fold it
+   *  into the list already on screen — no network, no list query, because the
+   *  raw rows are held for exactly this. Without the fold the strike is correct
+   *  but arrives a whole refresh late, which is the part that reads as broken:
+   *  a number that turns up eventually, at no time anyone can name. */
+  private learn(opening: Record<string, string | null>): boolean {
+    let learned = false;
+    for (const [k, v] of Object.entries(opening)) {
+      if (v !== null && v !== undefined && v !== '') {
+        this.openingPrices.set(k.toLowerCase(), v);
+        learned = true;
+      }
+    }
+    if (!learned) return false;
+    this.persistOpenings();
+    if (this.lastRaw) {
+      this.lastLive = this.lastRaw.map((r) => {
+        const key = r.marketId.toLowerCase();
+        return this.toSummary(r, this.lastTops.get(key), this.openingPrices.get(key) ?? null);
+      });
+    }
+    return true;
+  }
+
+  /** Hand the learned openings back to whoever is keeping them. Bounded, because
+   *  windows expire and their ids never come back: without a cap this grows for
+   *  as long as the browser profile lives. */
+  private persistOpenings(): void {
+    if (!this.store) return;
+    const entries = [...this.openingPrices.entries()].slice(-500);
+    this.openingPrices.clear();
+    for (const [k, v] of entries) this.openingPrices.set(k, v);
+    try { this.store.save(Object.fromEntries(entries)); } catch { /* full or blocked; memory still has it */ }
   }
 
   private toSummary(

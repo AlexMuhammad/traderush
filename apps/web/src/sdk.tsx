@@ -29,10 +29,38 @@ interface Ctx {
 
 const SdkCtx = createContext<Ctx | null>(null);
 
+/**
+ * Opening prices, kept across reloads.
+ *
+ * They cannot go stale: a window's opening price is fixed when the window opens
+ * and is the number it resolves against. Without this every load asked the
+ * indexer again and the strike arrived when it arrived — measured at anything
+ * from two seconds to most of a minute — so the console showed a window whose
+ * whole question is "which side of this price" without the price.
+ *
+ * Every access is wrapped: a private window, cleared site data or a browser set
+ * to block storage all throw here rather than return empty, and none of that is
+ * a reason to fail to draw a market.
+ */
+const OPENINGS_KEY = 'traderush.openings.v1';
+
+const openingStore = {
+  load(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem(OPENINGS_KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {};
+    } catch { return {}; }
+  },
+  save(all: Record<string, string>): void {
+    try { localStorage.setItem(OPENINGS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
+  },
+};
+
 export function SdkProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Ctx>(() => {
     const cfg = loadConfig(import.meta.env as unknown as Record<string, string | undefined>);
-    const market = new MarketAdapter(cfg);
+    const market = new MarketAdapter(cfg, { openings: openingStore });
     let duels: DuelAdapter | null = null;
     let duelsError: string | null = null;
     try { duels = new DuelAdapter(cfg); }

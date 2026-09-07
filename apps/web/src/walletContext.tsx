@@ -110,10 +110,37 @@ function PrivyWallet({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, [authenticated, active, address, walletChain, cfg.chain]);
 
+  /**
+   * Open the sign-in modal — and never, under any branch, do nothing.
+   *
+   * Both early returns here used to be silent, and the second one is a dead end
+   * rather than a wait. `login()` is a no-op once Privy considers the session
+   * authenticated, so an authenticated session that produced NO wallet leaves
+   * `conn` null forever: the gate stays up because `!conn`, and every press of
+   * Start returns on that line without opening anything. Nothing on the glass,
+   * nothing in the console, nothing to try. That is the shape this was reported
+   * as — "klik start tidak menampilkan connect wallet".
+   *
+   * The wallet list is what tells the two apart. Authenticated WITH a wallet is
+   * a handover still in flight and worth a moment's wait; authenticated with an
+   * empty list is a session that cannot become a connection, so it is dropped
+   * and the next press opens the modal properly.
+   */
   const doConnect = () => {
-    if (!ready) return;
+    if (!ready) {
+      setError('Still waking up — press Start again in a moment.');
+      return;
+    }
     setError(null);
-    if (authenticated) return;      // already in; the wallet effect will catch up
+    if (authenticated) {
+      if (wallets.length > 0) {
+        setError('Finishing sign-in…');   // the effect above is mid-handover
+      } else {
+        setError('That session came back without a wallet. Signing it out — press Start again.');
+        void logout();
+      }
+      return;
+    }
     setConnecting(true);
     try { login(); } finally { setConnecting(false); }
   };
