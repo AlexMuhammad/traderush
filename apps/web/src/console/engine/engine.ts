@@ -259,15 +259,44 @@ export class Engine implements Scene {
   attachCanvas(canvas: HTMLCanvasElement): void {
     this.ctx = canvas.getContext('2d');
     this.fit();
+    /*
+     * Re-fit whenever the CANVAS changes size, not just the window.
+     *
+     * `fit()` used to run exactly twice: once here, and on `window.resize`. A
+     * canvas's box can change without either. It happens on an ordinary first
+     * load — `attachCanvas` runs on mount, and the CRT settles a frame or two
+     * later once fonts and layout land — and the backing store keeps the size
+     * it was measured at. The engine then draws a scene sized for the old box
+     * into an element that is now bigger, so the chart, the strike line and the
+     * animals all sit in the top-left corner with dead black around them, and
+     * the game looks broken while every number beside it is correct.
+     *
+     * It is a resize the window never hears about, so a resize listener cannot
+     * catch it. An observer on the element itself can.
+     */
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => this.fit());
+    this.resizeObserver.observe(canvas);
   }
+
+  private resizeObserver: ResizeObserver | null = null;
+  /** The pixel ratio the backing store was last sized for. */
+  private fitDpr = 0;
 
   /** Sizes the backing store to the CSS box at device pixel ratio. */
   fit = (): void => {
     const c = this.ctx; if (!c) return;
     const r = c.canvas.getBoundingClientRect();
     const dpr = Math.min(2, devicePixelRatio || 1);
-    c.canvas.width = r.width * dpr;
-    c.canvas.height = r.height * dpr;
+    const w = Math.round(r.width * dpr);
+    const h = Math.round(r.height * dpr);
+    // Assigning to width/height CLEARS the canvas, so only do it when the size
+    // actually changed. The observer fires on every layout pass that touches
+    // the element, and a wipe on each one is a visible flicker.
+    if (w === c.canvas.width && h === c.canvas.height && dpr === this.fitDpr) return;
+    c.canvas.width = w;
+    c.canvas.height = h;
+    this.fitDpr = dpr;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
 
@@ -295,6 +324,8 @@ export class Engine implements Scene {
     clearInterval(this.priceTimer);
     clearInterval(this.clockTimer);
     removeEventListener('resize', this.fit);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     for (const t of this.timeouts) clearTimeout(t);
     this.timeouts = [];
     this.listeners.clear();
@@ -313,7 +344,23 @@ export class Engine implements Scene {
     // detached canvas is pure waste, and it keeps the price feed's work alive
     // for nothing.
     if (this.ctx && this.ctx.canvas.isConnected) {
-      renderScene(this.ctx, this, dt, Math.min(2, devicePixelRatio || 1));
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      /*
+       * Re-fit when the PIXEL RATIO changes, not only when the box does.
+       *
+       * Drag a window from a Retina screen to an external 1x monitor and the
+       * element keeps its exact CSS size: no `resize` event, nothing for a
+       * ResizeObserver to report. But the backing store is still twice the size
+       * it should be, while `renderScene` is now handed dpr 1 and draws at 1:1
+       * — so the picture lands in the top-left QUARTER of the canvas with black
+       * around it, and stays there. Browser zoom does the same thing.
+       *
+       * Nothing else in the app can notice this, so the render loop checks it:
+       * one comparison a frame, against the ratio the buffer was actually
+       * sized for.
+       */
+      if (dpr !== this.fitDpr) this.fit();
+      renderScene(this.ctx, this, dt, dpr);
     }
     this.raf = requestAnimationFrame(this.loop);
   };
