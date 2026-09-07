@@ -11,10 +11,21 @@ import { SideIcon } from './SideIcon';
  *  you are watching, with that side already taken. One currency, one way in.
  *
  *  Each key shows the book's implied probability and the multiple it would pay.
- *  When a side has no liquidity the key says so rather than silently failing.
+ *
+ *  Whether it CAN pay is a separate question, and the key used to answer it with
+ *  the wrong number. `dryUp` is a price threshold — "below 4% implied, call it
+ *  dry" — not a reading of the book, so a key could say "no liquidity" about a
+ *  side that was quoted merely because it was cheap, and offer a confident
+ *  "×10.9" on a side with no resting ask at all. The returns line directly above
+ *  it read the pool and said "no offer" at the same moment. One of them was
+ *  lying and it was this one.
+ *
+ *  The book decides now, through the same `useTakeSide` the returns line uses.
+ *  Three states, because there are three: not read yet, read and empty, read and
+ *  quoted. The multiple is only ever shown for the third.
  */
 export function CallKeys({
-  engine, s, onTake, disabled, pending, armed, armedLabel,
+  engine, s, onTake, disabled, pending, armed, armedLabel, liquid, bookKnown,
 }: {
   engine: Engine;
   s: ConsoleSnapshot;
@@ -28,6 +39,10 @@ export function CallKeys({
   armed: 'up' | 'down' | null;
   /** What that second press would cost, already formatted. */
   armedLabel: string;
+  /** Is this side actually being offered? Read from the pool, not from a price. */
+  liquid: (side: 'up' | 'down') => boolean;
+  /** Has the book been read at all? Until it has, "no offer" would be a guess. */
+  bookKnown: boolean;
 }) {
   const upPct = Math.round(s.upP * 100);
   // The horn locks them, and so does anything the pad above is complaining
@@ -35,8 +50,8 @@ export function CallKeys({
   const locked = s.phase !== 'trade' || disabled;
 
   const sides = [
-    { side: 'up' as const, name: 'UP', pct: upPct, mult: 1 / s.upP, dry: s.dryUp },
-    { side: 'down' as const, name: 'DOWN', pct: 100 - upPct, mult: 1 / (1 - s.upP), dry: s.dryDown },
+    { side: 'up' as const, name: 'UP', pct: upPct, mult: 1 / s.upP, dry: bookKnown && !liquid('up') },
+    { side: 'down' as const, name: 'DOWN', pct: 100 - upPct, mult: 1 / (1 - s.upP), dry: bookKnown && !liquid('down') },
   ];
 
   return (
@@ -62,7 +77,8 @@ export function CallKeys({
           <span className="mul">
             {pending === k.side ? 'placing…'
               : armed === k.side ? armedLabel
-              : k.dry ? 'no liquidity'
+              : !bookKnown ? 'reading…'
+              : k.dry ? 'no offer'
               : `×${k.mult.toFixed(1)}`}
           </span>
         </Key>

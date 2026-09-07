@@ -175,6 +175,19 @@ export function useTakeSide(
    *  somebody's resting order. */
   const liquid = (side: 'up' | 'down') => paper || costRaw(side) !== null;
 
+  /**
+   * Whether the book has been READ yet — which is not the same as whether it
+   * holds anything.
+   *
+   * `useBookTop` starts at null and stays there until the first eth_call lands,
+   * so `liquid` is false for a moment on every window before it is false for a
+   * reason. A key that says "no offer" during that moment is making the same
+   * kind of claim as one that offers a price nobody is quoting; it just happens
+   * to be wrong in the other direction. Callers that render the difference ask
+   * this first.
+   */
+  const bookKnown = paper || top !== null;
+
   // The engine draws whatever the wallet is holding. One place decides it, and
   // it is the chain.
   // In the demo the position is the paper one, and the pad has to read it from
@@ -369,7 +382,7 @@ export function useTakeSide(
 
   return {
     amountStr, setAmountStr, amount, balance, blocker, ready, pending, error,
-    returns, liquid, press, armed, exit, exitAt, tradeable, held: heldTokens, heldSide,
+    returns, liquid, bookKnown, press, armed, exit, exitAt, tradeable, held: heldTokens, heldSide,
     approving: allow.approving,
     symbol: money.symbol, format: money.format,
   };
