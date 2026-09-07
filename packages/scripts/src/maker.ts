@@ -164,6 +164,40 @@ async function quoteOne(m: Awaited<ReturnType<typeof market.listMarkets>>[number
   }
 }
 
+/**
+ * Cancel whatever this wallet already has resting, before quoting again.
+ *
+ * `--leave` means a run ends with orders on the book, which is the point — but
+ * it also means the NEXT run arrives to find its own stale quotes there. Two
+ * things go wrong if it just adds to them. The book fills with prices from
+ * however many runs ago, and a fresh bid can cross an old ask from the same
+ * wallet: the first scheduled run came back with
+ * `placeBinaryOrder reverted: SelfMatchCancelTaker()` on exactly that.
+ *
+ * The escrow is the bigger half. Every resting bid holds collateral and every
+ * ask holds minted inventory, so orders that are never cancelled are capital
+ * that is never returned — measured at about 25 tUSDC a run, which on a
+ * half-hourly schedule is over a thousand a day.
+ *
+ * So a run is a REPRICE, not an addition: cancel everything of ours first, post
+ * fresh, and leave that. Read from the indexer, which lags, so this is
+ * best-effort — a stale list cancels nothing that matters and a missing one
+ * only costs us the tidy-up this time round.
+ */
+async function sweepStale(): Promise<void> {
+  const open = await client.getOpenOrders(A.address).catch(() => null);
+  if (!open) { console.log(fmt.warn('could not read open orders — quoting on top of whatever is there')); return; }
+  if (!open.length) return;
+  console.log(fmt.head(`cancelling ${open.length} orders left by earlier runs`));
+  for (const o of open) {
+    await trader.cancelOrder({ pool: o.pool as `0x${string}`, orderId: BigInt(o.orderId) })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(fmt.warn(`  #${o.orderId}: ${(msg.split('\n')[0] ?? msg).slice(0, 70)}`));
+      });
+  }
+}
+
 async function pass(): Promise<void> {
   live = (await market.listMarkets()).sort((a, b) => a.intervalSec - b.intervalSec);
   console.log(fmt.head(`quoting ${live.length} windows · ${formatUnits(await market.balance(A.address), cfg.decimals)} ${cfg.collateralSymbol}`));
@@ -211,6 +245,9 @@ process.on('SIGINT', () => {
 });
 
 let live: Awaited<ReturnType<typeof market.listMarkets>> = [];
+// Only the leave-behind runs inherit orders; an attended run cancels its own on
+// the way out and starts from a book it did not leave anything on.
+if (leave) await sweepStale();
 await pass();
 if (watch) {
   console.log(fmt.head('watching — ctrl-c to pull the quotes'));

@@ -17,8 +17,14 @@
 # TO SET THIS UP, one secret:
 #   Settings -> Secrets and variables -> Actions -> New repository secret
 #   Name:  MAKER_PRIVATE_KEY
-#   Value: a THROWAWAY testnet key, funded with tUSDC from the faucet and a
-#          little STT for gas. Never a key that holds anything you would miss.
+#   Value: a THROWAWAY testnet key, funded with tUSDC from the faucet and STT
+#          for gas. Never a key that holds anything you would miss.
+#
+# KEEP IT TOPPED UP. Gas is what runs out first: about 0.1 STT a run, so four
+# runs a day is roughly 0.4 STT a day. When the STT is gone the quotes are not
+# refreshed and the ones already resting simply expire with their windows — the
+# book goes quiet without any error to notice. Check the wallet before anything
+# that matters.
 #
 # TO STOP IT: disable the workflow in the Actions tab, then run `pnpm maker`
 # once locally with the same key — a plain run cancels everything that wallet
@@ -27,10 +33,19 @@ name: maker
 
 on:
   schedule:
-    # Every 30 minutes. GitHub's cron is best-effort on a free runner and can
-    # drift by ten minutes or more; that is fine here, because the orders from
-    # the previous run are still on the book while this one is late.
-    - cron: '*/30 * * * *'
+    # Every six hours, and that is already generous.
+    #
+    # A run costs about 0.1 STT in gas — ten-odd transactions, and Somnia meters
+    # them in the tens of millions of gas each. Half-hourly was 4.8 STT a day
+    # against a maker wallet holding 0.6, which is a schedule that stops inside
+    # an afternoon. GAS IS THE BINDING RESOURCE HERE, not the collateral.
+    #
+    # It can afford to be this sparse because the orders do not need it: they
+    # rest until the market they were posted on expires, so the schedule is only
+    # repricing and picking up new windows. GitHub's cron is best-effort on a
+    # free runner and can drift; the previous run's quotes are still on the book
+    # while this one is late.
+    - cron: '0 */6 * * *'
   # So a run can be forced before a demo rather than waited for.
   workflow_dispatch:
 
