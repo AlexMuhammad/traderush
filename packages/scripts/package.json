@@ -14,10 +14,12 @@
     "e2e:room": "tsx --env-file-if-exists=../../.env src/e2e-room.ts",
     "e2e:book": "tsx --env-file-if-exists=../../.env src/e2e-book.ts",
     "settle": "tsx --env-file-if-exists=../../.env src/settle.ts",
+    "windows": "tsx --env-file-if-exists=../../.env src/windows.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@traderush/sdk": "workspace:*",
+    "@somnia-chain/markets-sdk": "^0.28.1",
     "viem": "^2.31.0",
     "ws": "^8.18.0"
   },

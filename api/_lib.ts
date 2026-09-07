@@ -53,19 +53,41 @@ export function limitParam(req: any, fallback: number, max: number): number {
   return Number.isFinite(n) ? Math.max(1, Math.min(max, Math.floor(n))) : fallback;
 }
 
-export async function marketAdapter(cfg?: TradeRushConfig): Promise<MarketAdapter> {
-  const [{ MarketAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
-  return new MarketAdapter(resolved);
+/**
+ * Adapters live for the life of the container, not the life of a request.
+ *
+ * They are where the caches sit — the last good market list, every window's
+ * opening price, the last book top — and a per-request adapter threw all of it
+ * away and paid the cold path again, every time. Held here, a warm invocation
+ * answers from memory and refreshes behind the response, which is the same
+ * shape as the `stale-while-revalidate` the handlers already send downstream.
+ *
+ * Nothing here holds a socket: only `MarketAdapter.watch()` and the price feed
+ * do, and no handler calls either.
+ */
+let markets: Promise<MarketAdapter> | null = null;
+let duels: Promise<DuelAdapter> | null = null;
+let rooms: Promise<RoomAdapter> | null = null;
+
+export function marketAdapter(cfg?: TradeRushConfig): Promise<MarketAdapter> {
+  return markets ??= (async () => {
+    const [{ MarketAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
+    return new MarketAdapter(resolved);
+  })();
 }
 
-export async function duelAdapter(cfg?: TradeRushConfig): Promise<DuelAdapter> {
-  const [{ DuelAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
-  return new DuelAdapter(resolved);
+export function duelAdapter(cfg?: TradeRushConfig): Promise<DuelAdapter> {
+  return duels ??= (async () => {
+    const [{ DuelAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
+    return new DuelAdapter(resolved);
+  })();
 }
 
-export async function roomAdapter(cfg?: TradeRushConfig): Promise<RoomAdapter> {
-  const [{ RoomAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
-  return new RoomAdapter(resolved);
+export function roomAdapter(cfg?: TradeRushConfig): Promise<RoomAdapter> {
+  return rooms ??= (async () => {
+    const [{ RoomAdapter }, resolved] = await Promise.all([sdk(), cfg ?? config()]);
+    return new RoomAdapter(resolved);
+  })();
 }
 
 export function fail(res: any, e: unknown) {

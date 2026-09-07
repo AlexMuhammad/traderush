@@ -123,8 +123,17 @@ export function human(seconds: number): string {
 export const money = (n: number): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * An asset price. Zero is not one.
+ *
+ * Every caller here is a strike or a spot, and neither BTC nor ETH is ever
+ * worth nothing — a zero means the number has not arrived yet. Reference-mode
+ * windows carry `strike: "0"` until the opening answer is fetched, and printing
+ * that as "0.00" states a price the market never had. A dash says the one true
+ * thing: not known yet.
+ */
 export const price = (n: number): string =>
-  n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n > 0 ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 
 export function mmss(seconds: number): string {
   const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);

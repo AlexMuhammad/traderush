@@ -28,13 +28,16 @@ export function ScreenDuels({
   useEffect(() => {
     if (!duels || !conn) return;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    // Scheduled from the end of the last poll, not on a fixed tick: a slow
+    // answer must not have a second request stacked on top of it.
     const load = () => apiDuels(conn.account.address)
       .catch(() => duels.listFor(conn.account.address))
       .then((r) => { if (alive) { setRows(r); setError(null); } })
-      .catch((e) => { if (alive) setError(e); });
+      .catch((e) => { if (alive) setError(e); })
+      .finally(() => { if (alive) timer = setTimeout(load, 6_000); });
     load();
-    const t = setInterval(load, 6_000);
-    return () => { alive = false; clearInterval(t); };
+    return () => { alive = false; clearTimeout(timer); };
   }, [duels, conn]);
 
   const me = conn?.account.address.toLowerCase();

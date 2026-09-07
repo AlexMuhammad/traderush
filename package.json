@@ -20,6 +20,7 @@
     "e2e:room": "pnpm --filter @traderush/scripts e2e:room",
     "e2e:book": "pnpm --filter @traderush/scripts e2e:book",
     "settle": "pnpm --filter @traderush/scripts settle",
+    "windows": "pnpm --filter @traderush/scripts windows",
     "deploy:escrow": "pnpm --filter @traderush/contracts deploy",
     "smoke": "pnpm --filter @traderush/web smoke",
     "test:contracts": "pnpm --filter @traderush/contracts test",

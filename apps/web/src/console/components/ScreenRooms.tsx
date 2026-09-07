@@ -27,13 +27,16 @@ export function ScreenRooms({
   useEffect(() => {
     if (!rooms || !conn) return;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    // Scheduled from the end of the last poll, not on a fixed tick: a slow
+    // answer must not have a second request stacked on top of it.
     const load = () => apiRooms(conn.account.address)
       .catch(() => rooms.listFor(conn.account.address))
       .then((r) => { if (alive) { setList(r); setError(null); } })
-      .catch((e) => { if (alive) setError(e); });
+      .catch((e) => { if (alive) setError(e); })
+      .finally(() => { if (alive) timer = setTimeout(load, 6_000); });
     load();
-    const t = setInterval(load, 6_000);
-    return () => { alive = false; clearInterval(t); };
+    return () => { alive = false; clearTimeout(timer); };
   }, [rooms, conn]);
 
   const items: ScreenItem[] = (list ?? []).map(({ room, seat }) => {
