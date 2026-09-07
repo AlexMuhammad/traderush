@@ -238,7 +238,9 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
     c.setLineDash([]);
 
     c.font = '400 9px Share Tech Mono, monospace';
-    const strikeLabel = 'STRIKE ' + R.strike.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+    const strikeLabel = 'STRIKE ' + (R.strike > 0
+      ? R.strike.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
+      : '—');
     c.fillStyle = 'rgba(0,0,0,.55)';
     c.fillRect(3, ly - 13, c.measureText(strikeLabel).width + 6, 11);
     c.fillStyle = 'rgba(255,200,87,.9)';

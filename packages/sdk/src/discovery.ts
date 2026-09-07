@@ -82,7 +82,7 @@ function deadline<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
 
 export class MarketDiscovery {
   private exchange: SomniaMarkets | null = null;
-  /** Oracle price scale per asset, inferred once — see `strikeScaleFor`. */
+  /** Oracle price scale per MARKET, inferred once — see `strikeScaleFor`. */
   private readonly scales = new Map<string, number>();
   private readonly watchedAssets = new Set<string>();
   /** Live price subscriptions. They hold the process open until stopped, which
@@ -95,6 +95,11 @@ export class MarketDiscovery {
    *  without these, every tick opened another request on a host already failing
    *  to answer the first, and the pile-up is its own cause. */
   private lastLive: BinaryMarketSummary[] | null = null;
+  /** The raw rows behind `lastLive`. Kept so that an opening price arriving
+   *  after the list has rendered can be folded into it on the spot, instead of
+   *  making the screen wait out another eighteen-second list query to see a
+   *  number that is already in hand. */
+  private lastRaw: BinaryMarket[] | null = null;
   private liveInFlight: Promise<BinaryMarketSummary[]> | null = null;
   /** A window's opening price is fixed the moment the window opens — it is the
    *  answer the market resolves AGAINST, not a quote. Re-asking for it on every
@@ -106,6 +111,7 @@ export class MarketDiscovery {
    *  back in time the row keeps the last top it had instead of flipping to
    *  "no book" and back. */
   private readonly lastTops = new Map<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }>();
+  private openingsInFlight = false;
 
   constructor(private readonly cfg: TradeRushConfig) {}
 
@@ -155,6 +161,11 @@ export class MarketDiscovery {
     const rows = await this.client.listLiveBinaryMarkets(
       this.cfg.scopeToVenue ? { venueId: this.cfg.venueId } : undefined,
     );
+    // BEFORE hydrating, not after: `hydrate` starts the opening-price fetch, and
+    // that fetch folds its answer back into `lastRaw`. Assigned afterwards, a
+    // fetch that returned quickly found nothing to fold into and the strike sat
+    // out the whole next refresh.
+    this.lastRaw = rows;
     const hydrated = await this.hydrate(rows);
     this.lastLive = hydrated;
     return hydrated;
@@ -265,7 +276,7 @@ export class MarketDiscovery {
   }
 
   /**
-   * The oracle's price scale for an asset.
+   * The oracle's price scale for ONE MARKET.
    *
    * `strike` is documented as "raw, in the oracle's price scale" and that scale
    * is exposed nowhere — not on the market row, not on the answer. Parsing it
@@ -273,22 +284,35 @@ export class MarketDiscovery {
    * wording has already changed several times.
    *
    * So it is inferred: the strike and the live underlying describe the same
-   * price, so their ratio rounds to the power of ten between them. Measured on
-   * Shannon this is 1e2 (strike 7749385 against a feed price of 77481). Cached
-   * per asset, and only ever computed from a real feed reading.
+   * price, so their ratio rounds to the power of ten between them.
+   *
+   * PER MARKET, not per asset — this was keyed by asset and the two are not the
+   * same thing. Measured on Shannon within one minute, same feed price of
+   * 78818.72:
+   *
+   *     BTC 24H    opening 8034670        -> 1e2
+   *     BTC 1080H  opening 7961075000000  -> 1e8
+   *
+   * One asset, two live windows, six orders of magnitude apart. Keyed by asset,
+   * whichever window hydrated first set the divisor for the other, and the
+   * 1080H strike came out a million times too large. The scale belongs to the
+   * question a market resolves against, and each market has its own.
+   *
+   * Returns null rather than guessing when the feed has not reported: there is
+   * nothing to take a ratio against, and a wrong strike is worse than no strike.
    */
-  private strikeScaleFor(asset: string, rawStrike: number): number {
-    const cached = this.scales.get(asset);
+  private strikeScaleFor(marketId: string, asset: string, rawStrike: number): number | null {
+    const cached = this.scales.get(marketId);
     if (cached) return cached;
     const spot = this.underlying(asset);
     if (spot > 0 && rawStrike > 0) {
       const scale = 10 ** Math.round(Math.log10(rawStrike / spot));
       if (scale >= 1 && scale <= 1e18) {
-        this.scales.set(asset, scale);
+        this.scales.set(marketId, scale);
         return scale;
       }
     }
-    return DEFAULT_STRIKE_SCALE;
+    return null;
   }
 
   // ------------------------------------------------------------- normalizing
@@ -321,30 +345,67 @@ export class MarketDiscovery {
     // timed, the whole list waited for it before rendering rows that did not
     // need it. A book top that is not back in three and a half seconds is a
     // book top the row renders without.
-    // Only ask for the openings still unknown. Once every live window has been
-    // seen once this list is empty and the query is skipped outright.
-    const missing = ids.filter((id) => !this.openingPrices.has(id.toLowerCase()));
+    // Openings are fetched OFF this path — see `primeOpenings`.
+    void this.primeOpenings(ids);
 
-    const [tops, opening] = await Promise.all([
-      deadline(
-        this.client.getBookTops(ids),
-        ENRICH_DEADLINE_MS,
-        null as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> | null,
-      ),
-      missing.length
-        ? deadline(this.client.getOpeningPrices(missing), ENRICH_DEADLINE_MS, null as Record<string, string | null> | null)
-        : Promise.resolve(null),
-    ]);
-
-    for (const [k, v] of Object.entries(opening ?? {})) {
-      if (v !== null && v !== undefined && v !== '') this.openingPrices.set(k.toLowerCase(), v);
-    }
+    const tops = await deadline(
+      this.client.getBookTops(ids),
+      ENRICH_DEADLINE_MS,
+      null as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> | null,
+    );
     for (const [k, v] of Object.entries(tops ?? {})) this.lastTops.set(k.toLowerCase(), v);
 
     return rows.map((r) => {
       const key = r.marketId.toLowerCase();
       return this.toSummary(r, tops?.[key] ?? this.lastTops.get(key), this.openingPrices.get(key) ?? null);
     });
+  }
+
+  /**
+   * Fill in opening prices without holding anything up.
+   *
+   * Every live window here is reference-mode — `strike` arrives as "0" and the
+   * price the market resolves against is the reference question's opening
+   * answer. So this is not decoration: without it `strike` is zero and the
+   * up/down question means nothing.
+   *
+   * Which is exactly why it cannot sit behind a deadline on the render path.
+   * Measured: 2.4s, 9.3s, 8.6s, then a 30s failure. Any bound short enough to
+   * protect the list is short enough to delete the strike most of the time, and
+   * a bound long enough to catch it is longer than the list is worth waiting
+   * for. So it runs beside the list instead, retried by each poll until it
+   * lands, and kept for good once it does — an opening price is fixed when the
+   * window opens and never moves.
+   */
+  private async primeOpenings(ids: string[]): Promise<void> {
+    const missing = ids.filter((id) => !this.openingPrices.has(id.toLowerCase()));
+    if (!missing.length || this.openingsInFlight) return;
+    this.openingsInFlight = true;
+    try {
+      const opening = await this.client.getOpeningPrices(missing);
+      let learned = false;
+      for (const [k, v] of Object.entries(opening)) {
+        if (v !== null && v !== undefined && v !== '') {
+          this.openingPrices.set(k.toLowerCase(), v);
+          learned = true;
+        }
+      }
+      // Fold it straight into the list already on screen. No network, no list
+      // query — the rows are held for exactly this. Without it the strike is
+      // correct but arrives a whole refresh late, which is the part that reads
+      // as broken: a number that shows up eventually, at no time you can name.
+      if (learned && this.lastRaw) {
+        this.lastLive = this.lastRaw.map((r) => {
+          const key = r.marketId.toLowerCase();
+          return this.toSummary(r, this.lastTops.get(key), this.openingPrices.get(key) ?? null);
+        });
+      }
+    } catch {
+      // The next poll asks again. Nothing on screen depends on this having
+      // worked THIS time.
+    } finally {
+      this.openingsInFlight = false;
+    }
   }
 
   private toSummary(
@@ -369,14 +430,17 @@ export class MarketDiscovery {
     // The window's opening price: the market's own strike when it has one,
     // otherwise the reference question's opening answer.
     const rawStrike = num(m.strike) || num(openingPrice);
-    const scale = this.strikeScaleFor(m.asset, rawStrike);
+    const scale = this.strikeScaleFor(m.marketId, m.asset, rawStrike);
 
     const state: MarketState = {
       marketId: m.marketId,
       // Gotcha §8.9 — typed fields, never the question text.
       symbol: m.asset,
       intervalSec: resolveIntervalSec(m) ?? num(m.intervalSec),
-      strike: rawStrike / scale,
+      // No scale means the feed has not reported yet and there is nothing to
+      // divide by. Zero reads as "not known" everywhere above; a guess reads as
+      // a price, and a wrong price here is the whole up/down question.
+      strike: scale ? rawStrike / scale : 0,
       spot: this.underlying(m.asset),
       upPrice,
       status: toStatus(m.status, m.voided),
