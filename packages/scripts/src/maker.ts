@@ -21,7 +21,9 @@
  *   pnpm maker              one pass over every live window
  *   pnpm maker -- --watch   re-quote every 20s until interrupted
  *
- * It signs with PRIVATE_KEY_A and it is a REAL market maker: it can be picked
+ * It signs with the MAKER wallet (`MAKER_PRIVATE_KEY`, else PRIVATE_KEY_B) and
+ * never with the wallet you play on — its fills are real positions and they
+ * belong to whoever signed them. It is a REAL market maker: it can be picked
  * off. Quote what you are willing to be filled on.
  */
 import { createPublicClient, createWalletClient, http, formatUnits, type PublicClient } from 'viem';
@@ -39,7 +41,27 @@ const minted = new Map<`0x${string}`, bigint>();
 const MIN_LEFT = 45;
 
 const watch = process.argv.includes('--watch');
-const A = privateKeyToAccount(requireEnv('PRIVATE_KEY_A') as `0x${string}`);
+
+/**
+ * The maker signs as SOMEBODY ELSE, and that is the point.
+ *
+ * This used to sign with PRIVATE_KEY_A — the wallet a person plays on. A market
+ * maker rests orders every twenty seconds and gets filled, so every one of those
+ * fills landed in that player's own Positions and History. From inside the
+ * console it read exactly like the account placing bets by itself, which is what
+ * it was, just not by the person holding it.
+ *
+ * Liquidity has to come from an account that is not the one watching the screen.
+ * `MAKER_PRIVATE_KEY` if it is set, otherwise PRIVATE_KEY_B — the second wallet
+ * this repo already keeps for the two-sided scripts, and never A.
+ */
+const MAKER_KEY = process.env.MAKER_PRIVATE_KEY?.trim() || requireEnv('PRIVATE_KEY_B');
+const A = privateKeyToAccount(MAKER_KEY as `0x${string}`);
+
+// Said out loud on every run, because a maker you have forgotten is quoting is
+// a maker that can be picked off, and because its fills belong to this address
+// and nobody else's.
+console.log(fmt.warn(`quoting as ${A.address} — the maker wallet, not your player wallet`));
 const pub = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) }) as PublicClient;
 const wallet = createWalletClient({ account: A, chain: cfg.chain, transport: http(cfg.rpcUrl) });
 const market = new MarketAdapter(cfg, { publicClient: pub });
