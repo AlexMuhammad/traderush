@@ -491,12 +491,21 @@ export function renderScene(c: CanvasRenderingContext2D, S: Scene, dt: number, d
   if (S.outcome) {
     S.outcomeT += dt;
     const tally = S.outcome.tally;
-    // The tally needs the glass darker than a bare verdict does: it is a plaque
+    // A tally that knows no money has nothing to lay out, so it does not get a
+    // plaque — an empty frame around a verdict reads as a card that failed to
+    // load. It falls through to the bare verdict below instead, which is the
+    // same card a bystander sees and is not the poorer for it.
+    //
+    // This decides the DRAWING only. The beats are scheduled in the engine off
+    // the tally itself, so an unpriced result still arrives with its tones, its
+    // shake, its flash and its burst.
+    const plaque = tally !== null && tally.money;
+    // The plaque needs the glass darker than a bare verdict does: it is a page
     // of small numbers over a moving scene, and the scene wins otherwise.
-    c.fillStyle = tally ? 'rgba(0,0,0,.8)' : 'rgba(0,0,0,.5)';
+    c.fillStyle = plaque ? 'rgba(0,0,0,.8)' : 'rgba(0,0,0,.5)';
     c.fillRect(0, 0, w, h);
 
-    if (tally) {
+    if (tally && plaque) {
       // The card owns its whole layout, title included — see drawTally.
       const want = drawTally(c, tally, S.outcome.txt, S.outcomeT,
                              { frame: S.frame, particles: S.particles, w, h });

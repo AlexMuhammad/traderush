@@ -9,6 +9,27 @@ import { intervalLabel } from '../engine/market';
 import { Fault } from './Readout';
 import { ScreenList, type ScreenItem } from './ScreenList';
 
+/**
+ * How long the claim list is given before the screen gives up on it.
+ *
+ * Generous, because nothing waits on it. `getClaimable` is documented by the
+ * SDK as "one portfolio read plus one fee read per winning market", and those
+ * fee reads are sequential — an account with seventy claimable markets was
+ * measured at seventy-one requests and sixty-six seconds. Cutting that off at
+ * nine seconds, and then at thirty, only ever replaced a slow answer with a
+ * failure; the request kept running either way.
+ *
+ * Still bounded, because an unbounded wait is what `withTimeout` exists to
+ * prevent: a screen on its lamps forever cannot be told from a broken one.
+ * This is set past what the slowest account measured, not at it.
+ */
+const CLAIMABLE_BUDGET = 120_000;
+
+/** The open positions get a short one, and can afford to: nothing waits on
+ *  them either, and on this indexer that half regularly never answers at all.
+ *  Failing fast here just puts the "unavailable" row up sooner. */
+const PORTFOLIO_BUDGET = 9_000;
+
 interface Claimable {
   marketId: string;
   outcomeIdx: 0 | 1;
@@ -38,7 +59,9 @@ export function ScreenPositions({
   const { cfg, market } = useSdk();
   const { conn } = useWallet();
   const [rows, setRows] = useState<Claimable[] | null>(null);
-  const [held, setHeld] = useState<ScreenItem[]>([]);
+  /** Open positions, with the market kept alongside so the claim list can be
+   *  subtracted at render — the two halves now arrive in either order. */
+  const [heldRaw, setHeldRaw] = useState<(ScreenItem & { marketId: string })[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState(0);
@@ -59,24 +82,27 @@ export function ScreenPositions({
   useEffect(() => {
     if (!conn) return;
     let alive = true;
-    void (async () => {
-      try {
-        const client = market.discovery.client;
-        // Settled, not all: these are two independent questions, and the
-        // portfolio half of the indexer can hang indefinitely. Under Promise.all
-        // that took the answered half down with it and left the screen on its
-        // loading lamps forever — the report this was written to fix.
-        const [claim, port] = await Promise.allSettled([
-          withTimeout(client.getClaimable(conn.account.address), 9000, 'the indexer'),
-          withTimeout(client.getPortfolio(conn.account.address), 9000, 'the indexer'),
-        ]);
+    const client = market.discovery.client;
+    const acct = conn.account.address;
+
+    // Neither half blocks the screen, and neither waits for the other.
+    //
+    // The claim list is the expensive one, and not because of its size. The SDK
+    // documents `getClaimable` as "one portfolio read plus one fee read per
+    // winning market", and those fee reads go out one after another: measured
+    // against an account with seventy claimable markets it made seventy-one
+    // requests and took sixty-six seconds. A timeout cannot fix a shape like
+    // that. It can only choose how early to give up, which is all the thirty
+    // seconds here ever did — and giving up printed a failure for an answer
+    // that was still coming.
+    //
+    // Those fee reads buy `estPayout`, and `estPayout` is a label. The claim is
+    // sent with `outcomeIdx` and `amount`, neither of which waits on a fee. So
+    // this is worth waiting for in the background and never worth holding the
+    // screen for.
+    void withTimeout(client.getClaimable(acct), CLAIMABLE_BUDGET, 'the indexer')
+      .then(async (claimable) => {
         if (!alive) return;
-
-        // What is owed is the half that matters; if it failed there is nothing
-        // worth showing and the error says so.
-        if (claim.status === 'rejected') throw claim.reason;
-        const claimable = claim.value;
-
         const named = await Promise.all(claimable.map(async (c) => {
           const m = await market.discovery.get(c.marketId).catch(() => null);
           return {
@@ -89,29 +115,35 @@ export function ScreenPositions({
         }));
         if (!alive) return;
         setRows(named);
+        setError(null);
+      })
+      .catch((e) => { if (alive) setError(e); });
 
-        // The open positions are the nice-to-have. Losing them costs a list of
-        // things you already know you hold; losing the screen costs the claim
-        // button, which is the only way money comes back.
-        if (port.status === 'rejected') { setHeldFailed(true); return; }
+    // The open positions are the nice-to-have. Losing them costs a list of
+    // things you already know you hold; losing the screen costs the claim
+    // button, which is the only way money comes back.
+    void withTimeout(client.getPortfolio(acct), PORTFOLIO_BUDGET, 'the indexer')
+      .then((port) => {
+        if (!alive) return;
         setHeldFailed(false);
-
         // Everything still open, so a position is visible before it settles.
-        const openIds = new Set(named.map((c) => c.marketId.toLowerCase()));
-        setHeld(port.value.positions
-          .filter((p) => BigInt(p.balance) > 0n && !openIds.has(p.market.id.toLowerCase()))
+        // What is already owed is subtracted at RENDER rather than here: the
+        // two halves now land in whichever order the indexer decides them, and
+        // this one usually wins.
+        setHeldRaw(port.positions
+          .filter((p) => BigInt(p.balance) > 0n)
           .map((p) => ({
             key: `${p.market.id}:${p.outcomeIndex}`,
+            marketId: p.market.id,
             label: `${p.market.asset} ${intervalLabel(Number(p.market.intervalSec ?? 0))}`,
             right: p.outcomeIndex === 0 ? 'UP' : 'DOWN',
             meta: formatUnits(BigInt(p.balance), p.market.quoteDecimals),
             sub: `${p.market.status.toLowerCase()} · strike ${p.market.strike}`,
             disabled: true,
           })));
-      } catch (e) {
-        if (alive) setError(e);
-      }
-    })();
+      })
+      .catch(() => { if (alive) setHeldFailed(true); });
+
     return () => { alive = false; };
   }, [conn, market, done]);
 
@@ -149,6 +181,14 @@ export function ScreenPositions({
 
   // Owed, minus anything this session already took.
   const owed = (rows ?? []).filter((r) => !claimed.has(r.marketId));
+
+  // A market that is already listed as owed must not also be listed as open.
+  // Subtracted here rather than where the positions are fetched, because the
+  // claim list is the slower of the two and usually is not there yet.
+  const owedIds = new Set((rows ?? []).map((r) => r.marketId.toLowerCase()));
+  const held: ScreenItem[] = heldRaw
+    .filter((h) => !owedIds.has(h.marketId.toLowerCase()))
+    .map(({ marketId: _m, ...item }) => item);
 
   const claimRows: ScreenItem[] = owed.map((r) => ({
     key: r.marketId,

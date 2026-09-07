@@ -6,6 +6,7 @@ import {
   type TradeRushConfig,
   type MarketState, type MarketSummary, type DuelView, type Room, type Seat,
 } from '@traderush/sdk';
+import { apiMarkets } from './api';
 
 /** A price at `t` seconds after the window opened. */
 export interface TrailPoint { t: number; price: number }
@@ -62,7 +63,8 @@ export function useMarkets(): { markets: MarketSummary[]; error: string | null; 
 
   useEffect(() => {
     let alive = true;
-    const load = () => market.listMarkets()
+    const load = () => apiMarkets()
+      .catch(() => market.listMarkets())
       .then((m) => { if (alive) { setMarkets(m); setError(null); } })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (alive) setLoading(false); });

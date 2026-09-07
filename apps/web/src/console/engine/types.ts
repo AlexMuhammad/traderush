@@ -96,7 +96,7 @@ export interface Race {
 
 export interface MarketDef {
   asset: 'BTC' | 'ETH';
-  interval: '15M' | '1H';
+  interval: '1M' | '15M' | '1H';
   /** Window length in seconds. */
   sec: number;
   base: number;
@@ -142,7 +142,21 @@ export interface TallyItem {
  */
 export interface Tally {
   win: boolean;
-  /** What you put in. */
+  /**
+   * Whether the money fields below mean anything.
+   *
+   * The beats — the tones, the shake, the flash, the burst — are scheduled off
+   * `win`, `items` and `streak` alone, so a result can be played in full
+   * without knowing what was staked. Requiring the money before any of it
+   * would play was why a settled window ended in silence whenever the stake
+   * could not be recovered: the arithmetic was missing, so the drama went with
+   * it.
+   *
+   * False means there is no plaque to draw — the card falls back to the bare
+   * verdict. It does NOT mean the result is silent.
+   */
+  money: boolean;
+  /** What you put in. Meaningless unless `money`. */
   stake: string;
   /** The book odds actually taken, as a percentage. */
   oddsPct: number;

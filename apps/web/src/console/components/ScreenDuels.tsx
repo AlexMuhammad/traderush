@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DuelView } from '@traderush/sdk';
+import { apiDuels } from '../../api';
 import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';
@@ -27,7 +28,8 @@ export function ScreenDuels({
   useEffect(() => {
     if (!duels || !conn) return;
     let alive = true;
-    const load = () => duels.listFor(conn.account.address)
+    const load = () => apiDuels(conn.account.address)
+      .catch(() => duels.listFor(conn.account.address))
       .then((r) => { if (alive) { setRows(r); setError(null); } })
       .catch((e) => { if (alive) setError(e); });
     load();

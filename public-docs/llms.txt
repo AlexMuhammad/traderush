@@ -1,0 +1,24 @@
+# Trade Rush
+
+> Three ways to take a side of a DreamDEX Event Contract, wrapped in a handheld-console trading game.
+
+## Docs
+
+- [Trade Rush](/index.mdx): Trade Rush is a Somnia x DreamDEX Event Contracts hackathon project with run, room, and duel modes.
+- [Problem statement](/introduction/problem.mdx): Why event contracts need a sharper product layer for real users.
+- [Our solution](/introduction/solution.mdx): How Trade Rush combines book orders, rooms, duels, and claim-first settlement.
+- [How Trade Rush works end to end](/overview/how-it-works.mdx): The player journey from market discovery to settlement.
+- [System architecture](/overview/architecture.mdx): Frontend, SDK, scripts, and smart-contract layers.
+- [User roles](/overview/user-roles.mdx): Permissions and responsibilities for players, challengers, room participants, market makers, and builders.
+- [Duels](/features/duels.mdx): Two-player equal-stake challenges on top of DreamDEX Event Contracts.
+- [Rooms](/features/rooms.mdx): Many-player parimutuel pots for event-contract markets.
+- [Book trading](/features/book-trading.mdx): The run mode buys or sells through the DreamDEX book with protocol-specific guards.
+- [Network switching](/features/network-switching.mdx): One environment variable moves Trade Rush between Shannon testnet and Somnia mainnet.
+- [Smart contract architecture](/contracts/overview.mdx): How `DuelEscrow` and `RoomEscrow` use DreamDEX complete-set minting.
+- [Deployed addresses](/contracts/addresses.mdx): Network constants and deployed-contract slots for Trade Rush.
+- [Function reference](/contracts/functions.mdx): Public functions on `DuelEscrow` and `RoomEscrow`.
+- [Tech stack](/technical/tech-stack.mdx): Frameworks, libraries, and tools used across Trade Rush.
+- [System flow](/technical/system-flow.mdx): How data and transactions move through Trade Rush.
+- [API integration](/technical/api-integration.mdx): How to integrate with Trade Rush from TypeScript, scripts, and contracts.
+- [Hackathon notes](/resources/hackathon-notes.mdx): Verified notes for the Event Contracts Hackathon build.
+- [Glossary](/resources/glossary.mdx): Terms used across Trade Rush, DreamDEX Event Contracts, and the docs.

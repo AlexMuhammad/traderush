@@ -34,6 +34,9 @@ import { StartScreen } from './screens/StartScreen';
 import './console.css';
 
 /** What the CRT shows. `create` is the market list in pick-for-duel mode. */
+/** Where the demo choice is remembered, so a reload does not undo it. */
+const DEMO_KEY = 'traderush.demo';
+
 type Screen =
   | 'game' | 'menu' | 'markets' | 'create'
   | 'createRoom' | 'rooms' | 'duels' | 'positions' | 'history';
@@ -84,9 +87,46 @@ export function ConsoleApp() {
     } catch { /* the row goes back to idle; the balance says the rest */ }
     finally { setFaucetBusy(false); }
   };
-  // Always the real event contracts. The built-in simulation survives only as
-  // the smoke test's feed — nothing a person can reach runs on invented prices.
-  const engine = useMemo(() => new Engine(new LiveFeed(market)), [market]);
+  /**
+   * Running on the built-in simulation instead of the venue.
+   *
+   * Off by default and never entered by accident: it is chosen at the door, on
+   * a key of its own, and a reload leaves it. Everything downstream still asks
+   * for a wallet before it would spend anything, so the worst a demo can do is
+   * draw.
+   *
+   * It exists because the venue's shortest windows come and go. When it is only
+   * running hour and day markets there is no way to see a window open, run and
+   * settle without waiting one out — and the ending is the part worth showing.
+   * The simulation runs at twenty times real time, so a fifteen minute window
+   * finishes in about forty-five seconds.
+   */
+  const [demo, setDemo] = useState(() => {
+    // Survives a reload, because the alternative is what a demo must never do:
+    // drop someone back at the door mid-try and make them find the key again.
+    // Storage can throw; a demo nobody can remember is still a demo.
+    try { return localStorage.getItem(DEMO_KEY) === '1'; } catch { return false; }
+  });
+  const enterDemo = () => {
+    try { localStorage.setItem(DEMO_KEY, '1'); } catch { /* still works this session */ }
+    setDemo(true);
+  };
+  /** Out of the simulation and back to the door. Named on the menu, because a
+   *  mode you cannot leave on purpose is a trap rather than a demo. */
+  const leaveDemo = () => {
+    try { localStorage.removeItem(DEMO_KEY); } catch { /* nothing to undo */ }
+    setDemo(false);
+    setScreen('game');
+    setCursor(0);
+  };
+  // Real event contracts unless the demo was asked for at the door. An engine
+  // built without a feed runs the simulation; the swap is a whole new engine
+  // rather than a mode flag, so nothing can be half in one world and half in
+  // the other — the effect below stops the old one and starts the new.
+  const engine = useMemo(
+    () => (demo ? new Engine() : new Engine(new LiveFeed(market))),
+    [market, demo],
+  );
   const [snap, setSnap] = useState<ConsoleSnapshot | null>(null);
   // Deposit and withdraw are errands, not places: they arrive on a sheet over
   // whatever you were doing rather than replacing it.
@@ -149,7 +189,9 @@ export function ConsoleApp() {
   // and should be able to READ the terms before signing in; accepting still
   // needs a wallet, and AcceptPanel asks for one there.
   const invited = Boolean(parseDuelLink(path) || parseRoomLink(path));
-  const gated = ready && !invited && (!conn || wrongChain);
+  // The demo is its own way past the gate: it needs no wallet, so a gate that
+  // asks for one would be asking for nothing.
+  const gated = ready && !invited && !demo && (!conn || wrongChain);
 
   const view = renderView(path, navigate);
 
@@ -160,7 +202,18 @@ export function ConsoleApp() {
 
   // The wallet reads as one row and signing out as another. Folded together,
   // sign-out was something you had to guess was there.
-  const walletRows: ScreenItem[] = !conn
+  const walletRows: ScreenItem[] = demo
+    ? [
+        {
+          key: 'demo',
+          label: 'Demo',
+          right: 'paper',
+          sub: 'simulated prices · nothing here touches a chain',
+          disabled: true,
+        },
+        { key: 'leavedemo', label: 'Leave demo', sub: 'back to the door, and to real markets' },
+      ]
+    : !conn
     ? [{ key: 'wallet', label: 'Sign in', sub: 'email, social or your own wallet' }]
     : wrongChain
       ? [
@@ -188,6 +241,12 @@ export function ConsoleApp() {
 
   const menuItems: ScreenItem[] = [
     { key: 'markets', label: 'Markets', sub: 'live event contracts · tune the dials' },
+    // Everything from here to the wallet rows needs a chain: a room and a duel
+    // are escrows, Positions reads the indexer, History reads settlements. The
+    // demo has none of that, and listing them anyway would be offering doors
+    // that open onto a sign-in prompt — which is the thing a demo is for
+    // avoiding. It keeps the game and the dials, and says what it is.
+    ...(demo ? [] : [
     {
       key: 'createRoom',
       label: 'Open a room',
@@ -210,6 +269,7 @@ export function ConsoleApp() {
     { key: 'duels', label: 'My duels', sub: 'open and running' },
     { key: 'positions', label: 'Positions', sub: 'what you hold, and what is owed to you' },
     { key: 'history', label: 'History', sub: 'duels that are over' },
+    ]),
     // Testnet only, and only with a wallet to mint into.
     // Money in and money out, next to each other. Someone looking for one is
     // usually about to look for the other, and a Withdraw that is hard to find
@@ -270,6 +330,7 @@ export function ConsoleApp() {
           else if (i.key === 'deposit') { show('game'); setSheet('deposit'); }
           else if (i.key === 'withdraw') { show('game'); setSheet('withdraw'); }
           else if (i.key === 'faucet') void runFaucet();
+          else if (i.key === 'leavedemo') leaveDemo();
           else if (i.key === 'switch') doSwitch();
           else if (i.key === 'signout') {
             // All the way out: the title card, not the connect step.
@@ -391,7 +452,7 @@ export function ConsoleApp() {
       {/* Nothing until Privy has finished restoring: flashing the card at
           someone who is already signed in, then snatching it away, is worse
           than a moment of the console alone. */}
-      {gated && <div className="gate"><StartScreen /></div>}
+      {gated && <div className="gate"><StartScreen onDemo={enterDemo} /></div>}
     </div>
     </ShareProvider>
     </EngineProvider>

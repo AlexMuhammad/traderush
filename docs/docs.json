@@ -1,0 +1,73 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Trade Rush",
+  "colors": {
+    "primary": "#0EA5A4",
+    "light": "#14B8A6",
+    "dark": "#0F766E"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting started",
+        "pages": [
+          "index"
+        ]
+      },
+      {
+        "group": "Introduction",
+        "pages": [
+          "introduction/problem",
+          "introduction/solution"
+        ]
+      },
+      {
+        "group": "Overview",
+        "pages": [
+          "overview/how-it-works",
+          "overview/architecture",
+          "overview/user-roles"
+        ]
+      },
+      {
+        "group": "Features",
+        "pages": [
+          "features/duels",
+          "features/rooms",
+          "features/book-trading",
+          "features/network-switching"
+        ]
+      },
+      {
+        "group": "Smart contracts",
+        "pages": [
+          "contracts/overview",
+          "contracts/addresses",
+          "contracts/functions"
+        ]
+      },
+      {
+        "group": "Technical",
+        "pages": [
+          "technical/tech-stack",
+          "technical/system-flow",
+          "technical/api-integration"
+        ]
+      },
+      {
+        "group": "Resources",
+        "pages": [
+          "resources/hackathon-notes",
+          "resources/glossary"
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/"
+    }
+  }
+}

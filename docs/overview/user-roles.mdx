@@ -1,0 +1,44 @@
+# User roles
+
+> Permissions and responsibilities for players, challengers, room participants, market makers, and builders.
+
+## Role summary
+
+| Role | What they do |
+| --- | --- |
+| Player | Connects a wallet, picks a market, and takes a side |
+| Challenger | Opens a duel and shares the accept link |
+| Opponent | Accepts a duel before its deadline |
+| Room participant | Joins Up or Down in a shared pot |
+| Market maker | Posts quotes to the DreamDEX book |
+| Builder | Deploys escrows, configures networks, and verifies protocol assumptions |
+
+## Player
+
+Players interact through the console UI. They can browse live markets, inspect the current strike and status, and choose one of the three modes.
+
+| Capability | Surface |
+| --- | --- |
+| Connect wallet | Privy |
+| View live markets | Console market list |
+| Take a side | Run, room, or duel |
+| Claim winning outcome | Result screen |
+
+## Challenger and opponent
+
+A duel has exactly two parties and equal stakes.
+
+| Party | Responsibility |
+| --- | --- |
+| Challenger | Chooses market, side, stake, and accept deadline |
+| Opponent | Accepts before the deadline and stakes the same amount |
+| Winner | Redeems the full pot after market resolution |
+| Loser | Holds a losing leg that redeems for zero without reverting |
+
+## Room participant
+
+Room participants can join either side with any stake. A room is parimutuel: the winning side splits the whole pot by contribution.
+
+## Builder
+
+Builders must verify live venue assumptions before deploying. Trade Rush includes `doctor`, `probe`, and e2e scripts because several protocol details differ from the original brief.

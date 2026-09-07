@@ -2,14 +2,17 @@ import { useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 
 /**
- * The gate. One card, one button.
+ * The gate. One card, one button — and one way past it that spends nothing.
  *
  * Start opens Privy directly — a separate "now connect" step said nothing the
  * person had not already agreed to by pressing Start. The card stays put while
  * the modal is up and turns into a network prompt if the wallet lands on the
  * wrong chain, so there is only ever one thing to press.
  */
-export function StartScreen() {
+export function StartScreen({ onDemo }: {
+  /** Enter the built-in simulation instead of signing in. */
+  onDemo: () => void;
+}) {
   const { cfg } = useSdk();
   const { connecting, error, wrongChain, doConnect, doSwitch } = useWallet();
 
@@ -40,6 +43,27 @@ export function StartScreen() {
       )}
 
       {error && <p className="gate__warn">{error}</p>}
+
+      {/* Under Start, and quieter than it, because it is the second thing to
+          reach for rather than the first. The venue's shortest windows come and
+          go, and when it is running hour and day markets there is no way to
+          watch one open, run and settle without waiting one out. This runs the
+          simulation at twenty times real time, so the ending — the part worth
+          seeing — arrives in under a minute.
+
+          Deliberately not offered as a way to trade: nothing here can spend,
+          and the keys say so the moment they are pressed. */}
+      {!wrongChain && (
+        <>
+          <button type="button" className="gate__demo" onClick={onDemo}>
+            Try the demo
+          </button>
+          <p className="gate__demo-note">
+            Simulated prices, no wallet, nothing at stake. A window runs in about
+            forty-five seconds. Reload to come back here.
+          </p>
+        </>
+      )}
 
       {/* Whose rails these are. Directly under the button, because it is part of
           what someone is agreeing to when they press it — the markets, the

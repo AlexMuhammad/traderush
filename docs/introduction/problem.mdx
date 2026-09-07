@@ -1,0 +1,35 @@
+# Problem statement
+
+> Event contracts are powerful, but their raw trading surface is too narrow for social, game-like, and low-liquidity interactions.
+
+DreamDEX Event Contracts expose a useful binary-market primitive: users can take a side, hold an outcome token, and redeem after resolution. The problem is not the primitive. The problem is that most users meet it as an order book, a market row, or a set of SDK calls.
+
+## What breaks for users
+
+| Friction | Why it matters |
+| --- | --- |
+| Thin books | A user can want a position but fail to match at their exact size or price |
+| Short windows | Markets can expire while a user is reading, sharing, or accepting |
+| Settlement confusion | Winnings are claimed, not automatically received |
+| Technical market data | Strike, status, venue, collateral decimals, tick, and lot rules are easy to misread |
+| No social primitive | A user cannot naturally challenge a friend or create a group pot from the book alone |
+
+## What breaks for builders
+
+The hackathon brief and the live venue differ in several important ways. Trade Rush found these by running against Shannon and mainnet rather than treating static docs as the only source of truth.
+
+| Live finding | Impact |
+| --- | --- |
+| Event contracts are read through the indexer, not `GET /v0/markets` | Market discovery must use the correct data path |
+| Testnet collateral has 6 decimals | Hardcoding 18 breaks every displayed stake and balance |
+| Settlement is not automatic | Result screens need a claim path |
+| There is no on-chain status enum | Contracts must derive tradability from `tradingStart` and `expiry` |
+| Some markets use reference-mode strikes | The UI must not parse questions as protocol data |
+
+## Why the book is not enough
+
+Order books are the correct surface for price discovery. They are not the only useful surface for event contracts.
+
+A challenge between two people needs a link and equal stakes. A group prediction needs a pot and proportional payouts. A casual user needs a readable interface that prevents expired writes, stale prices, wrong decimals, and impossible fills.
+
+Trade Rush builds those surfaces while still settling on DreamDEX event-contract primitives.

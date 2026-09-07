@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Room, Seat } from '@traderush/sdk';
+import { apiRooms } from '../../api';
 import { useNow, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useMoney } from './money';
@@ -26,7 +27,8 @@ export function ScreenRooms({
   useEffect(() => {
     if (!rooms || !conn) return;
     let alive = true;
-    const load = () => rooms.listFor(conn.account.address)
+    const load = () => apiRooms(conn.account.address)
+      .catch(() => rooms.listFor(conn.account.address))
       .then((r) => { if (alive) { setList(r); setError(null); } })
       .catch((e) => { if (alive) setError(e); });
     load();
