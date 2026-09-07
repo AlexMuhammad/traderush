@@ -379,13 +379,17 @@ export class MarketDiscovery {
     // never does. The cache outlives the page, so this is paid once.
     const cold = ids.every((id) => !this.openingPrices.has(id.toLowerCase()));
     const priming = this.primeOpenings(ids);
-    if (cold) await deadline(priming, ENRICH_DEADLINE_MS, undefined);
 
-    const tops = await deadline(
-      this.client.getBookTops(ids),
-      ENRICH_DEADLINE_MS,
-      null as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> | null,
-    );
+    // Both at once. Awaiting the openings first and the book tops after put two
+    // independent queries end to end and spent the deadline twice.
+    const [tops] = await Promise.all([
+      deadline(
+        this.client.getBookTops(ids),
+        ENRICH_DEADLINE_MS,
+        null as Record<string, { bestBid: string | null; bestAsk: string | null; mid: string | null }> | null,
+      ),
+      cold ? deadline(priming, ENRICH_DEADLINE_MS, undefined) : Promise.resolve(),
+    ]);
     for (const [k, v] of Object.entries(tops ?? {})) this.lastTops.set(k.toLowerCase(), v);
 
     return rows.map((r) => {
@@ -533,6 +537,4 @@ export class MarketDiscovery {
   }
 }
 
-/** Observed on Shannon. Only used when the price feed has not reported yet —
- *  mainnet ships no bundled feed, so confirm it there before trusting it. */
-export const DEFAULT_STRIKE_SCALE = 100;
+
