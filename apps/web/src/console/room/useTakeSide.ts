@@ -263,8 +263,10 @@ export function useTakeSide(
   const ready = blocker === null && pending === null;
 
 
-  // An arm cannot outlive the window it was made on.
+  // An arm cannot outlive the window it was made on — nor the moment the side
+  // it was armed on becomes one we hold, which is what a fill does to it.
   useEffect(() => { disarm(); }, [marketId]);
+  useEffect(() => { if (heldSide && armed === heldSide) disarm(); }, [heldSide, armed]);
 
   // Read the stake back for whatever is held here now. A different market or a
   // different side is a different purchase, so this is the only place the value
@@ -343,6 +345,12 @@ export function useTakeSide(
    * be pressed by accident.
    */
   const press = async (side: 'up' | 'down') => {
+    // A side already held is not bought again. The keys disable it, and this is
+    // the second lock: `armed` survives a re-render, so a press that arrives
+    // between the fill landing and the holdings being read back would otherwise
+    // walk the whole arm/CONFIRM/placing path a second time on a position that
+    // already exists.
+    if (side === heldSide) return;
     if (!ready || !liquid(side)) return;
     if (armed !== side) {
       if (armTimer.current) clearTimeout(armTimer.current);

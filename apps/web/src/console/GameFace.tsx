@@ -45,7 +45,7 @@ export function GameFace({
         engine={engine} s={s}
         disabled={!take.ready} pending={take.pending} armed={take.armed}
         armedLabel={take.format(take.amount)}
-        liquid={take.liquid} bookKnown={take.bookKnown}
+        liquid={take.liquid} bookKnown={take.bookKnown} heldSide={take.heldSide}
         onTake={(side) => { engine.wake(); void take.press(side); }}
       />
     </>
