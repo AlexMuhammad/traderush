@@ -3,7 +3,6 @@ import { useBalance, useMarket, useSdk } from '../../sdk';
 import { useWallet } from '../../walletContext';
 import { useEngine } from '../engineContext';
 import { useMoney } from '../components/money';
-import { useRoomAllowance } from './useRoomAllowance';
 import { useBookTop } from '../useBookTop';
 
 /**
@@ -119,9 +118,23 @@ export function useTakeSide(
 
   let amount = 0n;
   try { amount = money.parse(amountStr || '0'); } catch { /* surfaced as a blocker */ }
-  // The pool escrows the collateral, so it needs the allowance — same shape as
-  // the escrows, different spender.
-  const allow = useRoomAllowance(amount);
+  /*
+   * No allowance step here, deliberately.
+   *
+   * This used to call `useRoomAllowance(amount).ensure(...)` before every buy —
+   * and that hook approves the ROOM ESCROW. The console's UP/DOWN keys do not
+   * go anywhere near the room escrow: they buy on the book through the pool.
+   * So it was asking for a signature that granted a spender this trade never
+   * uses, in front of the trade, every time the allowance read came back short.
+   * The comment that used to sit here said "different spender", which is the
+   * bug written down.
+   *
+   * The spender that IS needed is handled a layer down and better: the markets
+   * SDK's writer approves `maxUint256` once per (token, spender), caches the
+   * pair, and does the same for the ERC-6909 operator grant the outcome tokens
+   * need. So the allowance is already infinite and already once-per-wallet —
+   * there was nothing here to add but a prompt.
+   */
 
   const scale = 10n ** BigInt(money.decimals);
 
@@ -250,8 +263,10 @@ export function useTakeSide(
   const ready = blocker === null && pending === null;
 
 
-  // An arm cannot outlive the window it was made on.
+  // An arm cannot outlive the window it was made on — nor the moment the side
+  // it was armed on becomes one we hold, which is what a fill does to it.
   useEffect(() => { disarm(); }, [marketId]);
+  useEffect(() => { if (heldSide && armed === heldSide) disarm(); }, [heldSide, armed]);
 
   // Read the stake back for whatever is held here now. A different market or a
   // different side is a different purchase, so this is the only place the value
@@ -330,6 +345,12 @@ export function useTakeSide(
    * be pressed by accident.
    */
   const press = async (side: 'up' | 'down') => {
+    // A side already held is not bought again. The keys disable it, and this is
+    // the second lock: `armed` survives a re-render, so a press that arrives
+    // between the fill landing and the holdings being read back would otherwise
+    // walk the whole arm/CONFIRM/placing path a second time on a position that
+    // already exists.
+    if (side === heldSide) return;
     if (!ready || !liquid(side)) return;
     if (armed !== side) {
       if (armTimer.current) clearTimeout(armTimer.current);
@@ -362,7 +383,6 @@ export function useTakeSide(
     if (pastExpiry()) { setError(new Error('this window has closed')); return; }
     setPending(side); setError(null);
     try {
-      await allow.ensure(conn.wallet, conn.account, amount);
       const pos = await market.buy(state.marketId as `0x${string}`, side, amount);
       // Immediate-or-cancel: a thin book can cross less than was asked for, and
       // an order that crossed nothing is not a position.
@@ -383,7 +403,6 @@ export function useTakeSide(
   return {
     amountStr, setAmountStr, amount, balance, blocker, ready, pending, error,
     returns, liquid, bookKnown, press, armed, exit, exitAt, tradeable, held: heldTokens, heldSide,
-    approving: allow.approving,
     symbol: money.symbol, format: money.format,
   };
 }

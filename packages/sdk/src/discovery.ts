@@ -205,7 +205,31 @@ export class MarketDiscovery {
     return this.hydrate(rows);
   }
 
+  /**
+   * One market, from the list we already hold when it is in it.
+   *
+   * This sits on the critical path of a trade. `submit()` calls it to get the
+   * pool and the outcome ids BEFORE the wallet is asked to sign, and
+   * `useHeldSide` calls it again afterwards to find out what the wallet now
+   * holds — so an indexer round trip here is a wallet prompt that takes seconds
+   * to appear and a position that takes seconds more to show up. On a host
+   * measured between 0.8s and 27s for the same query, that is the whole of both
+   * complaints.
+   *
+   * Nothing in a `ref` moves within a market's life: the pool binding, the
+   * nonce and the two outcome ids are fixed when it is created. The console
+   * polls the live list every few seconds, so when someone is looking at a
+   * market the answer is already in hand — and asking the indexer for a row we
+   * are holding is a round trip bought with somebody's finger on a key.
+   *
+   * Markets not in the live list — settled ones, a duel opened from a link —
+   * still go and fetch.
+   */
   async get(marketId: string): Promise<BinaryMarketSummary | null> {
+    const key = marketId.toLowerCase();
+    const known = this.lastLive?.find((m) => m.marketId.toLowerCase() === key);
+    if (known) return known;
+
     const row = await this.client.getBinaryMarket(marketId);
     if (!row) return null;
     return (await this.hydrate([row]))[0] ?? null;

@@ -25,7 +25,7 @@ import { SideIcon } from './SideIcon';
  *  quoted. The multiple is only ever shown for the third.
  */
 export function CallKeys({
-  engine, s, onTake, disabled, pending, armed, armedLabel, liquid, bookKnown,
+  engine, s, onTake, disabled, pending, armed, armedLabel, liquid, bookKnown, heldSide,
 }: {
   engine: Engine;
   s: ConsoleSnapshot;
@@ -43,6 +43,15 @@ export function CallKeys({
   liquid: (side: 'up' | 'down') => boolean;
   /** Has the book been read at all? Until it has, "no offer" would be a guess. */
   bookKnown: boolean;
+  /**
+   * The side this wallet is already on, if any.
+   *
+   * A side that is held is not bought again: the key for it is dead, not armed
+   * and not pressable. Left live it walked the whole arm/CONFIRM/placing path a
+   * second time and bought MORE of a position the player had already taken,
+   * which is not what pressing an already-chosen side means to anyone.
+   */
+  heldSide: 'up' | 'down' | null;
 }) {
   const upPct = Math.round(s.upP * 100);
   // The horn locks them, and so does anything the pad above is complaining
@@ -62,7 +71,9 @@ export function CallKeys({
           className={armed === k.side ? 'armed' : undefined}
           lit={armed === k.side || s.watchSide === k.side}
           dry={k.dry}
-          disabled={locked}
+          // Held is a harder stop than dry: dry buzzes and invites a retry when
+          // the book fills, held has nothing to wait for.
+          disabled={locked || k.side === heldSide}
           onGesture={(accepted) => {
             engine.wake();
             if (!accepted) { engine.audio.reject(); engine.shake = 3; }
@@ -73,9 +84,12 @@ export function CallKeys({
           <span className="nm">{k.name}</span>
           {/* Armed: the key says what the next press does and what it costs,
               because that press is the one that spends. */}
-          <span className="pct">{armed === k.side ? 'CONFIRM' : `${k.pct}%`}</span>
+          <span className="pct">
+            {k.side === heldSide ? 'YOURS' : armed === k.side ? 'CONFIRM' : `${k.pct}%`}
+          </span>
           <span className="mul">
-            {pending === k.side ? 'placing…'
+            {k.side === heldSide ? 'holding'
+              : pending === k.side ? 'placing…'
               : armed === k.side ? armedLabel
               : !bookKnown ? 'reading…'
               : k.dry ? 'no offer'
